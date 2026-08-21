@@ -1,80 +1,11 @@
- Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
-api-1  | warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-api-1  | For more information, see: https://pris.ly/prisma-config
-api-1  | 
-api-1  | Prisma schema loaded from prisma/schema.prisma
-api-1  | Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
-api-1  | warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-api-1  | For more information, see: https://pris.ly/prisma-config
-api-1  | 
-api-1  | Prisma schema loaded from prisma/schema.prisma
-api-1  | Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
-api-1  | warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-api-1  | For more information, see: https://pris.ly/prisma-config
-api-1  | 
-api-1  | Prisma schema loaded from prisma/schema.prisma
-api-1  | Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
-api-1  | warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-api-1  | For more information, see: https://pris.ly/prisma-config
-api-1  | 
-api-1  | Prisma schema loaded from prisma/schema.prisma
-api-1  | Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
-api-1  | warn The configuration property `package.json#prisma` is deprecated and will be removed in Prisma 7. Please migrate to a Prisma config file (e.g., `prisma.config.ts`).
-api-1  | For more information, see: https://pris.ly/prisma-config
-api-1  | 
-api-1  | Prisma schema loaded from prisma/schema.prisma
-api-1  | Datasource "db": PostgreSQL database "davart", schema "public" at "postgres:5432"
-api-1  | 
-api-1  | 17 migrations found in prisma/migrations
-api-1  | 
-api-1  | Error: P3009
-api-1  | 
-api-1  | migrate found failed migrations in the target database, new migrations will not be applied. Read more about how to resolve migration issues in a production database: https://pris.ly/d/migrate-resolve
-api-1  | The `20260817130000_project_members` migration started at 2026-08-21 13:55:14.155389 UTC failed
-api-1  | 
-api-1  | 
+cd ~/davartapp
+
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging down -v
+
+docker volume ls | grep -i postgres
+
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d --build
+
+sleep 40
+curl http://127.0.0.1:3000/api/health
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs --tail=40 api
