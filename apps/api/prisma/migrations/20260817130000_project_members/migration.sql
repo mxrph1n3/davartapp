@@ -1,4 +1,30 @@
 -- Sprint 15: Client ↔ Project many-to-many via project_members
+-- Also add project columns that were in schema but missing from 20260806170000_projects.
+
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "is_showcase" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "manager_id" TEXT;
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "surveyor_id" TEXT;
+ALTER TABLE "projects" ADD COLUMN IF NOT EXISTS "object_type" TEXT;
+
+CREATE INDEX IF NOT EXISTS "projects_is_showcase_idx" ON "projects"("is_showcase");
+CREATE INDEX IF NOT EXISTS "projects_manager_id_idx" ON "projects"("manager_id");
+CREATE INDEX IF NOT EXISTS "projects_surveyor_id_idx" ON "projects"("surveyor_id");
+
+DO $$ BEGIN
+  ALTER TABLE "projects"
+    ADD CONSTRAINT "projects_manager_id_fkey"
+    FOREIGN KEY ("manager_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "projects"
+    ADD CONSTRAINT "projects_surveyor_id_fkey"
+    FOREIGN KEY ("surveyor_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TYPE "ProjectMemberRole" AS ENUM ('owner', 'member', 'viewer');
 
