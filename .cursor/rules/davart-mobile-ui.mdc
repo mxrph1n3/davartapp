@@ -1,0 +1,33 @@
+---
+description: Default UI skill stack and design-system rules for Davart Flutter mobile
+globs: apps/mobile/**/*.dart
+alwaysApply: false
+---
+
+# Davart mobile UI
+
+## Default skill stack (pick one primary)
+
+| Job | Skill |
+|-----|--------|
+| Build / extend product screens | `interface-design` |
+| iOS feel, nav, touch targets | `ios-hig-design` |
+| Fix hierarchy, spacing, type | `ui-refactor` |
+| UX review (no code yet) | `ux-heuristics` |
+
+Optional polish only if the screen still looks generic: `impeccable` or `redesign-existing-projects`.
+
+Do **not** stack hallmark / taste / frontend-design-pro for in-app Flutter work — those target marketing/web aesthetics.
+
+## Hard constraints
+
+- Reuse `apps/mobile/lib/core/widgets/ds/` — do not invent parallel buttons/cards/inputs.
+- Colors only via `AppColors` (`lib/core/theme/app_colors.dart`). Accent is yellow `#FFDD2D`.
+- Theme via `AppTheme` — no one-off hex in feature screens unless extending tokens.
+- Keep 5-tab shell: Каталог · Проекты · Чаты · Корзина · Профиль. Bottom nav always visible on tab roots; product/checkout push above the shell.
+- Prefer calm retail UI: white/neutral surfaces, yellow accent CTAs, strong type hierarchy — not purple gradients, glow, or dense dashboard chrome.
+- Load `.interface-design/system.md` when using `interface-design`; offer to update it after new patterns.
+
+## Prompt shape for the user
+
+`use interface-design — <screen> — keep DS widgets and AppColors`

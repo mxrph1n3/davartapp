@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pub-cache/
+.dart_tool/
+
+# Build
+dist/
+build/
+*.iml
+
+# Environment
+.env
+.env.local
+.env.*.local
+infra/.env.staging
+!infra/.env.example
+!infra/.env.staging.example
+
+# Firebase (download from console, do not commit)
+apps/mobile/android/app/google-services.json
+apps/mobile/ios/Runner/GoogleService-Info.plist
+apps/mobile/lib/firebase_options.dart
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flutter
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/pubspec.lock
+
+# Prisma
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Coverage
+coverage/
+lcov.info
+
+# Misc
+*.pem

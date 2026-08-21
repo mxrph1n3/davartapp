@@ -1,0 +1,12 @@
+process.env.JWT_SECRET ??= 'test-secret-for-e2e-tests';
+process.env.REDIS_URL ??= 'redis://localhost:6379';
+process.env.DATABASE_URL ??=
+  'postgresql://test:test@localhost:5432/test?schema=public';
+process.env.S3_ENDPOINT ??= 'http://localhost:9000';
+process.env.S3_ACCESS_KEY ??= 'davart';
+process.env.S3_SECRET_KEY ??= 'davartsecret';
+process.env.S3_BUCKET ??= 'davart';
+process.env.S3_REGION ??= 'us-east-1';
+process.env.ALLOW_DEV_ENDPOINTS ??= 'true';
+process.env.ADMIN_API_SECRET ??= 'test-admin-secret';
+process.env.NODE_ENV ??= 'test';

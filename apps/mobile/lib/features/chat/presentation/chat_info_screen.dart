@@ -1,0 +1,382 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/ds/ds.dart';
+import '../../../core/widgets/state_views.dart';
+import '../../auth/presentation/auth_notifier.dart';
+import '../../commerce/presentation/active_project_provider.dart';
+import '../../projects/data/projects_repository.dart';
+import '../../staff/presentation/working_client_provider.dart';
+import '../data/chat_models.dart';
+import '../data/chat_repository.dart';
+import '../data/open_remote_attachment.dart';
+import 'voice_message_player.dart';
+
+final chatDetailsProvider =
+    FutureProvider.autoDispose.family<ChatDetails, String>((ref, chatId) {
+  return ref.watch(chatRepositoryProvider).getChat(chatId);
+});
+
+final chatArchiveProvider = FutureProvider.autoDispose
+    .family<List<ChatArchiveItem>, ({String chatId, String kind})>((ref, args) {
+  return ref.watch(chatRepositoryProvider).getArchive(
+        args.chatId,
+        kind: args.kind,
+      );
+});
+
+class ChatInfoScreen extends ConsumerStatefulWidget {
+  const ChatInfoScreen({super.key, required this.chatId});
+
+  final String chatId;
+
+  @override
+  ConsumerState<ChatInfoScreen> createState() => _ChatInfoScreenState();
+}
+
+class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabs = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final detailsAsync = ref.watch(chatDetailsProvider(widget.chatId));
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('О чате'),
+        leading: IconButton(
+          tooltip: 'Назад',
+          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+          onPressed: () => popOrGo(
+            context,
+            chatPathForRole(ref.watch(authProvider).user?.role),
+          ),
+        ),
+      ),
+      body: detailsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, _) => ErrorState(
+          message: 'Не удалось загрузить чат',
+          onRetry: () => ref.invalidate(chatDetailsProvider(widget.chatId)),
+        ),
+        data: (chat) {
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                  children: [
+                    Text(chat.title, style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: 4),
+                    Text(
+                      chat.type == 'project' ? 'Проектный чат' : chat.type,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    if (chat.isProject) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      PrimaryButton(
+                        label: 'Корзина проекта',
+                        onPressed: () => _openCart(chat),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Участники',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        if (chat.isProject)
+                          IconButton(
+                            tooltip: 'Пригласить по телефону',
+                            onPressed: () => _invite(chat),
+                            icon: const Icon(Icons.person_add_outlined),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (chat.participants.isEmpty)
+                      Text(
+                        'Участников пока нет',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      )
+                    else
+                      ...chat.participants.map(
+                        (p) => ListItem(
+                          title: p.name,
+                          subtitle: p.phone.isNotEmpty
+                              ? p.phone
+                              : _chatRoleLabel(p.role),
+                          leading: AppAvatar(label: p.name, size: 40),
+                          showChevron: false,
+                        ),
+                      ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      'Архив',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    TabBar(
+                      controller: _tabs,
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
+                      tabs: const [
+                        Tab(text: 'Медиа'),
+                        Tab(text: 'Файлы'),
+                        Tab(text: 'Голосовые'),
+                        Tab(text: 'Ссылки'),
+                      ],
+                    ),
+                    SizedBox(
+                      height: 320,
+                      child: TabBarView(
+                        controller: _tabs,
+                        children: [
+                          _ArchiveList(chatId: widget.chatId, kind: 'media'),
+                          _ArchiveList(chatId: widget.chatId, kind: 'files'),
+                          _ArchiveList(chatId: widget.chatId, kind: 'voice'),
+                          _ArchiveList(chatId: widget.chatId, kind: 'links'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openCart(ChatDetails chat) async {
+    final projectId = chat.projectId;
+    if (projectId == null) return;
+
+    final isStaff = ref.read(authProvider).user?.role.isStudio == true;
+    ref.read(activeProjectProvider.notifier).state = ActiveProject(
+      id: projectId,
+      name: chat.projectName ?? chat.title,
+      ownerClientId: chat.clientId,
+    );
+
+    if (isStaff) {
+      if (chat.clientId != null) {
+        ref.read(workingClientProvider.notifier).state = WorkingClient(
+          id: chat.clientId!,
+          displayName: chat.title,
+          phone: '',
+        );
+      }
+      if (mounted) context.push(AppRoutes.staffProjectCart(projectId));
+      return;
+    }
+
+    if (mounted) context.go(AppRoutes.cart);
+  }
+
+  Future<void> _invite(ChatDetails chat) async {
+    final projectId = chat.projectId;
+    if (projectId == null) return;
+
+    final controller = TextEditingController();
+    final phone = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Добавить участника'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(
+              labelText: 'Телефон',
+              hintText: '+79001234567',
+            ),
+            autofocus: true,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Добавить'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (phone == null || phone.isEmpty) return;
+
+    try {
+      await ref.read(projectsRepositoryProvider).inviteMember(
+            projectId: projectId,
+            phone: phone,
+          );
+      ref.invalidate(chatDetailsProvider(widget.chatId));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Участник добавлен')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось добавить участника')),
+        );
+      }
+    }
+  }
+}
+
+class _ArchiveList extends ConsumerWidget {
+  const _ArchiveList({required this.chatId, required this.kind});
+
+  final String chatId;
+  final String kind;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(
+      chatArchiveProvider((chatId: chatId, kind: kind)),
+    );
+
+    return async.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (_, _) => const Center(child: Text('Не удалось загрузить')),
+      data: (items) {
+        if (items.isEmpty) {
+          return Center(
+            child: Text(
+              switch (kind) {
+                'media' => 'Медиа пока нет',
+                'files' => 'Файлов пока нет',
+                'voice' => 'Голосовых пока нет',
+                _ => 'Ссылок пока нет',
+              },
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          itemCount: items.length,
+          itemBuilder: (context, index) {
+            final item = items[index];
+            if (kind == 'media' && item.attachmentUrl != null) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    item.attachmentUrl!,
+                    height: 140,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              );
+            }
+
+            if (kind == 'links') {
+              return Column(
+                children: item.urls
+                    .map(
+                      (url) => ListItem(
+                        title: url,
+                        subtitle: item.senderName,
+                        leading: const Icon(Icons.link, size: 20),
+                        onTap: () async {
+                          await Clipboard.setData(ClipboardData(text: url));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Ссылка скопирована')),
+                            );
+                          }
+                        },
+                      ),
+                    )
+                    .toList(),
+              );
+            }
+
+            if (kind == 'voice' && item.attachmentUrl != null) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    VoiceMessagePlayer(
+                      url: item.attachmentUrl!,
+                      content: item.content,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.senderName,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListItem(
+              title: item.attachmentName ?? item.content ?? 'Файл',
+              subtitle: item.senderName,
+              leading: const Icon(Icons.insert_drive_file_outlined, size: 20),
+              onTap: item.attachmentUrl == null
+                  ? null
+                  : () async {
+                      try {
+                        await openRemoteAttachment(
+                          url: item.attachmentUrl!,
+                          fileName: item.attachmentName,
+                        );
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Не удалось открыть файл'),
+                          ),
+                        );
+                      }
+                    },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+String _chatRoleLabel(String role) {
+  return switch (role) {
+    'complectator' => 'Менеджер',
+    'designer' => 'Дизайнер',
+    'admin' => 'Админ',
+    _ => 'Клиент',
+  };
+}

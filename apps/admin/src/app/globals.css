@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3eee6;
+  --ink: #1c1915;
+  --muted: #6b6258;
+  --rule: #d4c8b8;
+  --panel: #fffbf5;
+  --copper: #3f6f64;
+  --copper-ink: #e8f3ef;
+  --alert: #b5473a;
+  --focus: #c45c26;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-panel: var(--panel);
+  --color-copper: var(--copper);
+  --color-copper-ink: var(--copper-ink);
+  --color-alert: var(--alert);
+  --font-sans: var(--font-plex);
+  --font-display: var(--font-fraunces);
+  --font-mono: var(--font-plex-mono);
+}
+
+html,
+body {
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-plex), "IBM Plex Sans", sans-serif;
+}
+
+::selection {
+  background: var(--copper-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.master-rule {
+  width: 3px;
+  background: linear-gradient(180deg, #3f6f64 0%, #c45c26 100%);
+}
