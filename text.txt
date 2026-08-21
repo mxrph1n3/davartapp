@@ -1,11 +1,14 @@
 cd ~/davartapp
 
+# остановить всё и удалить тома
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging down -v
 
-docker volume ls | grep -i postgres
+# на всякий случай убрать висящие тома проекта
+docker volume ls
+docker volume prune -f
 
+# поднять заново
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d --build
 
-sleep 40
-curl http://127.0.0.1:3000/api/health
-docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs --tail=40 api
+# логи api в реальном времени (Ctrl+C чтобы выйти)
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs -f api
