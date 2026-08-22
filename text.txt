@@ -1,5 +1,10 @@
-
+davart-server@davart-server-HP-ProBook-450-G5:~/davartapp$ curl http://192.168.1.134:3000/api/health
+{"status":"ok","timestamp":"2026-08-22T02:06:25.277Z","services":{"database":"ok","redis":"ok","meilisearch":"ok"}}davart-server@davart-server-HP-ProBook-450-G5:~/davartapp$ 
 cd apps/mobile
 flutter run --dart-define=API_BASE_URL=http://192.168.1.134:3000/api
 
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs -f api | grep -i otp
+Command 'flutter' not found, did you mean:
+  command 'fluster' from deb fluster (1.0.1+really0.6.0-2)
+Try: sudo apt install <deb name>
+couldn't find env file: /home/davart-server/davartapp/apps/mobile/infra/.env.staging
