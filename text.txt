@@ -1,79 +1,12 @@
-From github.com:mxrph1n3/davartapp
-   1a4fb68..0db9ff4  main       -> origin/main
-Updating 1a4fb68..0db9ff4
-Fast-forward
- apps/api/Dockerfile          |  2 +-
- apps/api/package.json        |  2 +-
- apps/api/tsconfig.build.json |  2 +-
- text.txt                     | 13 +++----------
- 4 files changed, 6 insertions(+), 13 deletions(-)
-WARN[0000] Docker Compose is configured to build using Bake, but buildx isn't installed 
-[+] Building 163.7s (19/19) FINISHED                                                               docker:default
- => [api internal] load build definition from Dockerfile                                                     0.3s
- => => transferring dockerfile: 731B                                                                         0.0s
- => [api internal] load metadata for docker.io/library/node:22-alpine                                        1.4s
- => [api internal] load .dockerignore                                                                        0.3s
- => => transferring context: 101B                                                                            0.0s
- => [api build 1/5] FROM docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f71  0.5s
- => => resolve docker.io/library/node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5  0.4s
- => [api internal] load build context                                                                        0.4s
- => => transferring context: 12.90kB                                                                         0.0s
- => CACHED [api build 2/5] WORKDIR /app                                                                      0.0s
- => [api runner 3/7] RUN addgroup -S davart && adduser -S davart -G davart                                   5.5s
- => [api deps 3/5] COPY package.json package-lock.json ./                                                    3.3s
- => [api deps 4/5] COPY prisma ./prisma                                                                      4.0s
- => [api deps 5/5] RUN npm ci                                                                               39.2s
- => [api build 3/5] COPY --from=deps /app/node_modules ./node_modules                                       36.0s 
- => [api runner 4/7] COPY --from=deps /app/node_modules ./node_modules                                      35.9s 
- => [api build 4/5] COPY . .                                                                                 3.0s 
- => [api build 5/5] RUN npx prisma generate && npm run build                                                16.8s 
- => [api runner 5/7] COPY --from=build /app/dist ./dist                                                      4.4s 
- => [api runner 6/7] COPY --from=build /app/prisma ./prisma                                                  2.5s 
- => [api runner 7/7] COPY --from=build /app/package.json ./                                                  1.4s 
- => [api] exporting to image                                                                                40.5s 
- => => exporting layers                                                                                     28.1s 
- => => exporting manifest sha256:24c30f85498bd4a4f4c48b9a0c480a599cf17a7fd3ab2becdaeb3e30c979ad79            0.3s 
- => => exporting config sha256:142f824facda1c36322002d38259ee5fbc328293580876e054367317b41410d1              0.3s
- => => exporting attestation manifest sha256:90e25aca903e1c73ff67a4b5aa75604705aba5a671ed84a39f31f237adf3af  0.6s
- => => exporting manifest list sha256:40900052f3b0b26b1b60b02d6d4668f64029a68dd38ecd9092972485ffabcf3c       0.3s
- => => naming to docker.io/library/davart-api:latest                                                         0.1s
- => => unpacking to docker.io/library/davart-api:latest                                                     10.5s
- => [api] resolving provenance for metadata file                                                             0.0s
-[+] Building 1/1
- ✔ api  Built                                                                                                0.0s 
-[+] Running 4/4
- ✔ Container davart-redis-1     Healthy                                                                     24.5s 
- ✔ Container davart-postgres-1  Healthy                                                                     24.5s 
- ✔ Container davart-minio-1     Healthy                                                                     24.5s 
- ✔ Container davart-api-1       Started                                                                     25.5s 
-{"status":"ok","timestamp":"2026-08-22T01:52:24.125Z","services":{"database":"ok","redis":"ok","meilisearch":"ok"}api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/addresses, POST} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/projects, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/projects, POST} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/projects/:projectId, GET} route +1ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/projects/:projectId/brief, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/projects/:projectId/brief/pdf, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/cart, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/cart/items, POST} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/cart/items/:itemId, PATCH} route +1ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/cart/items/:itemId, DELETE} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/cart, DELETE} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/orders, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/clients/:clientId/orders/:orderId, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/projects/:projectId/orders, POST} route +1ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/staff/audit, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RoutesResolver] AdminController {/api/admin}: +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users, POST} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id, PATCH} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/admin/users/:id/role, PATCH} route +1ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RoutesResolver] FaqController {/api/faq}: +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/faq, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RoutesResolver] LegalController {/api/legal}: +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/legal/privacy, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/legal/terms, GET} route +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RoutesResolver] HealthController {/api/health}: +0ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [RouterExplorer] Mapped {/api/health, GET} route +1ms
-api-1  | [Nest] 1  - 08/22/2026, 1:52:07 AM     LOG [StorageService] S3 bucket "davart" created
-api-1  | [Nest] 1  - 08/22/2026, 1:52:08 AM     LOG [MeilisearchService] Meilisearch connected
-api-1  | [Nest] 1  - 08/22/2026, 1:52:08 AM     LOG [NestApplication] Nest application successfully started +5ms
-davart-server@davart-server-HP-ProBook-450-G5:~/davartapp$ 
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging exec api npx prisma db seed
+
+hostname -I | awk '{print $1}'
+sudo ufw allow 3000/tcp
+sudo ufw status
+
+curl http://IP_УБУНТУ:3000/api/health
+
+cd apps/mobile
+flutter run --dart-define=API_BASE_URL=http://IP_УБУНТУ:3000/api
+
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs -f api | grep -i otp
