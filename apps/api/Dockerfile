@@ -20,4 +20,4 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/package.json ./
 USER davart
 EXPOSE 3000
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main"]
+CMD ["sh", "-c", "npx prisma migrate deploy && if [ -f dist/main.js ]; then node dist/main.js; else node dist/src/main.js; fi"]
