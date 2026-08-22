@@ -1,12 +1,5 @@
-docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging exec api npx prisma db seed
-
-hostname -I | awk '{print $1}'
-sudo ufw allow 3000/tcp
-sudo ufw status
-
-curl http://IP_УБУНТУ:3000/api/health
 
 cd apps/mobile
-flutter run --dart-define=API_BASE_URL=http://IP_УБУНТУ:3000/api
+flutter run --dart-define=API_BASE_URL=http://192.168.1.134:3000/api
 
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs -f api | grep -i otp
