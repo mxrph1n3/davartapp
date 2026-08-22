@@ -53,10 +53,19 @@ cat infra/.env.staging
 
 ## 3. Пересоздать контейнеры (сотрёт старую локальную БД)
 
+Если API рестартится с Prisma **P3009** — том Postgres не стёрт. Делай так:
+
 ```bash
 cd ~/davartapp
+git pull
+
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging down -v
-docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d --build
+docker volume ls | grep -E 'postgres|davart' || true
+docker volume rm davart_postgres_data 2>/dev/null || true
+docker volume rm infra_postgres_data davartapp_postgres_data 2>/dev/null || true
+
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging build --no-cache api
+docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d
 ```
 
 ## 4. Проверка

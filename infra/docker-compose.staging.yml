@@ -3,6 +3,8 @@
 #   cp infra/.env.staging.example infra/.env.staging
 #   docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d --build
 
+name: davart
+
 services:
   postgres:
     image: postgres:16-alpine

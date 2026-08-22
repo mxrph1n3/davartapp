@@ -26,9 +26,13 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
-CREATE TYPE "ProjectMemberRole" AS ENUM ('owner', 'member', 'viewer');
+DO $$ BEGIN
+  CREATE TYPE "ProjectMemberRole" AS ENUM ('owner', 'member', 'viewer');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TABLE "project_members" (
+CREATE TABLE IF NOT EXISTS "project_members" (
     "id" TEXT NOT NULL,
     "project_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
@@ -37,16 +41,24 @@ CREATE TABLE "project_members" (
     CONSTRAINT "project_members_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "project_members_project_id_user_id_key" ON "project_members"("project_id", "user_id");
-CREATE INDEX "project_members_user_id_idx" ON "project_members"("user_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "project_members_project_id_user_id_key" ON "project_members"("project_id", "user_id");
+CREATE INDEX IF NOT EXISTS "project_members_user_id_idx" ON "project_members"("user_id");
 
-ALTER TABLE "project_members"
-  ADD CONSTRAINT "project_members_project_id_fkey"
-  FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "project_members"
+    ADD CONSTRAINT "project_members_project_id_fkey"
+    FOREIGN KEY ("project_id") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "project_members"
-  ADD CONSTRAINT "project_members_user_id_fkey"
-  FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "project_members"
+    ADD CONSTRAINT "project_members_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- Backfill: primary Project.userId → owner membership
 INSERT INTO "project_members" ("id", "project_id", "user_id", "role", "created_at")
