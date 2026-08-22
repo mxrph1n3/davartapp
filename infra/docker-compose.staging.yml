@@ -99,6 +99,20 @@ services:
     ports:
       - "3000:3000"
 
+  # Cloudflare Tunnel (вариант B). Не публикует порты роутера.
+  # Запуск: docker compose ... --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - api
+      - minio
+    profiles:
+      - tunnel
+
 volumes:
   postgres_data:
   redis_data:

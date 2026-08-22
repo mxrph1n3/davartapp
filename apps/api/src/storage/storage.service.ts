@@ -70,7 +70,8 @@ export class StorageService implements OnModuleInit {
       ContentType: contentType,
     });
 
-    return getSignedUrl(this.client!, command, { expiresIn });
+    const signed = await getSignedUrl(this.client!, command, { expiresIn });
+    return this.toPublicUrl(signed);
   }
 
   async getDownloadUrl(storageKey: string, expiresIn = 1800): Promise<string> {
@@ -81,7 +82,8 @@ export class StorageService implements OnModuleInit {
       Key: storageKey,
     });
 
-    return getSignedUrl(this.client!, command, { expiresIn });
+    const signed = await getSignedUrl(this.client!, command, { expiresIn });
+    return this.toPublicUrl(signed);
   }
 
   async uploadObject(
@@ -104,6 +106,22 @@ export class StorageService implements OnModuleInit {
   private ensureAvailable() {
     if (!this.isAvailable()) {
       throw new Error('S3 storage is not available');
+    }
+  }
+
+  /** Phones cannot reach http://minio:9000 — rewrite host to S3_PUBLIC_BASE_URL. */
+  private toPublicUrl(signedUrl: string): string {
+    const publicBase = this.config.get<string>('S3_PUBLIC_BASE_URL')?.trim();
+    if (!publicBase) return signedUrl;
+
+    try {
+      const signed = new URL(signedUrl);
+      const pub = new URL(publicBase);
+      signed.protocol = pub.protocol;
+      signed.host = pub.host;
+      return signed.toString();
+    } catch {
+      return signedUrl;
     }
   }
 }
