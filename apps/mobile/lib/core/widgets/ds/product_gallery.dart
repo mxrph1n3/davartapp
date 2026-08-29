@@ -19,13 +19,18 @@ class _ProductGalleryState extends State<ProductGallery> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final urls = widget.imageUrls.where((u) => u.isNotEmpty).toList();
 
     if (urls.isEmpty) {
-      return const ColoredBox(
-        color: AppColors.imagePlaceholder,
+      return ColoredBox(
+        color: colors.imagePlaceholder,
         child: Center(
-          child: Icon(Icons.image_outlined, size: 48, color: AppColors.textSecondary),
+          child: Icon(
+            Icons.image_outlined,
+            size: 48,
+            color: colors.textSecondary,
+          ),
         ),
       );
     }
@@ -41,10 +46,14 @@ class _ProductGalleryState extends State<ProductGallery> {
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            errorBuilder: (_, _, _) => const ColoredBox(
-              color: AppColors.imagePlaceholder,
+            errorBuilder: (_, _, _) => ColoredBox(
+              color: colors.imagePlaceholder,
               child: Center(
-                child: Icon(Icons.image_outlined, size: 48, color: AppColors.textSecondary),
+                child: Icon(
+                  Icons.image_outlined,
+                  size: 48,
+                  color: colors.textSecondary,
+                ),
               ),
             ),
           ),
@@ -65,7 +74,7 @@ class _ProductGalleryState extends State<ProductGallery> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: active
-                        ? AppColors.textPrimary
+                        ? colors.textPrimary
                         : Colors.white.withValues(alpha: 0.6),
                   ),
                 );

@@ -21,13 +21,16 @@ import '../../features/commerce/presentation/orders_screen.dart';
 import '../../features/chat/presentation/chat_detail_screen.dart';
 import '../../features/chat/presentation/chat_info_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
+import '../../features/chat/presentation/new_chat_screen.dart';
 import '../../features/profile/presentation/addresses_screen.dart';
 import '../../features/profile/presentation/edit_profile_screen.dart';
 import '../../features/profile/presentation/faq_screen.dart';
 import '../../features/profile/presentation/legal_screen.dart';
+import '../../features/profile/presentation/notifications_settings_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../../features/projects/presentation/brief_screen.dart';
+import '../../features/projects/presentation/portfolio_screen.dart';
 import '../../features/projects/presentation/project_detail_screen.dart';
 import '../../features/projects/presentation/projects_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
@@ -37,9 +40,10 @@ import '../../features/staff/presentation/staff_brief_screen.dart';
 import '../../features/staff/presentation/staff_checkout_screen.dart';
 import '../../features/staff/presentation/staff_client_cart_screen.dart';
 import '../../features/staff/presentation/staff_client_profile_screen.dart';
-import '../../features/staff/presentation/staff_clients_screen.dart';
 import '../../features/staff/presentation/staff_order_detail_screen.dart';
 import '../../features/staff/presentation/staff_profile_screen.dart';
+import '../../features/staff/presentation/staff_project_workspace_screen.dart';
+import '../shell/staff_second_tab.dart';
 
 abstract final class AppRoutes {
   static const splash = '/';
@@ -64,13 +68,20 @@ abstract final class AppRoutes {
   static const adminUsers = '/staff/admin/users';
 
   static String productDetail(String id) => '/product/$id';
+  static String staffProductDetail(String id) => '/staff/product/$id';
   static String orderDetail(String id) => '/orders/$id';
   static String projectDetail(String id) => '/projects/$id';
   static String projectBrief(String id) => '/projects/$id/brief';
+  static const portfolio = '/projects/portfolio';
   static String documentViewer(String id) => '/documents/$id';
   static String chatDetail(String id) => '/chat/$id';
   static String chatInfo(String id) => '/chat/$id/info';
+  static const newChat = '/chat/new';
+  static const staffNewChat = '/staff/chats/new';
+  static String staffChatInfo(String id) => '/staff/chats/$id/info';
   static String staffClientProfile(String id) => '/staff/clients/$id';
+  static String staffProjectWorkspace(String projectId) =>
+      '/staff/projects/$projectId/workspace';
   static String staffProjectCart(String projectId) =>
       '/staff/projects/$projectId/cart';
   static String staffProjectCheckout(String projectId) =>
@@ -82,6 +93,7 @@ abstract final class AppRoutes {
   static const editProfile = '/profile/edit';
   static const addresses = '/profile/addresses';
   static const settings = '/profile/settings';
+  static const notifications = '/profile/notifications';
   static const faq = '/profile/faq';
   static const privacy = '/profile/privacy';
   static const terms = '/profile/terms';
@@ -98,6 +110,33 @@ String profilePathForRole(UserRole? role) =>
 
 String chatPathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffChats : AppRoutes.chat;
+
+String newChatPathForRole(UserRole? role) =>
+    role?.isStudio == true ? AppRoutes.staffNewChat : AppRoutes.newChat;
+
+String chatInfoPathForRole(UserRole? role, String chatId) =>
+    role?.isStudio == true
+        ? AppRoutes.staffChatInfo(chatId)
+        : AppRoutes.chatInfo(chatId);
+
+String productPathForRole(UserRole? role, String id) =>
+    role?.isStudio == true
+        ? AppRoutes.staffProductDetail(id)
+        : AppRoutes.productDetail(id);
+
+String searchPathForRole(UserRole? role) =>
+    role?.isStudio == true ? '/staff/search' : AppRoutes.search;
+
+String favoritesPathForRole(UserRole? role) =>
+    role?.isStudio == true ? '/staff/favorites' : AppRoutes.favorites;
+
+String editProfilePathForRole(UserRole? role) =>
+    role?.isStudio == true ? '/staff/profile/edit' : AppRoutes.editProfile;
+
+String notificationsPathForRole(UserRole? role) =>
+    role?.isStudio == true
+        ? '/staff/profile/notifications'
+        : AppRoutes.notifications;
 
 String projectsPathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffClients : AppRoutes.projects;
@@ -154,6 +193,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       final role = authState.user?.role ?? UserRole.client;
+      final isStudio = authState.user?.isStaff ?? role.isStudio;
       final home = AppRoutes.homeForRole(role);
 
       if (isAuthRoute || isSplash) {
@@ -168,14 +208,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         return home;
       }
 
-      if (role.isStudio && _isClientShellPath(location)) {
+      if (isStudio && _isClientShellPath(location)) {
         if (location == AppRoutes.catalog) return AppRoutes.staffCatalog;
         if (location == AppRoutes.chat) return AppRoutes.staffChats;
         if (location == AppRoutes.profile) return AppRoutes.staffProfile;
         return AppRoutes.staffChats;
       }
 
-      if (!role.isStudio && _isStaffPath(location)) {
+      if (!isStudio && _isStaffPath(location)) {
         return AppRoutes.catalog;
       }
 
@@ -193,44 +233,21 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.otp,
         builder: (context, state) {
-          final phone = state.uri.queryParameters['phone'] ??
-              state.extra as String? ??
-              '';
-          return OtpScreen(phone: phone);
+          final phone = state.uri.queryParameters['phone'] ?? '';
+          final initialCode =
+              state.extra is String ? state.extra as String : null;
+          return OtpScreen(phone: phone, initialCode: initialCode);
         },
       ),
-      GoRoute(
-        path: AppRoutes.search,
-        builder: (context, state) {
-          final query = state.uri.queryParameters['q'] ?? '';
-          return SearchScreen(initialQuery: query);
-        },
-      ),
-      GoRoute(
-        path: '/product/:id',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final productId = state.pathParameters['id']!;
-          return ProductDetailScreen(productId: productId);
-        },
-      ),
-      GoRoute(
-        path: '/documents/:id',
-        builder: (context, state) {
-          final documentId = state.pathParameters['id']!;
-          return DocumentViewerScreen(documentId: documentId);
-        },
-      ),
-      GoRoute(
-        path: '/chat/:id/info',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final chatId = state.pathParameters['id']!;
-          return ChatInfoScreen(chatId: chatId);
-        },
-      ),
+      // Fullscreen chat thread — bottom nav hidden.
       GoRoute(
         path: '/chat/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        redirect: (context, state) {
+          final id = state.pathParameters['id'];
+          if (id == 'new') return AppRoutes.newChat;
+          return null;
+        },
         builder: (context, state) {
           final chatId = state.pathParameters['id']!;
           final title = state.uri.queryParameters['title'];
@@ -244,129 +261,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-        path: AppRoutes.staffAudit,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const StaffAuditScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.adminUsers,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const AdminUsersScreen(),
-      ),
-      GoRoute(
-        path: '/staff/clients/:clientId',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final clientId = state.pathParameters['clientId']!;
-          return StaffClientProfileScreen(clientId: clientId);
-        },
-        routes: [
-          GoRoute(
-            path: 'orders/:orderId',
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) {
-              final clientId = state.pathParameters['clientId']!;
-              final orderId = state.pathParameters['orderId']!;
-              return StaffOrderDetailScreen(
-                clientId: clientId,
-                orderId: orderId,
-              );
-            },
-          ),
-          GoRoute(
-            path: 'projects/:projectId/brief',
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) {
-              final clientId = state.pathParameters['clientId']!;
-              final projectId = state.pathParameters['projectId']!;
-              return StaffBriefScreen(
-                clientId: clientId,
-                projectId: projectId,
-              );
-            },
-          ),
-        ],
-      ),
-      GoRoute(
-        path: '/staff/projects/:projectId/cart',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final projectId = state.pathParameters['projectId']!;
-          return StaffProjectCartScreen(projectId: projectId);
-        },
-      ),
-      GoRoute(
-        path: '/staff/projects/:projectId/checkout',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final projectId = state.pathParameters['projectId']!;
-          return StaffCheckoutScreen(projectId: projectId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.editProfile,
-        builder: (context, state) => const EditProfileScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.addresses,
-        builder: (context, state) => const AddressesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.settings,
-        builder: (context, state) => const SettingsScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.faq,
-        builder: (context, state) => const FaqScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.privacy,
-        builder: (context, state) => const LegalScreen(type: 'privacy'),
-      ),
-      GoRoute(
-        path: AppRoutes.terms,
-        builder: (context, state) => const LegalScreen(type: 'terms'),
-      ),
-      GoRoute(
-        path: AppRoutes.favorites,
-        builder: (context, state) => const FavoritesScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.checkout,
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) => const CheckoutScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.orders,
-        builder: (context, state) => const OrdersScreen(),
-      ),
-      GoRoute(
-        path: '/orders/:id',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final orderId = state.pathParameters['id']!;
-          return OrderDetailScreen(orderId: orderId);
-        },
-      ),
-      GoRoute(
-        path: '/projects/:id',
-        parentNavigatorKey: _rootNavigatorKey,
-        builder: (context, state) {
-          final projectId = state.pathParameters['id']!;
-          return ProjectDetailScreen(projectId: projectId);
-        },
-        routes: [
-          GoRoute(
-            path: 'brief',
-            parentNavigatorKey: _rootNavigatorKey,
-            builder: (context, state) {
-              final projectId = state.pathParameters['id']!;
-              return BriefScreen(projectId: projectId);
-            },
-          ),
-        ],
-      ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
           return MainShell(navigationShell: navigationShell);
@@ -378,6 +272,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: AppRoutes.catalog,
                 builder: (context, state) => const CatalogScreen(),
               ),
+              GoRoute(
+                path: AppRoutes.search,
+                builder: (context, state) {
+                  final query = state.uri.queryParameters['q'] ?? '';
+                  return SearchScreen(initialQuery: query);
+                },
+              ),
+              GoRoute(
+                path: '/product/:id',
+                builder: (context, state) {
+                  final productId = state.pathParameters['id']!;
+                  return ProductDetailScreen(productId: productId);
+                },
+              ),
+              GoRoute(
+                path: AppRoutes.favorites,
+                builder: (context, state) => const FavoritesScreen(),
+              ),
             ],
           ),
           StatefulShellBranch(
@@ -385,6 +297,35 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.projects,
                 builder: (context, state) => const ProjectsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'portfolio',
+                    builder: (context, state) => const PortfolioScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) {
+                      final projectId = state.pathParameters['id']!;
+                      return ProjectDetailScreen(projectId: projectId);
+                    },
+                    routes: [
+                      GoRoute(
+                        path: 'brief',
+                        builder: (context, state) {
+                          final projectId = state.pathParameters['id']!;
+                          return BriefScreen(projectId: projectId);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/documents/:id',
+                builder: (context, state) {
+                  final documentId = state.pathParameters['id']!;
+                  return DocumentViewerScreen(documentId: documentId);
+                },
               ),
             ],
           ),
@@ -393,6 +334,19 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.chat,
                 builder: (context, state) => const ChatScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    builder: (context, state) => const NewChatScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id/info',
+                    builder: (context, state) {
+                      final chatId = state.pathParameters['id']!;
+                      return ChatInfoScreen(chatId: chatId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -401,6 +355,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.cart,
                 builder: (context, state) => const CartScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'checkout',
+                    builder: (context, state) => const CheckoutScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: AppRoutes.checkout,
+                builder: (context, state) => const CheckoutScreen(),
               ),
             ],
           ),
@@ -409,6 +373,52 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.profile,
                 builder: (context, state) => const ProfileScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (context, state) => const EditProfileScreen(),
+                  ),
+                  GoRoute(
+                    path: 'addresses',
+                    builder: (context, state) => const AddressesScreen(),
+                  ),
+                  GoRoute(
+                    path: 'settings',
+                    builder: (context, state) => const SettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notifications',
+                    builder: (context, state) =>
+                        const NotificationsSettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'faq',
+                    builder: (context, state) => const FaqScreen(),
+                  ),
+                  GoRoute(
+                    path: 'privacy',
+                    builder: (context, state) =>
+                        const LegalScreen(type: 'privacy'),
+                  ),
+                  GoRoute(
+                    path: 'terms',
+                    builder: (context, state) =>
+                        const LegalScreen(type: 'terms'),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: AppRoutes.orders,
+                builder: (context, state) => const OrdersScreen(),
+                routes: [
+                  GoRoute(
+                    path: ':id',
+                    builder: (context, state) {
+                      final orderId = state.pathParameters['id']!;
+                      return OrderDetailScreen(orderId: orderId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -424,6 +434,19 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.staffChats,
                 builder: (context, state) => const ChatScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    builder: (context, state) => const NewChatScreen(),
+                  ),
+                  GoRoute(
+                    path: ':id/info',
+                    builder: (context, state) {
+                      final chatId = state.pathParameters['id']!;
+                      return ChatInfoScreen(chatId: chatId);
+                    },
+                  ),
+                ],
               ),
             ],
           ),
@@ -431,7 +454,65 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.staffClients,
-                builder: (context, state) => const StaffClientsScreen(),
+                builder: (context, state) => const StaffSecondTab(),
+                routes: [
+                  GoRoute(
+                    path: ':clientId',
+                    builder: (context, state) {
+                      final clientId = state.pathParameters['clientId']!;
+                      return StaffClientProfileScreen(clientId: clientId);
+                    },
+                    routes: [
+                      GoRoute(
+                        path: 'orders/:orderId',
+                        builder: (context, state) {
+                          final clientId = state.pathParameters['clientId']!;
+                          final orderId = state.pathParameters['orderId']!;
+                          return StaffOrderDetailScreen(
+                            clientId: clientId,
+                            orderId: orderId,
+                          );
+                        },
+                      ),
+                      GoRoute(
+                        path: 'projects/:projectId/brief',
+                        builder: (context, state) {
+                          final clientId = state.pathParameters['clientId']!;
+                          final projectId = state.pathParameters['projectId']!;
+                          return StaffBriefScreen(
+                            clientId: clientId,
+                            projectId: projectId,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: '/staff/projects/:projectId/workspace',
+                builder: (context, state) {
+                  final projectId = state.pathParameters['projectId']!;
+                  return StaffProjectWorkspaceScreen(projectId: projectId);
+                },
+              ),
+              GoRoute(
+                path: '/staff/projects/:projectId/cart',
+                builder: (context, state) {
+                  final projectId = state.pathParameters['projectId']!;
+                  return StaffProjectCartScreen(projectId: projectId);
+                },
+              ),
+              GoRoute(
+                path: '/staff/projects/:projectId/checkout',
+                builder: (context, state) {
+                  final projectId = state.pathParameters['projectId']!;
+                  return StaffCheckoutScreen(projectId: projectId);
+                },
+              ),
+              GoRoute(
+                path: AppRoutes.staffAudit,
+                builder: (context, state) => const StaffAuditScreen(),
               ),
             ],
           ),
@@ -441,6 +522,24 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: AppRoutes.staffCatalog,
                 builder: (context, state) => const CatalogScreen(),
               ),
+              GoRoute(
+                path: '/staff/search',
+                builder: (context, state) {
+                  final query = state.uri.queryParameters['q'] ?? '';
+                  return SearchScreen(initialQuery: query);
+                },
+              ),
+              GoRoute(
+                path: '/staff/product/:id',
+                builder: (context, state) {
+                  final productId = state.pathParameters['id']!;
+                  return ProductDetailScreen(productId: productId);
+                },
+              ),
+              GoRoute(
+                path: '/staff/favorites',
+                builder: (context, state) => const FavoritesScreen(),
+              ),
             ],
           ),
           StatefulShellBranch(
@@ -448,12 +547,31 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.staffProfile,
                 builder: (context, state) => const StaffProfileScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'edit',
+                    builder: (context, state) => const EditProfileScreen(),
+                  ),
+                  GoRoute(
+                    path: 'settings',
+                    builder: (context, state) => const SettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'notifications',
+                    builder: (context, state) =>
+                        const NotificationsSettingsScreen(),
+                  ),
+                ],
+              ),
+              GoRoute(
+                path: AppRoutes.adminUsers,
+                builder: (context, state) => const AdminUsersScreen(),
               ),
             ],
           ),
         ],
       ),
-    ],
+    ]
   );
   ref.onDispose(router.dispose);
   return router;

@@ -40,6 +40,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final catalogHome = catalogPathForRole(ref.watch(authProvider).user?.role);
     final productAsync = ref.watch(productDetailProvider(widget.productId));
     final favorites = ref.watch(favoritesProvider);
@@ -47,7 +48,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
 
     return productAsync.when(
         loading: () => Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: colors.background,
           appBar: AppBar(
             automaticallyImplyLeading: false,
             leading: AppBackButton(fallback: catalogHome),
@@ -55,7 +56,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
           body: const Center(child: CircularProgressIndicator()),
         ),
         error: (_, _) => Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: colors.background,
           appBar: AppBar(
             automaticallyImplyLeading: false,
             leading: AppBackButton(fallback: catalogHome),
@@ -77,7 +78,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
               _showAllSpecs ? specs : specs.take(3).toList(growable: false);
 
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: colors.background,
             body: Stack(
             children: [
               Positioned(
@@ -92,9 +93,10 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                 minChildSize: 0.50,
                 maxChildSize: 0.92,
                 builder: (context, scrollController) {
+                  final sheetColors = AppColors.of(context);
                   return DecoratedBox(
-                    decoration: const BoxDecoration(
-                      color: AppColors.background,
+                    decoration: BoxDecoration(
+                      color: sheetColors.background,
                       borderRadius: AppRadius.sheetRadius,
                     ),
                     child: ListView(
@@ -133,7 +135,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           Text(
                             'Нет в наличии',
                             style: textTheme.bodySmall?.copyWith(
-                              color: AppColors.error,
+                              color: sheetColors.error,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -166,7 +168,7 @@ class _ProductDetailScreenState extends ConsumerState<ProductDetailScreen> {
                           Text(
                             product.description!,
                             style: textTheme.bodyLarge?.copyWith(
-                              color: AppColors.textPrimary
+                              color: sheetColors.textPrimary
                                   .withValues(alpha: 0.72),
                             ),
                           ),
@@ -277,11 +279,12 @@ class _SheetHandle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       width: 36,
       height: 4,
       decoration: BoxDecoration(
-        color: AppColors.textPrimary.withValues(alpha: 0.12),
+        color: colors.textPrimary.withValues(alpha: 0.12),
         borderRadius: AppRadius.pillRadius,
       ),
     );
@@ -302,8 +305,9 @@ class _OverlayIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
-      color: AppColors.background,
+      color: colors.background,
       shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
@@ -314,9 +318,9 @@ class _OverlayIcon extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.border),
           ),
-          child: Icon(icon, size: iconSize, color: AppColors.textPrimary),
+          child: Icon(icon, size: iconSize, color: colors.textPrimary),
         ),
       ),
     );
@@ -331,11 +335,12 @@ class _SpecRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.divider)),
       ),
       child: Row(
         children: [

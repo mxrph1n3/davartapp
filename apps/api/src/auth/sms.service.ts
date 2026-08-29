@@ -2,8 +2,8 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 
 /**
- * OTP delivery.
- * - SMS_PROVIDER=mock (default): log code (dev/test only; fail-closed in production)
+ * OTP / invite SMS.
+ * - SMS_PROVIDER=mock (default): confirm send without logging the code
  * - SMS_PROVIDER=smsru: SMS.ru (`SMSRU_API_ID` required)
  */
 @Injectable()
@@ -13,6 +13,10 @@ export class SmsService {
   constructor(private readonly configService: ConfigService) {}
 
   async sendOtp(phone: string, code: string): Promise<void> {
+    await this.sendText(phone, `DAVart: код ${code}`);
+  }
+
+  async sendText(phone: string, message: string): Promise<void> {
     const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
 
@@ -22,18 +26,19 @@ export class SmsService {
           'SMS provider is not configured for production',
         );
       }
-      this.logger.log(`[MOCK SMS] OTP for ${phone}: ${code}`);
+      // Dev-only: real SMS.ru never logs the body. Mock prints the code for local login.
+      this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
       return;
     }
 
     if (provider === 'smsru') {
-      await this.sendViaSmsRu(phone, code);
+      await this.sendViaSmsRu(phone, message);
       return;
     }
 
     if (nodeEnv === 'production') {
       this.logger.error(
-        `SMS provider "${provider}" is not implemented — refusing to send OTP in production`,
+        `SMS provider "${provider}" is not implemented — refusing to send SMS in production`,
       );
       throw new ServiceUnavailableException(
         'SMS provider is not configured for production',
@@ -43,10 +48,10 @@ export class SmsService {
     this.logger.warn(
       `SMS provider "${provider}" is not configured, falling back to mock (non-production only)`,
     );
-    this.logger.log(`[MOCK SMS] OTP for ${phone}: ${code}`);
+    this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
   }
 
-  private async sendViaSmsRu(phone: string, code: string): Promise<void> {
+  private async sendViaSmsRu(phone: string, message: string): Promise<void> {
     const apiId = this.configService.get<string>('SMSRU_API_ID');
     if (!apiId) {
       throw new ServiceUnavailableException(
@@ -54,7 +59,6 @@ export class SmsService {
       );
     }
 
-    const message = `Davart: код ${code}`;
     const url = new URL('https://sms.ru/sms/send');
     url.searchParams.set('api_id', apiId);
     url.searchParams.set('to', phone.replace(/^\+/, ''));
@@ -80,6 +84,6 @@ export class SmsService {
       );
     }
 
-    this.logger.log(`SMS.ru OTP sent to ${phone}`);
+    this.logger.log(`SMS.ru sent to ${phone}`);
   }
 }

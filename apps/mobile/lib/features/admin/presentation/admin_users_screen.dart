@@ -35,6 +35,7 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final role = ref.watch(authProvider).user?.role;
     if (role != UserRole.admin) {
       return Scaffold(
@@ -127,8 +128,8 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openEditor(),
-        backgroundColor: AppColors.accent,
-        foregroundColor: AppColors.textPrimary,
+        backgroundColor: colors.accent,
+        foregroundColor: colors.textPrimary,
         icon: const Icon(Icons.person_add_alt_1),
         label: const Text('Новый аккаунт'),
       ),
@@ -160,7 +161,7 @@ class _AdminUserEditorSheet extends ConsumerStatefulWidget {
 class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
   late final TextEditingController _phone;
   late final TextEditingController _name;
-  late UserRole _role;
+  late Set<UserRole> _roles;
   var _saving = false;
 
   bool get _isCreate => widget.user == null;
@@ -170,7 +171,10 @@ class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
     super.initState();
     _phone = TextEditingController(text: widget.user?.phone ?? '+7');
     _name = TextEditingController(text: widget.user?.name ?? '');
-    _role = widget.user?.role ?? UserRole.client;
+    _roles = {
+      widget.user?.role ?? UserRole.client,
+      ...?widget.user?.extraRoles,
+    };
   }
 
   @override
@@ -213,17 +217,29 @@ class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
             labelText: 'Имя',
           ),
           const SizedBox(height: AppSpacing.sm),
-          Text('Роль', style: Theme.of(context).textTheme.bodySmall),
+          Text('Роли', style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               for (final role in UserRole.values)
-                ChoiceChip(
+                FilterChip(
                   label: Text(adminRoleLabel(role)),
-                  selected: _role == role,
-                  onSelected: (_) => setState(() => _role = role),
+                  selected: _roles.contains(role),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _roles.add(role);
+                        if (role != UserRole.client) {
+                          _roles.remove(UserRole.client);
+                        }
+                      } else {
+                        _roles.remove(role);
+                        if (_roles.isEmpty) _roles.add(UserRole.client);
+                      }
+                    });
+                  },
                 ),
             ],
           ),
@@ -254,7 +270,9 @@ class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
       if (_isCreate) {
         await repo.createUser(
           phone: phone,
-          role: _role,
+          role: _roles.contains(UserRole.admin)
+              ? UserRole.admin
+              : _roles.first,
           name: name.isEmpty ? null : name,
         );
       } else {
@@ -262,7 +280,7 @@ class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
           userId: widget.user!.id,
           phone: phone,
           name: name,
-          role: _role,
+          roles: _roles.toList(),
         );
       }
       if (mounted) Navigator.pop(context, true);

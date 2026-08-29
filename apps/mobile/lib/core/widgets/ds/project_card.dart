@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -17,6 +18,7 @@ class ProjectCard extends StatelessWidget {
     this.coverUrl,
     required this.onTap,
     this.compact = false,
+    this.onMorePressed,
   });
 
   final String name;
@@ -27,6 +29,7 @@ class ProjectCard extends StatelessWidget {
   final String? coverUrl;
   final VoidCallback onTap;
   final bool compact;
+  final VoidCallback? onMorePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -38,17 +41,21 @@ class ProjectCard extends StatelessWidget {
         subtitle: address,
         coverUrl: coverUrl,
         onTap: onTap,
+        onMorePressed: onMorePressed,
       );
     }
+
+    final colors = AppColors.of(context);
+    final brightness = Theme.of(context).brightness;
 
     return GestureDetector(
       onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: colors.surface,
           borderRadius: AppRadius.cardRadius,
-          boxShadow: AppShadows.card,
-          border: Border.all(color: AppColors.border),
+          boxShadow: AppShadows.cardFor(brightness),
+          border: Border.all(color: colors.border),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -56,7 +63,7 @@ class ProjectCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: _cover(coverUrl),
+              child: _cover(coverUrl, colors),
             ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
@@ -82,7 +89,10 @@ class ProjectCard extends StatelessWidget {
                   ),
                   if (address != null) ...[
                     const SizedBox(height: 6),
-                    Text(address!, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      address!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                 ],
               ),
@@ -93,30 +103,30 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  Widget _cover(String? url) {
+  Widget _cover(String? url, DavartColors colors) {
     if (url != null) {
       return Image.network(
         url,
         fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => const ColoredBox(
-          color: AppColors.imagePlaceholder,
+        errorBuilder: (_, _, _) => ColoredBox(
+          color: colors.imagePlaceholder,
           child: Center(
             child: Icon(
               Icons.apartment_outlined,
               size: 40,
-              color: AppColors.textSecondary,
+              color: colors.textSecondary,
             ),
           ),
         ),
       );
     }
-    return const ColoredBox(
-      color: AppColors.imagePlaceholder,
+    return ColoredBox(
+      color: colors.imagePlaceholder,
       child: Center(
         child: Icon(
           Icons.apartment_outlined,
           size: 40,
-          color: AppColors.textSecondary,
+          color: colors.textSecondary,
         ),
       ),
     );
@@ -131,6 +141,7 @@ class _CompactProjectCard extends StatelessWidget {
     this.status,
     this.subtitle,
     this.coverUrl,
+    this.onMorePressed,
   });
 
   final String name;
@@ -139,10 +150,15 @@ class _CompactProjectCard extends StatelessWidget {
   final String? subtitle;
   final String? coverUrl;
   final VoidCallback onTap;
+  final VoidCallback? onMorePressed;
+
+  bool get _canDelete => status == 'brief_filling';
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = projectStatusColor(status ?? statusLabel);
+    final colors = AppColors.of(context);
+    final statusColor =
+        projectStatusColor(status ?? statusLabel, colors);
 
     return GestureDetector(
       onTap: onTap,
@@ -160,14 +176,22 @@ class _CompactProjectCard extends StatelessWidget {
                     ? Image.network(
                         coverUrl!,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(
-                          color: AppColors.imagePlaceholder,
-                          child: Icon(Icons.apartment_outlined, size: 28),
+                        errorBuilder: (_, _, _) => ColoredBox(
+                          color: colors.imagePlaceholder,
+                          child: Icon(
+                            Icons.apartment_outlined,
+                            size: 28,
+                            color: colors.textSecondary,
+                          ),
                         ),
                       )
-                    : const ColoredBox(
-                        color: AppColors.imagePlaceholder,
-                        child: Icon(Icons.apartment_outlined, size: 28),
+                    : ColoredBox(
+                        color: colors.imagePlaceholder,
+                        child: Icon(
+                          Icons.apartment_outlined,
+                          size: 28,
+                          color: colors.textSecondary,
+                        ),
                       ),
               ),
             ),
@@ -205,6 +229,17 @@ class _CompactProjectCard extends StatelessWidget {
                 ],
               ),
             ),
+            if (onMorePressed != null && _canDelete)
+              CupertinoButton(
+                padding: const EdgeInsets.all(8),
+                minimumSize: Size.zero,
+                onPressed: onMorePressed,
+                child: Icon(
+                  CupertinoIcons.ellipsis_circle,
+                  size: 26,
+                  color: colors.textSecondary,
+                ),
+              ),
           ],
         ),
       ),

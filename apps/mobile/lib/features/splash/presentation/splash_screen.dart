@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/deep_link/deep_link.dart';
 import '../../../core/push/push_service.dart';
-import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/auth_notifier.dart';
 
@@ -27,20 +24,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Navigation is owned by GoRouter.redirect — splash only removes the
+    // native splash and warms push once auth leaves unknown.
     ref.listen(authProvider, (previous, next) {
       if (next.status == AuthStatus.unknown) return;
       FlutterNativeSplash.remove();
       if (next.isAuthenticated) {
         ref.read(pushServiceProvider).initialize();
-        final pending = ref.read(pendingDeepLinkProvider);
-        if (pending != null) {
-          ref.read(pendingDeepLinkProvider.notifier).state = null;
-          context.go(pending);
-        } else {
-          context.go(AppRoutes.homeForRole(next.user!.role));
-        }
-      } else {
-        context.go(AppRoutes.catalog);
       }
     });
 
@@ -51,7 +41,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Davart',
+              'DAVart',
               style: TextStyle(
                 color: AppColors.background,
                 fontSize: 36,

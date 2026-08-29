@@ -48,16 +48,16 @@ class _MainShellState extends ConsumerState<MainShell> {
           const DavartNavItem(
             icon: Icons.grid_view_outlined,
             selectedIcon: Icons.grid_view,
-            label: 'Каталог',
+            label: 'Магазин',
           ),
           const DavartNavItem(
-            icon: Icons.folder_outlined,
-            selectedIcon: Icons.folder,
-            label: 'Проекты',
+            icon: Icons.palette_outlined,
+            selectedIcon: Icons.palette,
+            label: 'Дизайн',
           ),
           DavartNavItem(
-            icon: Icons.chat_bubble_outline,
-            selectedIcon: Icons.chat_bubble,
+            icon: Icons.send_outlined,
+            selectedIcon: Icons.send,
             label: 'Чаты',
             badge: unreadTotal > 0 ? unreadTotal : null,
           ),

@@ -101,8 +101,19 @@ export class BriefPdfService {
 }
 
 export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  brief_filling: 'На паузе',
-  in_progress: 'В работе',
-  completed: 'Завершён',
+  brief_filling: 'Бриф',
+  measurement: 'Замер',
+  in_progress: 'Планировка',
+  materials: 'Ведомость материалов и мебели',
+  visualization: 'Визуализация',
+  final_assembly: 'Итоговые чертежи и сборка проекта',
+  completed: 'Завершен',
   archived: 'Архив',
 };
+
+/** Brief stays open through layout; locks after планировка. */
+export const BRIEF_EDITABLE_STATUSES: ProjectStatus[] = [
+  ProjectStatus.brief_filling,
+  ProjectStatus.measurement,
+  ProjectStatus.in_progress,
+];

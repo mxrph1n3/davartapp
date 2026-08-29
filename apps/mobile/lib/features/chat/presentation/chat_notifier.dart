@@ -44,9 +44,33 @@ class UnreadTotalNotifier extends AsyncNotifier<int> {
 }
 
 final chatMessagesProvider = AsyncNotifierProvider.autoDispose
-    .family<ChatMessagesNotifier, List<ChatMessage>, String>(
+    .family<ChatMessagesNotifier, ChatMessagesState, String>(
   ChatMessagesNotifier.new,
 );
+
+class ChatMessagesState {
+  const ChatMessagesState({
+    required this.messages,
+    this.hasMore = false,
+    this.loadingOlder = false,
+  });
+
+  final List<ChatMessage> messages;
+  final bool hasMore;
+  final bool loadingOlder;
+
+  ChatMessagesState copyWith({
+    List<ChatMessage>? messages,
+    bool? hasMore,
+    bool? loadingOlder,
+  }) {
+    return ChatMessagesState(
+      messages: messages ?? this.messages,
+      hasMore: hasMore ?? this.hasMore,
+      loadingOlder: loadingOlder ?? this.loadingOlder,
+    );
+  }
+}
 
 final chatSendingProvider =
     NotifierProvider.autoDispose.family<ChatSendingNotifier, bool, String>(
@@ -82,18 +106,28 @@ class ChatFailedUploadsNotifier
 }
 
 class ChatMessagesNotifier
-    extends AutoDisposeFamilyAsyncNotifier<List<ChatMessage>, String> {
+    extends AutoDisposeFamilyAsyncNotifier<ChatMessagesState, String> {
+  var _page = 1;
+  var _total = 0;
+
   @override
-  Future<List<ChatMessage>> build(String chatId) async {
+  Future<ChatMessagesState> build(String chatId) async {
     final socket = ref.watch(chatSocketServiceProvider);
     await socket.connect();
     socket.joinChat(chatId);
 
     void onMessage(ChatMessage message) {
+      message = _owned(message);
       if (message.chatId != chatId) return;
-      final current = state.value ?? [];
+      final current = state.value?.messages ?? [];
       if (current.any((item) => item.id == message.id)) return;
-      state = AsyncData([...current, message]);
+      _total += 1;
+      state = AsyncData(
+        (state.value ?? const ChatMessagesState(messages: [])).copyWith(
+          messages: [...current, message],
+          hasMore: current.length + 1 < _total,
+        ),
+      );
       if (!message.isMine) {
         ref.read(chatRepositoryProvider).markRead(chatId);
         ref.read(unreadTotalProvider.notifier).refresh();
@@ -107,10 +141,51 @@ class ChatMessagesNotifier
     });
 
     final page = await ref.watch(chatRepositoryProvider).getMessages(chatId);
+    _page = page.page;
+    _total = page.total;
     await ref.read(chatRepositoryProvider).markRead(chatId);
     ref.read(unreadTotalProvider.notifier).refresh();
     socket.sendRead(chatId);
-    return page.items;
+    return ChatMessagesState(
+      messages: page.items.map(_owned).toList(),
+      hasMore: page.items.length < page.total,
+    );
+  }
+
+  ChatMessage _owned(ChatMessage message) {
+    final id = ref.read(authProvider).user?.id;
+    if (id == null) return message;
+    return message.copyWith(isMine: message.sender.id == id);
+  }
+
+  Future<void> loadOlder() async {
+    final current = state.value;
+    if (current == null || current.loadingOlder || !current.hasMore) return;
+
+    state = AsyncData(current.copyWith(loadingOlder: true));
+    try {
+      final nextPage = _page + 1;
+      final page = await ref.read(chatRepositoryProvider).getMessages(
+            arg,
+            page: nextPage,
+          );
+      _page = page.page;
+      _total = page.total;
+      final existingIds = current.messages.map((m) => m.id).toSet();
+      final older = page.items
+          .where((item) => !existingIds.contains(item.id))
+          .toList();
+      final merged = [...older, ...current.messages];
+      state = AsyncData(
+        ChatMessagesState(
+          messages: merged,
+          hasMore: merged.length < _total,
+          loadingOlder: false,
+        ),
+      );
+    } catch (_) {
+      state = AsyncData(current.copyWith(loadingOlder: false));
+    }
   }
 
   Future<void> sendText(String text) async {
@@ -228,34 +303,56 @@ class ChatMessagesNotifier
   }
 
   void _replaceMessage(String pendingId, ChatMessage message) {
-    final current = state.value ?? [];
-    state = AsyncData([
-      ...current.where((item) => item.id != pendingId),
-      message,
-    ]);
+    message = _owned(message);
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        messages: [
+          ...current.messages.where((item) => item.id != pendingId),
+          message,
+        ],
+      ),
+    );
   }
 
   void _markFailed(String messageId) {
-    final current = state.value ?? [];
+    final current = state.value;
+    if (current == null) return;
     state = AsyncData(
-      current
-          .map(
-            (item) => item.id == messageId
-                ? item.copyWith(isPending: false, isFailed: true)
-                : item,
-          )
-          .toList(),
+      current.copyWith(
+        messages: current.messages
+            .map(
+              (item) => item.id == messageId
+                  ? item.copyWith(isPending: false, isFailed: true)
+                  : item,
+            )
+            .toList(),
+      ),
     );
   }
 
   void _removeMessage(String messageId) {
-    final current = state.value ?? [];
-    state = AsyncData(current.where((item) => item.id != messageId).toList());
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        messages:
+            current.messages.where((item) => item.id != messageId).toList(),
+      ),
+    );
   }
 
   void _appendMessage(ChatMessage message) {
-    final current = state.value ?? [];
-    if (current.any((item) => item.id == message.id)) return;
-    state = AsyncData([...current, message]);
+    final current = state.value ?? const ChatMessagesState(messages: []);
+    if (current.messages.any((item) => item.id == message.id)) return;
+    _total += 1;
+    final messages = [...current.messages, message];
+    state = AsyncData(
+      current.copyWith(
+        messages: messages,
+        hasMore: messages.length < _total,
+      ),
+    );
   }
 }

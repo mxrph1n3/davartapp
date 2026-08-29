@@ -164,7 +164,7 @@ describe('Projects (e2e)', () => {
 
     expect(response.body).toHaveLength(1);
     expect(response.body[0].name).toBe('Квартира ЖК Skyline');
-    expect(response.body[0].statusLabel).toBe('На паузе');
+    expect(response.body[0].statusLabel).toBe('Бриф');
   });
 
   it('POST /api/projects', async () => {

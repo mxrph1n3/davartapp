@@ -23,7 +23,7 @@ import 'chat_notifier.dart';
 import 'product_picker_sheet.dart';
 import 'voice_message_player.dart';
 
-final _timeFormat = DateFormat('HH:mm');
+final _timeFormat = DateFormat('dd.MM.yyyy HH:mm');
 
 class ChatDetailScreen extends ConsumerStatefulWidget {
   const ChatDetailScreen({
@@ -55,8 +55,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Timer? _recordTicker;
   Timer? _typingEmitTimer;
   Timer? _typingClearTimer;
+  var _peerTypingPreview = '';
   var _isPeerTyping = false;
   TypingHandler? _typingHandler;
+  ChatSocketService? _socket;
+  double? _scrollExtentBeforeOlder;
 
   @override
   void initState() {
@@ -65,6 +68,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       if (mounted) setState(() {});
     });
     Future<void>.delayed(Duration.zero, _syncWorkingClient);
+    _scrollController.addListener(_onScroll);
     _voiceRecorder.onPeaks = (peaks) {
       if (mounted) setState(() => _recordBars = List<double>.from(peaks));
     };
@@ -72,30 +76,45 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   }
 
   void _bindTypingListener() {
-    _typingHandler ??= (chatId, userId) {
+    _socket ??= ref.read(chatSocketServiceProvider);
+    _typingHandler ??= (chatId, userId, preview) {
       if (chatId != widget.chatId) return;
       final myId = ref.read(authProvider).user?.id;
       if (myId != null && userId == myId) return;
-      setState(() => _isPeerTyping = true);
+      setState(() {
+        _isPeerTyping = true;
+        _peerTypingPreview = preview;
+      });
       _typingClearTimer?.cancel();
       _typingClearTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted) setState(() => _isPeerTyping = false);
+        if (mounted) {
+          setState(() {
+            _isPeerTyping = false;
+            _peerTypingPreview = '';
+          });
+        }
       });
     };
-    ref.read(chatSocketServiceProvider).addTypingListener(_typingHandler!);
+    _socket!.addTypingListener(_typingHandler!);
   }
 
   void _emitTyping() {
     _typingEmitTimer?.cancel();
     _typingEmitTimer = Timer(const Duration(milliseconds: 350), () {
-      ref.read(chatSocketServiceProvider).sendTyping(widget.chatId);
+      final ChatSocketService socket =
+          _socket ?? ref.read(chatSocketServiceProvider);
+      _socket = socket;
+      socket.sendTyping(
+        widget.chatId,
+        preview: _controller.text.trim(),
+      );
     });
   }
 
   void _syncWorkingClient() {
     final clientId = widget.clientId;
     if (clientId == null) return;
-    final isStaff = ref.read(authProvider).user?.role.isStudio == true;
+    final isStaff = ref.read(authProvider).user?.isStaff == true;
     if (!isStaff) return;
 
     final title = widget.title?.trim();
@@ -106,15 +125,24 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     );
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    if (_scrollController.position.pixels > 64) return;
+    final thread = ref.read(chatMessagesProvider(widget.chatId)).value;
+    if (thread == null || !thread.hasMore || thread.loadingOlder) return;
+    _scrollExtentBeforeOlder = _scrollController.position.maxScrollExtent;
+    ref.read(chatMessagesProvider(widget.chatId).notifier).loadOlder();
+  }
+
   @override
   void dispose() {
     _recordTicker?.cancel();
     _typingEmitTimer?.cancel();
     _typingClearTimer?.cancel();
-    if (_typingHandler != null) {
-      ref
-          .read(chatSocketServiceProvider)
-          .removeTypingListener(_typingHandler!);
+    final handler = _typingHandler;
+    final socket = _socket;
+    if (handler != null && socket != null) {
+      socket.removeTypingListener(handler);
     }
     unawaited(_voiceRecorder.dispose());
     _controller.dispose();
@@ -137,17 +165,47 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   Widget build(BuildContext context) {
     final messagesAsync = ref.watch(chatMessagesProvider(widget.chatId));
     final isSending = ref.watch(chatSendingProvider(widget.chatId));
-    final isStaff =
-        ref.watch(authProvider).user?.role.isStudio == true;
+    final user = ref.watch(authProvider).user;
+    final isStaff = user?.isStaff == true;
+    final canSeeClients = user?.canSeeClients == true;
     final clientId = widget.clientId;
 
-    ref.listen(chatMessagesProvider(widget.chatId), (_, next) {
-      if (next.hasValue) _scrollToBottom();
+    ref.listen(chatMessagesProvider(widget.chatId), (previous, next) {
+      final prevMessages = previous?.value?.messages ?? const <ChatMessage>[];
+      final thread = next.value;
+      if (thread == null) return;
+      final nextMessages = thread.messages;
+      final prepended = prevMessages.isNotEmpty &&
+          nextMessages.length > prevMessages.length &&
+          prevMessages.last.id == nextMessages.last.id;
+      if (prepended) {
+        final oldMax = _scrollExtentBeforeOlder;
+        _scrollExtentBeforeOlder = null;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_scrollController.hasClients || oldMax == null) return;
+          final delta = _scrollController.position.maxScrollExtent - oldMax;
+          _scrollController.jumpTo(_scrollController.position.pixels + delta);
+        });
+        return;
+      }
+      final isNewAtEnd = prevMessages.isEmpty ||
+          (nextMessages.isNotEmpty &&
+              prevMessages.last.id != nextMessages.last.id);
+      if (isNewAtEnd) _scrollToBottom();
     });
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.title ?? 'Чат'),
+        title: GestureDetector(
+          onTap: () => context.push(
+            chatInfoPathForRole(
+              ref.read(authProvider).user?.role,
+              widget.chatId,
+            ),
+          ),
+          behavior: HitTestBehavior.opaque,
+          child: Text(widget.title ?? 'Чат'),
+        ),
         leading: IconButton(
           tooltip: 'Назад',
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
@@ -157,13 +215,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            tooltip: 'О чате',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () {
-              context.push(AppRoutes.chatInfo(widget.chatId));
-            },
-          ),
           if (isStaff && (clientId != null || widget.projectId != null)) ...[
             IconButton(
               tooltip: 'Корзина проекта',
@@ -181,7 +232,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 }
               },
             ),
-            if (clientId != null)
+            if (canSeeClients && clientId != null)
               IconButton(
                 tooltip: 'Профиль клиента',
                 icon: const Icon(Icons.person_outline),
@@ -200,18 +251,50 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (_, _) =>
                   const Center(child: Text('Не удалось загрузить сообщения')),
-              data: (messages) {
+              data: (thread) {
+                final messages = thread.messages;
                 if (messages.isEmpty) {
                   return const Center(child: Text('Напишите первое сообщение'));
                 }
 
+                final extra = thread.hasMore || thread.loadingOlder ? 1 : 0;
                 return ListView.builder(
                   controller: _scrollController,
                   padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
+                  itemCount: messages.length + extra,
                   itemBuilder: (context, index) {
+                    if (extra == 1 && index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Center(
+                          child: thread.loadingOlder
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : TextButton(
+                                  onPressed: () {
+                                    _scrollExtentBeforeOlder =
+                                        _scrollController.hasClients
+                                            ? _scrollController
+                                                .position.maxScrollExtent
+                                            : null;
+                                    ref
+                                        .read(
+                                          chatMessagesProvider(widget.chatId)
+                                              .notifier,
+                                        )
+                                        .loadOlder();
+                                  },
+                                  child: const Text('Загрузить раньше'),
+                                ),
+                        ),
+                      );
+                    }
+                    final message = messages[index - extra];
                     return _MessageBubble(
-                      message: messages[index],
+                      message: message,
                       chatId: widget.chatId,
                     );
                   },
@@ -225,9 +308,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'Печатает…',
+                  _peerTypingPreview.isEmpty
+                      ? 'Печатает…'
+                      : 'Печатает: $_peerTypingPreview',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: AppColors.of(context).textSecondary,
                       ),
                 ),
               ),
@@ -477,6 +562,7 @@ class _MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
     return Opacity(
       opacity: message.isPending ? 0.55 : 1,
       child: Stack(
@@ -495,7 +581,7 @@ class _MessageBubble extends ConsumerWidget {
                     message.sender.name,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: colors.textPrimary,
                         ),
                   ),
                 _MessageContent(message: message),
@@ -535,10 +621,10 @@ class _MessageBubble extends ConsumerWidget {
               right: message.isMine ? 8 : null,
               left: message.isMine ? null : 8,
               top: -4,
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline,
                 size: 18,
-                color: AppColors.error,
+                color: colors.error,
               ),
             ),
         ],
@@ -547,13 +633,13 @@ class _MessageBubble extends ConsumerWidget {
   }
 }
 
-class _MessageContent extends StatelessWidget {
+class _MessageContent extends ConsumerWidget {
   const _MessageContent({required this.message});
 
   final ChatMessage message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     switch (message.type) {
       case 'text':
         return Text(message.content ?? '');
@@ -609,7 +695,12 @@ class _MessageContent extends StatelessWidget {
         final product = message.product;
         if (product == null) return const Text('Товар');
         return InkWell(
-          onTap: () => context.push(AppRoutes.productDetail(product.id)),
+          onTap: () => context.push(
+            productPathForRole(
+              ref.read(authProvider).user?.role,
+              product.id,
+            ),
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [

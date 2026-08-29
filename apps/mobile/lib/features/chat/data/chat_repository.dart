@@ -111,8 +111,45 @@ class ChatRepository {
     await _dio.post('/chats/seed-demo');
   }
 
+  Future<ChatSummary> getProjectChat(String projectId) async {
+    final response = await _dio.get('/chats/project/$projectId');
+    return ChatSummary.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<ChatContact>> getContacts({String? q}) async {
+    final response = await _dio.get(
+      '/chats/contacts',
+      queryParameters: {
+        if (q != null && q.isNotEmpty) 'q': q,
+      },
+    );
+    final items = response.data['items'] as List<dynamic>? ?? [];
+    return items
+        .map((item) => ChatContact.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ChatSummary> createPersonalChat(String userId) async {
+    final response = await _dio.post(
+      '/chats/personal',
+      data: {'userId': userId},
+    );
+    return ChatSummary.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<ChatDetails> getChat(String chatId) async {
     final response = await _dio.get('/chats/$chatId');
+    return ChatDetails.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ChatDetails> addSupportParticipant({
+    required String chatId,
+    required String userId,
+  }) async {
+    final response = await _dio.post(
+      '/chats/$chatId/participants',
+      data: {'userId': userId},
+    );
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);
   }
 

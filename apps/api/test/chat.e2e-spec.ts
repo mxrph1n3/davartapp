@@ -186,7 +186,7 @@ describe('Chat (e2e)', () => {
       .expect(200);
 
     expect(response.body).toHaveLength(1);
-    expect(response.body[0].title).toBe('Davart');
+    expect(response.body[0].title).toBe('DAVart');
     expect(response.body[0].unreadCount).toBe(1);
   });
 

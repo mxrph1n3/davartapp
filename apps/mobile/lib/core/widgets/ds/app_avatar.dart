@@ -15,25 +15,36 @@ class AppAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final initial = avatarInitial(label);
+    final showSilhouette = initial.isEmpty;
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: colors.surfaceMuted,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       alignment: Alignment.center,
-      child: Text(
-        avatarInitial(label),
-        style: TextStyle(
-          fontSize: label.trim().startsWith('+') || RegExp(r'^\d').hasMatch(label.trim())
-              ? size * 0.28
-              : size * 0.36,
-          fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-      ),
+      child: showSilhouette
+          ? Icon(
+              Icons.person_outline,
+              size: size * 0.5,
+              color: colors.textSecondary,
+            )
+          : Text(
+              initial,
+              style: TextStyle(
+                fontSize: label.trim().startsWith('+') ||
+                        RegExp(r'^\d').hasMatch(label.trim())
+                    ? size * 0.28
+                    : size * 0.36,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
+            ),
     );
   }
 }

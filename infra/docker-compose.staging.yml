@@ -61,6 +61,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 8
+    ports:
+      - "9000:9000"
 
   api:
     build:
@@ -106,7 +108,7 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - api
       - minio

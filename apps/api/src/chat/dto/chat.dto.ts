@@ -18,6 +18,38 @@ export class ChatIdParamDto {
   id!: string;
 }
 
+export class ProjectChatParamDto {
+  @IsUUID()
+  projectId!: string;
+}
+
+export class AddChatParticipantDto {
+  @IsUUID()
+  userId!: string;
+}
+
+export class CreatePersonalChatDto {
+  @IsUUID()
+  userId!: string;
+}
+
+export class ChatContactsQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+}
+
+export class AssignProjectStaffDto {
+  @IsOptional()
+  @IsUUID()
+  designerId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  surveyorId?: string | null;
+}
+
 export class ChatArchiveQueryDto {
   @IsOptional()
   @IsIn(['media', 'files', 'voice', 'links'])
@@ -87,7 +119,7 @@ export class AttachmentUploadUrlDto {
 export const CHAT_TYPE_LABELS: Record<ChatType, string> = {
   project: 'Проект',
   personal: 'Личный',
-  support: 'Davart',
+  support: 'DAVart',
 };
 
 export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {

@@ -50,6 +50,7 @@ class AdminRepository {
     String? phone,
     String? name,
     UserRole? role,
+    List<UserRole>? roles,
   }) async {
     final response = await _dio.patch(
       '/admin/users/$userId',
@@ -57,7 +58,19 @@ class AdminRepository {
         if (phone != null) 'phone': phone,
         if (name != null) 'name': name,
         if (role != null) 'role': role.name,
+        if (roles != null) 'roles': roles.map((item) => item.name).toList(),
       },
+    );
+    return AdminUser.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<AdminUser> setRoles({
+    required String userId,
+    required List<UserRole> roles,
+  }) async {
+    final response = await _dio.patch(
+      '/admin/users/$userId/roles',
+      data: {'roles': roles.map((role) => role.name).toList()},
     );
     return AdminUser.fromJson(response.data as Map<String, dynamic>);
   }
@@ -106,6 +119,7 @@ class AdminUser {
     this.name,
     this.email,
     required this.role,
+    this.extraRoles = const [],
     required this.createdAt,
   });
 
@@ -114,6 +128,7 @@ class AdminUser {
   final String? name;
   final String? email;
   final UserRole role;
+  final List<UserRole> extraRoles;
   final DateTime createdAt;
 
   factory AdminUser.fromJson(Map<String, dynamic> json) {
@@ -123,6 +138,9 @@ class AdminUser {
       name: json['name'] as String?,
       email: json['email'] as String?,
       role: UserRole.fromJson(json['role'] as String?),
+      extraRoles: (json['extraRoles'] as List<dynamic>? ?? [])
+          .map((item) => UserRole.fromJson(item as String?))
+          .toList(),
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
@@ -133,6 +151,7 @@ String adminRoleLabel(UserRole role) {
     UserRole.admin => 'Админ (бог)',
     UserRole.designer => 'Дизайнер',
     UserRole.complectator => 'Менеджер',
+    UserRole.surveyor => 'Замерщик',
     UserRole.client => 'Клиент',
   };
 }

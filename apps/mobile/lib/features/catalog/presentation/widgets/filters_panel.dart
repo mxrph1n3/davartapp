@@ -48,6 +48,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final options = ref.watch(catalogProvider).filterOptions;
     final count = ref.watch(catalogProvider).products.length;
 
@@ -69,7 +70,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -117,8 +118,8 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                               ? options.priceRange.min + 1
                               : options.priceRange.max,
                           divisions: 20,
-                          activeColor: AppColors.accent,
-                          inactiveColor: AppColors.divider,
+                          activeColor: colors.accent,
+                          inactiveColor: colors.divider,
                           onChanged: (v) => setState(() {
                             _minPrice = v.start;
                             _maxPrice = v.end;
@@ -128,6 +129,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                           children: [
                             Expanded(
                               child: _priceBox(
+                                context,
                                 '${(_minPrice ?? options.priceRange.min).round()} ₽',
                               ),
                             ),
@@ -137,6 +139,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                             ),
                             Expanded(
                               child: _priceBox(
+                                context,
                                 '${(_maxPrice ?? options.priceRange.max).round()} ₽',
                               ),
                             ),
@@ -179,11 +182,11 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                             height: 32,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: AppColors.surfaceMuted,
+                              color: colors.surfaceMuted,
                               border: Border.all(
                                 color: selected
-                                    ? AppColors.textPrimary
-                                    : AppColors.border,
+                                    ? colors.textPrimary
+                                    : colors.border,
                                 width: selected ? 2 : 1,
                               ),
                             ),
@@ -201,7 +204,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Только в наличии'),
                     value: _inStock ?? false,
-                    activeThumbColor: AppColors.accent,
+                    activeThumbColor: colors.accent,
                     onChanged: (v) =>
                         setState(() => _inStock = v ? true : null),
                   ),
@@ -318,19 +321,21 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
     );
   }
 
-  Widget _priceBox(String value) {
+  Widget _priceBox(BuildContext context, String value) {
+    final colors = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: colors.surfaceMuted,
         borderRadius: AppRadius.inputRadius,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       child: Text(value),
     );
   }
 
   Widget _selectRow(BuildContext context, String title, String value, VoidCallback onTap) {
+    final colors = AppColors.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: AppRadius.cardRadius,
@@ -341,7 +346,7 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
             Expanded(child: Text(title, style: Theme.of(context).textTheme.bodyLarge)),
             Text(value, style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(width: 4),
-            const Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+            Icon(Icons.chevron_right, size: 18, color: colors.textSecondary),
           ],
         ),
       ),

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsEnum,
   IsOptional,
   IsString,
@@ -54,4 +55,15 @@ export class UpdateAdminUserDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsOptional()
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  roles?: UserRole[];
+}
+
+export class SetRolesDto {
+  @IsArray()
+  @IsEnum(UserRole, { each: true })
+  roles!: UserRole[];
 }

@@ -35,7 +35,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('Каталог'), findsWidgets);
+    expect(find.text('Магазин'), findsWidgets);
   });
 }
 

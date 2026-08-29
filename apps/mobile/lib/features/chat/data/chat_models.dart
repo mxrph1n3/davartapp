@@ -40,6 +40,32 @@ class ChatSummary {
   }
 }
 
+class ChatContact {
+  const ChatContact({
+    required this.id,
+    required this.name,
+    this.phone,
+    required this.role,
+    required this.roleLabel,
+  });
+
+  final String id;
+  final String name;
+  final String? phone;
+  final String role;
+  final String roleLabel;
+
+  factory ChatContact.fromJson(Map<String, dynamic> json) {
+    return ChatContact(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      phone: json['phone'] as String?,
+      role: json['role'] as String? ?? '',
+      roleLabel: json['roleLabel'] as String? ?? '',
+    );
+  }
+}
+
 class ChatLastMessage {
   const ChatLastMessage({
     required this.id,
@@ -100,6 +126,7 @@ class ChatMessage {
   ChatMessage copyWith({
     bool? isPending,
     bool? isFailed,
+    bool? isMine,
   }) {
     return ChatMessage(
       id: id,
@@ -111,7 +138,7 @@ class ChatMessage {
       attachmentMime: attachmentMime,
       product: product,
       sender: sender,
-      isMine: isMine,
+      isMine: isMine ?? this.isMine,
       createdAt: createdAt,
       isPending: isPending ?? this.isPending,
       isFailed: isFailed ?? this.isFailed,
@@ -217,6 +244,8 @@ class ChatDetails {
   final List<ChatParticipant> participants;
 
   bool get isProject => type == 'project' && projectId != null;
+
+  bool get isSupport => type == 'support';
 
   factory ChatDetails.fromJson(Map<String, dynamic> json) {
     return ChatDetails(

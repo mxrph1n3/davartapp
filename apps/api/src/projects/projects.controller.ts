@@ -41,6 +41,15 @@ export class ProjectsController {
     return this.projectsService.create(user.sub, dto);
   }
 
+  @Delete(':id')
+  @HttpCode(200)
+  delete(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ProjectIdParamDto,
+  ) {
+    return this.projectsService.delete(user.sub, params.id);
+  }
+
   @Post('seed-demo')
   @HttpCode(200)
   seedDemo(@CurrentUser() user: JwtPayload) {
@@ -58,7 +67,12 @@ export class ProjectsController {
     @CurrentUser() user: JwtPayload,
     @Param() params: ProjectIdParamDto,
   ) {
-    return this.projectsService.listMembers(user.sub, params.id, user.role);
+    return this.projectsService.listMembers(
+      user.sub,
+      params.id,
+      user.role,
+      user.extraRoles ?? [],
+    );
   }
 
   @Post(':id/members')
@@ -118,6 +132,15 @@ export class ProjectsController {
       'Content-Disposition': `attachment; filename="brief-${params.id}.pdf"`,
     });
     res.send(pdf);
+  }
+
+  @Post(':id/request-surveyor')
+  @HttpCode(200)
+  requestSurveyor(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ProjectIdParamDto,
+  ) {
+    return this.projectsService.requestSurveyor(user.sub, params.id);
   }
 
   @Post(':id/start-work')

@@ -12,13 +12,14 @@ class ProjectCartBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
     final project = ref.watch(activeProjectProvider);
     final label = project == null
         ? 'Выберите проект для корзины'
         : 'Корзина проекта: ${project.name}';
 
     return Material(
-      color: AppColors.surfaceMuted,
+      color: colors.surfaceMuted,
       child: InkWell(
         onTap: () => ensureActiveProject(
           context,
@@ -47,7 +48,7 @@ class ProjectCartBanner extends ConsumerWidget {
               Text(
                 'Сменить',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppColors.accent,
+                      color: colors.accent,
                     ),
               ),
             ],

@@ -79,6 +79,11 @@ flutter build appbundle        # Android → Play Console
 - **Uptime**: ping `/api/health` каждые 60 сек
 - **Алерты**: 5xx rate > 1%, health down > 2 min
 
+## Бэкапы
+
+Postgres + MinIO: `docs/backups.md`, скрипты `scripts/backup-davart.sh` / `scripts/restore-davart.sh`.
+Телефония Mango не используется.
+
 ## Эскалация
 
 1. P0 (auth down, data loss) — немедленно, rollback

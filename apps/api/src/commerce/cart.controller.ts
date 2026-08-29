@@ -32,7 +32,12 @@ export class CartController {
     @CurrentUser() user: JwtPayload,
     @Query() query: CartProjectQueryDto,
   ) {
-    return this.cartService.getCart(query.projectId, user.sub, user.role);
+    return this.cartService.getCart(
+      query.projectId,
+      user.sub,
+      user.role,
+      user.extraRoles ?? [],
+    );
   }
 
   @Post('items')
@@ -46,6 +51,7 @@ export class CartController {
       user.role,
       dto.productId,
       dto.quantity,
+      user.extraRoles ?? [],
     );
   }
 
@@ -62,6 +68,7 @@ export class CartController {
       user.role,
       params.id,
       dto.quantity,
+      user.extraRoles ?? [],
     );
   }
 
@@ -76,6 +83,7 @@ export class CartController {
       user.sub,
       user.role,
       params.id,
+      user.extraRoles ?? [],
     );
   }
 
@@ -85,6 +93,11 @@ export class CartController {
     @CurrentUser() user: JwtPayload,
     @Query() query: CartProjectQueryDto,
   ) {
-    return this.cartService.clearCart(query.projectId, user.sub, user.role);
+    return this.cartService.clearCart(
+      query.projectId,
+      user.sub,
+      user.role,
+      user.extraRoles ?? [],
+    );
   }
 }

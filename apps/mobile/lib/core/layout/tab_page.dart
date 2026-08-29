@@ -14,8 +14,9 @@ class TabPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
-      color: AppColors.background,
+      color: colors.background,
       child: SafeArea(
         bottom: false,
         child: SizedBox.expand(child: child),

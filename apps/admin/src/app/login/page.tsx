@@ -3,9 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, clearTokens, setTokens } from '@/lib/api';
-import type { SessionUser } from '@/lib/types';
-
-const STUDIO = new Set(['designer', 'complectator', 'admin']);
+import { canUseCrm, type SessionUser } from '@/lib/types';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,18 +11,27 @@ export default function LoginPage() {
   const [code, setCode] = useState('');
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [error, setError] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function sendOtp(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setHint(null);
     setPending(true);
     try {
-      await api('/auth/send-otp', {
-        method: 'POST',
-        body: JSON.stringify({ phone: phone.trim() }),
-      });
+      const res = await api<{ message: string; debugCode?: string }>(
+        '/auth/send-otp',
+        {
+          method: 'POST',
+          body: JSON.stringify({ phone: phone.trim() }),
+        },
+      );
       setStep('code');
+      if (res.debugCode) {
+        setHint(`Mock-код: ${res.debugCode}`);
+        setCode(res.debugCode);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось отправить код');
     } finally {
@@ -46,9 +53,11 @@ export default function LoginPage() {
       );
       setTokens(tokens.accessToken, tokens.refreshToken);
       const me = await api<SessionUser>('/users/me');
-      if (!STUDIO.has(me.role)) {
+      if (!canUseCrm(me)) {
         clearTokens();
-        setError('Этот кабинет только для сотрудников студии');
+        setError(
+          'CRM только для комплектаторов и админов. Дизайнерам — мобильное приложение.',
+        );
         return;
       }
       router.replace('/clients');
@@ -93,6 +102,7 @@ export default function LoginPage() {
             />
           </label>
         )}
+        {hint && <p className="text-sm text-[var(--muted)]">{hint}</p>}
         {error && <p className="text-sm text-[var(--alert)]">{error}</p>}
         <button
           type="submit"
@@ -107,7 +117,7 @@ export default function LoginPage() {
         </button>
       </form>
       <p className="mt-8 text-xs text-[var(--muted)]">
-        Комплектатор +79009999998 · дизайнер +79009999999 · код в логе API
+        Комплектатор +79009999998 · в mock код приходит в ответе API
       </p>
     </main>
   );

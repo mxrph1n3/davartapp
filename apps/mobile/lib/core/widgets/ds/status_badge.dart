@@ -15,19 +15,20 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: highlighted ? AppColors.accent : AppColors.surfaceMuted,
+        color: highlighted ? colors.accent : colors.surfaceMuted,
         borderRadius: AppRadius.pillRadius,
         border: Border.all(
-          color: highlighted ? AppColors.accent : AppColors.border,
+          color: highlighted ? colors.accent : colors.border,
         ),
       ),
       child: Text(
         label,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppColors.textPrimary,
+              color: colors.textPrimary,
               fontWeight: FontWeight.w500,
             ),
       ),
@@ -36,28 +37,39 @@ class StatusBadge extends StatelessWidget {
 }
 
 bool isActiveProjectStatus(String label) {
-  return label == 'В работе' ||
-      label == 'Заполнение брифа' ||
-      label == 'На паузе';
+  return label == 'Планировка' ||
+      label == 'Замер' ||
+      label == 'Бриф' ||
+      label == 'Визуализация' ||
+      label == 'В работе';
 }
 
 /// Colored status text for project list (matches design mockups).
-Color projectStatusColor(String statusOrLabel) {
+Color projectStatusColor(String statusOrLabel, [DavartColors? colors]) {
+  final c = colors ?? DavartColors.light;
   switch (statusOrLabel) {
     case 'in_progress':
+    case 'Планировка':
     case 'В работе':
-      return const Color(0xFFD4A800);
+    case 'measurement':
+    case 'Замер':
+      return c.statusGold;
     case 'completed':
     case 'Завершён':
     case 'Завершен':
-      return const Color(0xFF5BB89A);
+      return c.statusGreen;
     case 'brief_filling':
-    case 'На паузе':
-    case 'Заполнение брифа':
+    case 'Бриф':
+    case 'materials':
+    case 'Ведомость материалов и мебели':
+    case 'visualization':
+    case 'Визуализация':
+    case 'final_assembly':
+    case 'Итоговые чертежи и сборка проекта':
     case 'archived':
     case 'Архив':
     default:
-      return AppColors.textSecondary;
+      return c.textSecondary;
   }
 }
 
@@ -69,10 +81,18 @@ String projectStageLabel(String status) {
   switch (status) {
     case 'brief_filling':
       return 'Бриф';
+    case 'measurement':
+      return 'Замер';
     case 'in_progress':
       return 'Планировка';
+    case 'materials':
+      return 'Ведомость материалов и мебели';
+    case 'visualization':
+      return 'Визуализация';
+    case 'final_assembly':
+      return 'Итоговые чертежи и сборка проекта';
     case 'completed':
-      return 'Сдача';
+      return 'Завершен';
     case 'archived':
       return 'Архив';
     default:

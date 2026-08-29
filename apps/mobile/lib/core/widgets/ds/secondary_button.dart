@@ -17,8 +17,9 @@ class SecondaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final button = Material(
-      color: AppColors.surface,
+      color: colors.surface,
       borderRadius: AppRadius.buttonRadius,
       child: InkWell(
         onTap: onPressed,
@@ -28,7 +29,7 @@ class SecondaryButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           decoration: BoxDecoration(
             borderRadius: AppRadius.buttonRadius,
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.border),
           ),
           alignment: Alignment.center,
           child: Text(

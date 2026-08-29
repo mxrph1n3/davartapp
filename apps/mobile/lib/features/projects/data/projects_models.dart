@@ -188,6 +188,7 @@ class Project {
     this.style,
     this.objectType,
     this.startDate,
+    this.userId,
     required this.status,
     required this.statusLabel,
     this.isShowcase = false,
@@ -206,6 +207,7 @@ class Project {
   final String? style;
   final String? objectType;
   final DateTime? startDate;
+  final String? userId;
   final String status;
   final String statusLabel;
   final bool isShowcase;
@@ -230,6 +232,7 @@ class Project {
       area: (json['area'] as num?)?.toDouble(),
       style: json['style'] as String?,
       objectType: json['objectType'] as String?,
+      userId: json['userId'] as String?,
       startDate: json['startDate'] != null
           ? DateTime.parse(json['startDate'] as String)
           : null,

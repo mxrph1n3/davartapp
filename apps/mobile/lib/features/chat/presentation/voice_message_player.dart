@@ -118,10 +118,11 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
 
   @override
   Widget build(BuildContext context) {
-    final playFill = widget.isMine ? AppColors.textPrimary : AppColors.accent;
-    final playIcon = widget.isMine ? AppColors.background : AppColors.textPrimary;
-    final played = AppColors.textPrimary;
-    final unplayed = AppColors.textPrimary.withValues(alpha: widget.isMine ? 0.28 : 0.22);
+    final colors = AppColors.of(context);
+    final playFill = widget.isMine ? colors.textPrimary : colors.accent;
+    final playIcon = widget.isMine ? colors.background : colors.textPrimary;
+    final played = colors.textPrimary;
+    final unplayed = colors.textPrimary.withValues(alpha: widget.isMine ? 0.28 : 0.22);
 
     return SizedBox(
       width: 214,

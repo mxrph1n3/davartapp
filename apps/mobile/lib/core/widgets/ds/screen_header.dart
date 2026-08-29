@@ -63,13 +63,17 @@ class HeaderIconButton extends StatelessWidget {
               top: -4,
               child: Container(
                 padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(
-                  color: AppColors.accent,
+                decoration: BoxDecoration(
+                  color: AppColors.of(context).accent,
                   shape: BoxShape.circle,
                 ),
                 child: Text(
                   '$badge',
-                  style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.of(context).textOnAccent,
+                  ),
                 ),
               ),
             ),

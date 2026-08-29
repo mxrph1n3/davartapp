@@ -1,10 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
+import { ChatModule } from '../chat/chat.module';
 import { BriefPdfService } from './brief-pdf.service';
 import { ProjectsController } from './projects.controller';
 import { PublicProjectsController } from './public-projects.controller';
 import { ProjectsService } from './projects.service';
 
 @Module({
+  imports: [forwardRef(() => ChatModule)],
   controllers: [PublicProjectsController, ProjectsController],
   providers: [ProjectsService, BriefPdfService],
   exports: [ProjectsService],

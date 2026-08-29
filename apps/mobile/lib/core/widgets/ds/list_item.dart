@@ -25,13 +25,16 @@ class ListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final brightness = Theme.of(context).brightness;
+
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: AppRadius.cardRadius,
-        boxShadow: AppShadows.subtle,
-        border: Border.all(color: AppColors.border),
+        boxShadow: AppShadows.subtleFor(brightness),
+        border: Border.all(color: colors.border),
       ),
       child: Material(
         color: Colors.transparent,
@@ -61,27 +64,34 @@ class ListItem extends StatelessWidget {
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),
-                        Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
                       ],
                     ],
                   ),
                 ),
                 if (badge != null) ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceMuted,
+                      color: colors.surfaceMuted,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(badge!, style: Theme.of(context).textTheme.labelSmall),
+                    child: Text(
+                      badge!,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
                 if (showChevron)
-                  const Icon(
+                  Icon(
                     Icons.chevron_right,
                     size: 20,
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                   ),
               ],
             ),

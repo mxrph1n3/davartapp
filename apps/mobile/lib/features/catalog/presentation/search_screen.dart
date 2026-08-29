@@ -69,6 +69,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final state = ref.watch(searchProvider);
 
     final favoritesState = ref.watch(favoritesProvider);
@@ -116,9 +117,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           padding: const EdgeInsets.all(AppSpacing.screenPadding),
                           itemCount: state.products.length +
                               (state.isLoadingMore ? 1 : 0),
-                          separatorBuilder: (_, _) => const Divider(
+                          separatorBuilder: (_, _) => Divider(
                             height: 1,
-                            color: AppColors.divider,
+                            color: colors.divider,
                           ),
                           itemBuilder: (context, index) {
                             if (index >= state.products.length) {
@@ -144,7 +145,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                               isFavorite:
                                   favoritesState.isFavorite(product.id),
                               onTap: () => context.push(
-                                AppRoutes.productDetail(product.id),
+                                productPathForRole(
+                                  ref.read(authProvider).user?.role,
+                                  product.id,
+                                ),
                               ),
                               onFavoriteToggle: () async {
                                 try {

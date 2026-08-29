@@ -22,10 +22,10 @@ Do **not** stack hallmark / taste / frontend-design-pro for in-app Flutter work 
 ## Hard constraints
 
 - Reuse `apps/mobile/lib/core/widgets/ds/` — do not invent parallel buttons/cards/inputs.
-- Colors only via `AppColors` (`lib/core/theme/app_colors.dart`). Accent is yellow `#FFDD2D`.
+- Colors only via `AppColors.of(context)` (`lib/core/theme/app_colors.dart`) — `DavartColors` ThemeExtension for light/dark. Accent is yellow `#FFDD2D`. Static `AppColors.*` fields are the light palette (splash / const only).
 - Theme via `AppTheme` — no one-off hex in feature screens unless extending tokens.
-- Keep 5-tab shell: Каталог · Проекты · Чаты · Корзина · Профиль. Bottom nav always visible on tab roots; product/checkout push above the shell.
-- Prefer calm retail UI: white/neutral surfaces, yellow accent CTAs, strong type hierarchy — not purple gradients, glow, or dense dashboard chrome.
+- Keep 5-tab shell: Магазин · Дизайн · Чаты · Корзина · Профиль. Bottom nav always visible on tab roots; product/checkout push above the shell.
+- Prefer calm retail UI: neutral surfaces (white in light, near-black in dark), yellow accent CTAs, strong type hierarchy — not purple gradients, glow, or dense dashboard chrome.
 - Load `.interface-design/system.md` when using `interface-design`; offer to update it after new patterns.
 
 ## Prompt shape for the user

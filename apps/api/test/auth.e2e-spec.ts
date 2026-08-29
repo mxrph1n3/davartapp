@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -5,6 +6,10 @@ import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RedisService } from '../src/redis/redis.service';
+
+function hashOtp(code: string): string {
+  return createHash('sha256').update(`davart-otp:${code}`).digest('hex');
+}
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
@@ -45,6 +50,7 @@ describe('Auth (e2e)', () => {
         phone: '+79001234567',
         name: null,
         role: 'client',
+        extraRoles: [],
         createdAt: new Date(),
         updatedAt: new Date(),
       }),
@@ -53,6 +59,7 @@ describe('Auth (e2e)', () => {
         phone: '+79001234567',
         name: null,
         role: 'client',
+        extraRoles: [],
         createdAt: new Date(),
       }),
     },
@@ -67,7 +74,7 @@ describe('Auth (e2e)', () => {
       create: jest.fn().mockResolvedValue({
         id: 'chat-1',
         type: 'support',
-        title: 'Davart',
+        title: 'DAVart',
         projectId: null,
         updatedAt: new Date(),
         participants: [],
@@ -116,13 +123,16 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /api/auth/send-otp', async () => {
-    await request(app.getHttpServer())
+    const response = await request(app.getHttpServer())
       .post('/api/auth/send-otp')
       .send({ phone: '+79001234567' })
-      .expect(200)
-      .expect({ message: 'OTP sent' });
+      .expect(200);
 
-    expect(redisStore.get('otp:+79001234567')).toBeDefined();
+    expect(response.body.message).toBe('OTP sent');
+    expect(response.body.debugCode).toMatch(/^\d{4}$/);
+    expect(redisStore.get('otp:+79001234567')).toBe(
+      hashOtp(response.body.debugCode as string),
+    );
   });
 
   it('POST /api/auth/send-otp fails when Redis is down', async () => {
@@ -142,7 +152,7 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /api/auth/verify-otp with valid code', async () => {
-    redisStore.set('otp:+79001234567', '1234');
+    redisStore.set('otp:+79001234567', hashOtp('1234'));
 
     const response = await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
@@ -151,10 +161,12 @@ describe('Auth (e2e)', () => {
 
     expect(response.body.accessToken).toBeDefined();
     expect(response.body.refreshToken).toBeDefined();
+    expect(response.body.user).toBeDefined();
+    expect(response.body.user.phone).toBe('+79001234567');
   });
 
   it('POST /api/auth/verify-otp locks after too many attempts', async () => {
-    redisStore.set('otp:+79001234567', '9999');
+    redisStore.set('otp:+79001234567', hashOtp('9999'));
 
     for (let i = 0; i < 4; i += 1) {
       await request(app.getHttpServer())
@@ -175,7 +187,7 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /api/auth/refresh and logout', async () => {
-    redisStore.set('otp:+79001234567', '1234');
+    redisStore.set('otp:+79001234567', hashOtp('1234'));
 
     const verified = await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
@@ -189,7 +201,12 @@ describe('Auth (e2e)', () => {
         id: 'rt-1',
         tokenHash: where.tokenHash,
         expiresAt: new Date(Date.now() + 60_000),
-        user: { id: 'user-1', phone: '+79001234567' },
+        user: {
+          id: 'user-1',
+          phone: '+79001234567',
+          role: 'client',
+          extraRoles: [],
+        },
       }),
     );
 

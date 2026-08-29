@@ -18,6 +18,8 @@ class BottomActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final brightness = Theme.of(context).brightness;
     return Container(
       padding: padding ??
           EdgeInsets.fromLTRB(
@@ -26,10 +28,10 @@ class BottomActionBar extends StatelessWidget {
             AppSpacing.screenPadding,
             AppSpacing.md + MediaQuery.paddingOf(context).bottom,
           ),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(top: BorderSide(color: AppColors.divider)),
-        boxShadow: AppShadows.subtle,
+      decoration: BoxDecoration(
+        color: colors.background,
+        border: Border(top: BorderSide(color: colors.divider)),
+        boxShadow: AppShadows.subtleFor(brightness),
       ),
       child: Row(children: children),
     );
@@ -83,8 +85,9 @@ class IconActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
-      color: selected ? AppColors.accent : AppColors.surfaceMuted,
+      color: selected ? colors.accent : colors.surfaceMuted,
       borderRadius: AppRadius.buttonRadius,
       child: InkWell(
         onTap: onPressed,
@@ -95,12 +98,12 @@ class IconActionButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: AppRadius.buttonRadius,
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.border),
           ),
           child: Icon(
             icon,
             size: 22,
-            color: AppColors.textPrimary,
+            color: colors.textPrimary,
           ),
         ),
       ),

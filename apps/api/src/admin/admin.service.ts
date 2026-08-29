@@ -5,7 +5,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { ASSIGNABLE_ROLES, isStudioRole } from '../auth/roles';
+import {
+  ASSIGNABLE_ROLES,
+  extraRolesOf,
+  hasStudioRole,
+  isStudioRole,
+  primaryRoleOf,
+  uniqueRoles,
+} from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -15,6 +22,7 @@ const userSelect = {
   name: true,
   email: true,
   role: true,
+  extraRoles: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -63,9 +71,19 @@ export class AdminService {
   async updateUser(
     actorId: string,
     userId: string,
-    input: { phone?: string; name?: string; role?: UserRole },
+    input: {
+      phone?: string;
+      name?: string;
+      role?: UserRole;
+      roles?: UserRole[];
+    },
   ) {
-    if (!input.phone && input.name === undefined && !input.role) {
+    if (
+      !input.phone &&
+      input.name === undefined &&
+      !input.role &&
+      !input.roles
+    ) {
       throw new BadRequestException('Nothing to update');
     }
 
@@ -74,16 +92,26 @@ export class AdminService {
       throw new NotFoundException('User not found');
     }
 
-    if (input.role) {
-      if (!ASSIGNABLE_ROLES.includes(input.role)) {
+    const nextRoles = input.roles
+      ? uniqueRoles(input.roles)
+      : input.role
+        ? [input.role]
+        : null;
+
+    if (nextRoles) {
+      if (nextRoles.length === 0) {
+        throw new BadRequestException('At least one role is required');
+      }
+      if (nextRoles.some((role) => !ASSIGNABLE_ROLES.includes(role))) {
         throw new BadRequestException('Invalid role');
       }
-      if (actorId === userId && input.role !== UserRole.admin) {
+      const nextPrimary = primaryRoleOf(nextRoles);
+      if (actorId === userId && nextPrimary !== UserRole.admin) {
         throw new BadRequestException('Cannot demote yourself');
       }
       if (
         user.role === UserRole.admin &&
-        input.role !== UserRole.admin
+        nextPrimary !== UserRole.admin
       ) {
         await this.ensureNotLastAdmin(userId);
       }
@@ -98,8 +126,9 @@ export class AdminService {
       }
     }
 
-    const previousRole = user.role;
-    const nextRole = input.role ?? previousRole;
+    const previousRoles = uniqueRoles([user.role, ...user.extraRoles]);
+    const nextPrimary = nextRoles ? primaryRoleOf(nextRoles) : user.role;
+    const nextExtra = nextRoles ? extraRolesOf(nextRoles) : user.extraRoles;
 
     const updated = await this.prisma.user.update({
       where: { id: userId },
@@ -108,16 +137,20 @@ export class AdminService {
         ...(input.name !== undefined
           ? { name: input.name.trim() || null }
           : {}),
-        ...(input.role ? { role: input.role } : {}),
+        ...(nextRoles
+          ? { role: nextPrimary, extraRoles: nextExtra }
+          : {}),
       },
       select: userSelect,
     });
 
-    if (input.role && nextRole !== previousRole) {
-      if (isStudioRole(nextRole) && !isStudioRole(previousRole)) {
+    if (nextRoles) {
+      const wasStudio = hasStudioRole(previousRoles);
+      const nowStudio = hasStudioRole(nextRoles);
+      if (nowStudio && !wasStudio) {
         await this.chatService.syncStaffIntoAllSupportChats(userId);
       }
-      if (nextRole === UserRole.client && isStudioRole(previousRole)) {
+      if (!nowStudio && wasStudio) {
         await this.chatService.removeStaffFromAllSupportChats(userId);
         await this.chatService.ensureDavartChat(userId);
       }
@@ -128,6 +161,10 @@ export class AdminService {
 
   async elevateRole(actorId: string, userId: string, role: UserRole) {
     return this.updateUser(actorId, userId, { role });
+  }
+
+  async setRoles(actorId: string, userId: string, roles: UserRole[]) {
+    return this.updateUser(actorId, userId, { roles });
   }
 
   async listUsers(params: { page: number; limit: number; q?: string }) {
@@ -150,6 +187,7 @@ export class AdminService {
           name: true,
           email: true,
           role: true,
+          extraRoles: true,
           createdAt: true,
         },
         orderBy: [{ role: 'asc' }, { phone: 'asc' }],

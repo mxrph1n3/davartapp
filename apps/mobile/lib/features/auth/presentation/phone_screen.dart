@@ -38,11 +38,16 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
-      await ref.read(authProvider.notifier).sendOtp(_controller.text.trim());
+      final debugCode = await ref
+          .read(authProvider.notifier)
+          .sendOtp(_controller.text.trim());
       if (mounted) {
         final phone = _controller.text.trim();
         final embedded = isEmbeddedLogin(GoRouterState.of(context));
-        context.push(otpPath(phone: phone, embedded: embedded));
+        context.push(
+          otpPath(phone: phone, embedded: embedded),
+          extra: debugCode,
+        );
       }
     } on Exception catch (error) {
       if (mounted) {

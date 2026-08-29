@@ -3,7 +3,6 @@ export 'app_back_button.dart';
 export 'app_card.dart';
 export 'app_input.dart';
 export 'bottom_action_bar.dart';
-export 'bottom_navigation.dart';
 export 'chat_bubble.dart';
 export 'voice_waveform.dart';
 export 'document_card.dart';

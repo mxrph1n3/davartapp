@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, clearTokens, getAccessToken } from '@/lib/api';
-import type { SessionUser } from '@/lib/types';
-
-const STUDIO = new Set(['designer', 'complectator', 'admin']);
+import { canUseCrm, type SessionUser } from '@/lib/types';
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -19,7 +17,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
     api<SessionUser>('/users/me')
       .then((me) => {
-        if (!STUDIO.has(me.role)) {
+        if (!canUseCrm(me)) {
           clearTokens();
           router.replace('/login');
           return;

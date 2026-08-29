@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import { DocumentType } from '@prisma/client';
 import { randomUUID } from 'crypto';
+import {
+  canAccessAnyClientProject,
+  staffAssignedToProjectWhere,
+  userCanAccessProjectWhere,
+} from '../projects/project-access';
 import { isStudioRole } from '../auth/roles';
 import { PushService } from '../push/push.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { userCanAccessProjectWhere } from '../projects/project-access';
 import { StorageService } from '../storage/storage.service';
 import {
   CreateUploadUrlDto,
@@ -190,10 +194,19 @@ export class DocumentsService {
   private async ensureUserProject(userId: string, projectId: string) {
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, extraRoles: true },
     });
+    const roles = viewer
+      ? [viewer.role, ...(viewer.extraRoles ?? [])]
+      : [];
 
-    if (isStudioRole(viewer?.role)) {
+    const asOwner = await this.prisma.project.findFirst({
+      where: userCanAccessProjectWhere(userId, projectId),
+      select: { id: true },
+    });
+    if (asOwner) return;
+
+    if (canAccessAnyClientProject(roles)) {
       const project = await this.prisma.project.findFirst({
         where: { id: projectId, isShowcase: false },
         select: { id: true },
@@ -201,14 +214,18 @@ export class DocumentsService {
       if (project) return;
     }
 
-    const project = await this.prisma.project.findFirst({
-      where: userCanAccessProjectWhere(userId, projectId),
-      select: { id: true },
-    });
-
-    if (!project) {
-      throw new NotFoundException('Project not found');
+    if (roles.some((role) => isStudioRole(role))) {
+      const assigned = await this.prisma.project.findFirst({
+        where: {
+          id: projectId,
+          ...staffAssignedToProjectWhere(userId),
+        },
+        select: { id: true },
+      });
+      if (assigned) return;
     }
+
+    throw new NotFoundException('Project not found');
   }
 
   private formatDocument(document: {

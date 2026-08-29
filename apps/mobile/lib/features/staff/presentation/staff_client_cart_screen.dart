@@ -135,15 +135,17 @@ class _StaffProjectCartScreenState
                                   ? Image.network(
                                       item.product.imageUrl!,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, _, _) =>
-                                          const ColoredBox(
-                                        color: AppColors.imagePlaceholder,
-                                        child: Icon(Icons.image_outlined),
-                                      ),
+                                      errorBuilder: (_, _, _) {
+                                        final colors = AppColors.of(context);
+                                        return ColoredBox(
+                                          color: colors.imagePlaceholder,
+                                          child: const Icon(Icons.image_outlined),
+                                        );
+                                      },
                                     )
-                                  : const ColoredBox(
-                                      color: AppColors.imagePlaceholder,
-                                      child: Icon(Icons.image_outlined),
+                                  : ColoredBox(
+                                      color: AppColors.of(context).imagePlaceholder,
+                                      child: const Icon(Icons.image_outlined),
                                     ),
                             ),
                           ),

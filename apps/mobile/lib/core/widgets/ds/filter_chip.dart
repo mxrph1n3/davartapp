@@ -17,6 +17,7 @@ class CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return GestureDetector(
       onTap: () => onSelected(!selected),
       child: AnimatedContainer(
@@ -25,7 +26,7 @@ class CategoryChip extends StatelessWidget {
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: selected ? AppColors.textPrimary : Colors.transparent,
+          color: selected ? colors.textPrimary : Colors.transparent,
           borderRadius: AppRadius.pillRadius,
         ),
         alignment: Alignment.center,
@@ -36,7 +37,7 @@ class CategoryChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 14,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? AppColors.background : AppColors.textSecondary,
+            color: selected ? colors.background : colors.textSecondary,
           ),
         ),
       ),
@@ -56,13 +57,14 @@ class ActiveFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       height: 36,
       padding: const EdgeInsets.only(left: 14, right: 4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: colors.surfaceMuted,
         borderRadius: AppRadius.pillRadius,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -71,7 +73,7 @@ class ActiveFilterChip extends StatelessWidget {
           IconButton(
             onPressed: onDeleted,
             icon: const Icon(Icons.close, size: 16),
-            color: AppColors.textSecondary,
+            color: colors.textSecondary,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),

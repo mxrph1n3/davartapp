@@ -30,6 +30,7 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final state = ref.watch(favoritesProvider);
 
     return Scaffold(
@@ -60,9 +61,9 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                   : ListView.separated(
                       padding: const EdgeInsets.all(AppSpacing.screenPadding),
                       itemCount: state.items.length,
-                      separatorBuilder: (_, _) => const Divider(
+                      separatorBuilder: (_, _) => Divider(
                         height: 1,
-                        color: AppColors.divider,
+                        color: colors.divider,
                       ),
                       itemBuilder: (context, index) {
                         final item = state.items[index];
@@ -73,7 +74,10 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
                           inStock: item.product.inStock,
                           isFavorite: true,
                           onTap: () => context.push(
-                            AppRoutes.productDetail(item.product.id),
+                            productPathForRole(
+                              ref.read(authProvider).user?.role,
+                              item.product.id,
+                            ),
                           ),
                           onFavoriteToggle: () => ref
                               .read(favoritesProvider.notifier)

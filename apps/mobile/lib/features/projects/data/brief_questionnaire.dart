@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class BriefField {
   const BriefField({required this.id, required this.label, this.lines = 3});
 
@@ -17,7 +19,11 @@ class BriefRoomSection {
   final String title;
   final List<BriefField> fields;
 
-  String get imageAsset => 'assets/brief/rooms/$id.jpg';
+  String get imageAsset {
+    if (id == 'kitchen') return 'assets/brief/rooms/kitchen_living.jpg';
+    if (id == 'wardrobe') return 'assets/brief/rooms/hallway.jpg';
+    return 'assets/brief/rooms/$id.jpg';
+  }
 }
 
 class BriefChoice {
@@ -71,6 +77,7 @@ const briefColorSwatches = <BriefColorSwatch>[
   BriefColorSwatch(id: 'charcoal', label: 'Уголь', hex: 0xFF2A2A2A),
   BriefColorSwatch(id: 'mustard', label: 'Горчица', hex: 0xFFC4A04A),
   BriefColorSwatch(id: 'cream', label: 'Крем', hex: 0xFFFAF6EE),
+  BriefColorSwatch(id: 'metal', label: 'Металл', hex: 0xFF8A9098),
 ];
 
 const briefStyleOptions = <BriefVisualOption>[
@@ -93,6 +100,21 @@ const briefStyleOptions = <BriefVisualOption>[
     id: 'classic',
     label: 'Современная классика',
     asset: 'assets/brief/styles/classic.jpg',
+  ),
+  BriefVisualOption(
+    id: 'classical',
+    label: 'Классический',
+    asset: 'assets/brief/styles/classic.jpg',
+  ),
+  BriefVisualOption(
+    id: 'travans',
+    label: 'Траванс',
+    asset: 'assets/brief/styles/classic.jpg',
+  ),
+  BriefVisualOption(
+    id: 'provence',
+    label: 'Прованс',
+    asset: 'assets/brief/styles/mediterranean.jpg',
   ),
   BriefVisualOption(
     id: 'loft',
@@ -123,10 +145,39 @@ const briefObjectOptions = <BriefVisualOption>[
     asset: 'assets/brief/objects/house.jpg',
   ),
   BriefVisualOption(
-    id: 'townhouse',
-    label: 'Таунхаус',
+    id: 'office',
+    label: 'Офис',
     asset: 'assets/brief/objects/townhouse.jpg',
   ),
+  BriefVisualOption(
+    id: 'commercial',
+    label: 'Коммерческое помещение',
+    asset: 'assets/brief/objects/townhouse.jpg',
+  ),
+];
+
+const briefCommercialTypeChoices = <BriefChoice>[
+  BriefChoice(id: 'office', label: 'Офис'),
+  BriefChoice(id: 'retail', label: 'Магазин / шоурум'),
+  BriefChoice(id: 'cafe', label: 'Кафе / ресторан'),
+  BriefChoice(id: 'clinic', label: 'Клиника'),
+  BriefChoice(id: 'salon', label: 'Салон / студия'),
+  BriefChoice(id: 'coworking', label: 'Коворкинг'),
+  BriefChoice(id: 'other', label: 'Другое'),
+];
+
+const briefFamilyRoleChoices = <BriefChoice>[
+  BriefChoice(id: 'self', label: 'Я'),
+  BriefChoice(id: 'partner', label: 'Партнёр / супруг(а)'),
+  BriefChoice(id: 'child', label: 'Ребёнок'),
+  BriefChoice(id: 'parent', label: 'Родитель'),
+  BriefChoice(id: 'relative', label: 'Родственник'),
+  BriefChoice(id: 'other', label: 'Другой'),
+];
+
+const briefKitchenLayoutChoices = <BriefChoice>[
+  BriefChoice(id: 'kitchen', label: 'Кухня'),
+  BriefChoice(id: 'kitchen_living', label: 'Кухня-гостиная'),
 ];
 
 const briefHouseholdChoices = <BriefChoice>[
@@ -247,6 +298,8 @@ const briefRadiatorChoices = <BriefChoice>[
 const briefDefaultRoomsByObject = <String, List<String>>{
   'apartment': ['hallway', 'kitchen_living', 'bedroom', 'bathroom', 'loggia'],
   'house': ['hallway', 'kitchen_living', 'bedroom', 'bathroom', 'kids'],
+  'office': ['hallway', 'kitchen_living', 'bathroom'],
+  'commercial': ['hallway', 'kitchen_living', 'bathroom'],
   'townhouse': [
     'hallway',
     'kitchen_living',
@@ -266,7 +319,12 @@ const briefGeneralFields = <BriefField>[
   BriefField(id: 'phone', label: 'Контактный телефон', lines: 1),
   BriefField(id: 'email', label: 'Электронная почта', lines: 1),
   BriefField(id: 'objectType', label: 'Тип объекта', lines: 1),
+  BriefField(id: 'floors', label: 'Количество этажей', lines: 1),
+  BriefField(id: 'area', label: 'Площадь, м²', lines: 1),
+  BriefField(id: 'commercialType', label: 'Тип коммерческого объекта', lines: 1),
+  BriefField(id: 'kitchenLayout', label: 'Кухня или кухня-гостиная', lines: 1),
   BriefField(id: 'householdKind', label: 'Кто будет жить', lines: 1),
+  BriefField(id: 'householdMembers', label: 'Состав семьи'),
   BriefField(id: 'household', label: 'Состав проживающих (имена и возраст)'),
   BriefField(id: 'kids', label: 'Дети', lines: 1),
   BriefField(id: 'pets', label: 'Домашние животные', lines: 1),
@@ -282,6 +340,7 @@ const briefGeneralFields = <BriefField>[
   BriefField(id: 'interestsNote', label: 'Уточнение к увлечениям', lines: 2),
   BriefField(id: 'likedColors', label: 'Цвета, которые нравятся', lines: 1),
   BriefField(id: 'likedStyles', label: 'Стили, которые нравятся', lines: 1),
+  BriefField(id: 'likedStylesCustom', label: 'Свой стиль', lines: 1),
   BriefField(id: 'disliked', label: 'Что категорически не нравится', lines: 2),
   BriefField(id: 'budget', label: 'Бюджет на ремонт', lines: 1),
   BriefField(
@@ -324,6 +383,43 @@ const _lighting = BriefField(
 const _other = BriefField(id: 'other', label: 'Что еще необходимо учесть?');
 
 const briefRoomSections = <BriefRoomSection>[
+  BriefRoomSection(
+    id: 'kitchen',
+    title: 'Кухня',
+    fields: [
+      _lighting,
+      BriefField(
+        id: 'finishes',
+        label: 'Предпочтения по отделке (пол, стены, фартук)?',
+      ),
+      BriefField(
+        id: 'hood',
+        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
+      ),
+      BriefField(
+        id: 'diningTable',
+        label:
+            'Есть ли предпочтения по форме обеденного стола и по материалу?',
+        lines: 4,
+      ),
+      BriefField(id: 'island', label: 'Нужен ли стол-остров?'),
+      BriefField(
+        id: 'dishwasher',
+        label: 'Нужна ли посудомойка? Какого размера?',
+      ),
+      BriefField(id: 'cooktop', label: 'На сколько конфорок варочная панель?'),
+      BriefField(
+        id: 'oven',
+        label:
+            'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
+      ),
+      BriefField(
+        id: 'fridge',
+        label: 'Холодильник встроенный или отдельностоящий?',
+      ),
+      _other,
+    ],
+  ),
   BriefRoomSection(
     id: 'kitchen_living',
     title: 'Кухня-гостиная',
@@ -420,7 +516,7 @@ const briefRoomSections = <BriefRoomSection>[
   ),
   BriefRoomSection(
     id: 'bathroom',
-    title: 'Ванная',
+    title: 'Санузел',
     fields: [
       BriefField(
         id: 'finishes',
@@ -454,6 +550,28 @@ const briefRoomSections = <BriefRoomSection>[
         lines: 1,
       ),
       BriefField(id: 'dryer', label: 'Нужна ли сушильная машина?'),
+      _other,
+    ],
+  ),
+  BriefRoomSection(
+    id: 'wardrobe',
+    title: 'Гардеробная',
+    fields: [
+      BriefField(
+        id: 'finishes',
+        label: 'Предпочтения по отделке (пол, стены)?',
+      ),
+      _lighting,
+      BriefField(
+        id: 'system',
+        label: 'Какая система хранения нужна: корпусная, встроенная, открытая?',
+      ),
+      BriefField(
+        id: 'zones',
+        label: 'Какие зоны нужны: одежда, обувь, сумки, бельё?',
+      ),
+      BriefField(id: 'island', label: 'Нужен ли остров / пуф в гардеробной?'),
+      BriefField(id: 'mirror', label: 'Нужно ли зеркало?'),
       _other,
     ],
   ),
@@ -509,7 +627,14 @@ final briefValueLabels = <String, Map<String, String>>{
   'likedColors': {for (final item in briefColorSwatches) item.id: item.label},
   'likedStyles': {for (final item in briefStyleOptions) item.id: item.label},
   'objectType': {for (final item in briefObjectOptions) item.id: item.label},
+  'commercialType': {
+    for (final item in briefCommercialTypeChoices) item.id: item.label
+  },
+  'kitchenLayout': {
+    for (final item in briefKitchenLayoutChoices) item.id: item.label
+  },
   'householdKind': {for (final item in briefHouseholdChoices) item.id: item.label},
+  'familyRole': {for (final item in briefFamilyRoleChoices) item.id: item.label},
   'kids': {for (final item in briefKidsChoices) item.id: item.label},
   'pets': {for (final item in briefPetChoices) item.id: item.label},
   'routine': {for (final item in briefRoutineChoices) item.id: item.label},
@@ -567,4 +692,82 @@ String briefDisplayValue(String fieldId, String? raw) {
   final map = briefValueLabels[fieldId];
   if (map == null) return raw.trim();
   return briefSelectedIds(raw).map((id) => map[id] ?? id).join(', ');
+}
+
+class BriefFamilyMember {
+  const BriefFamilyMember({this.role = '', this.age = '', this.customRole = ''});
+
+  final String role;
+  final String age;
+  final String customRole;
+
+  String get roleLabel {
+    if (role == 'other' && customRole.trim().isNotEmpty) {
+      return customRole.trim();
+    }
+    return briefValueLabels['familyRole']?[role] ??
+        (customRole.trim().isNotEmpty ? customRole.trim() : role);
+  }
+
+  Map<String, String> toJson() => {
+        'role': role,
+        'age': age,
+        if (customRole.isNotEmpty) 'customRole': customRole,
+      };
+
+  factory BriefFamilyMember.fromJson(Map<String, dynamic> json) {
+    return BriefFamilyMember(
+      role: (json['role'] as String?) ?? '',
+      age: (json['age'] as String?) ?? '',
+      customRole: (json['customRole'] as String?) ?? '',
+    );
+  }
+
+  BriefFamilyMember copyWith({
+    String? role,
+    String? age,
+    String? customRole,
+  }) {
+    return BriefFamilyMember(
+      role: role ?? this.role,
+      age: age ?? this.age,
+      customRole: customRole ?? this.customRole,
+    );
+  }
+}
+
+List<BriefFamilyMember> briefParseFamilyMembers(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const [];
+    return decoded
+        .whereType<Map>()
+        .map(
+          (item) => BriefFamilyMember.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .toList();
+  } catch (_) {
+    return const [];
+  }
+}
+
+String briefEncodeFamilyMembers(List<BriefFamilyMember> members) {
+  return jsonEncode(members.map((m) => m.toJson()).toList());
+}
+
+String briefFamilyMembersSummary(List<BriefFamilyMember> members) {
+  return members
+      .where(
+        (m) =>
+            m.role.isNotEmpty || m.customRole.isNotEmpty || m.age.isNotEmpty,
+      )
+      .map((m) {
+        final who = m.roleLabel.isEmpty ? 'Участник' : m.roleLabel;
+        final age = m.age.trim();
+        return age.isEmpty ? who : '$who, $age';
+      })
+      .join('; ');
 }

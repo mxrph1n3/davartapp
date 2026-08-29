@@ -17,7 +17,11 @@ enum OrderStatus {
 
 enum ProjectStatus {
   brief_filling
+  measurement
   in_progress
+  materials
+  visualization
+  final_assembly
   completed
   archived
 }
@@ -40,6 +44,7 @@ enum UserRole {
   client
   designer
   complectator
+  surveyor
   admin
 }
 
@@ -63,6 +68,7 @@ model User {
   name                 String?
   email                String?
   role                 UserRole          @default(client)
+  extraRoles           UserRole[]        @default([]) @map("extra_roles")
   notificationsEnabled Boolean           @default(true) @map("notifications_enabled")
   birthDate            DateTime?         @map("birth_date") @db.Date
   createdAt            DateTime          @default(now()) @map("created_at")

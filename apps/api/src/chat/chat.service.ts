@@ -5,17 +5,40 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ChatType, MessageType, Prisma, UserRole } from '@prisma/client';
-import { STUDIO_ROLES, canSeeContactPhone, isStudioRole } from '../auth/roles';
+import {
+  canSeeContactPhone,
+  hasSupportDutyRole,
+  hasStudioRole,
+  isStudioRole,
+  allRolesOf,
+  SUPPORT_DUTY_ROLES,
+} from '../auth/roles';
+import { actorProjectAccessWhere } from '../projects/project-access';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 import { StorageService } from '../storage/storage.service';
+import { PushService } from '../push/push.service';
 import {
   AttachmentUploadUrlDto,
   CHAT_TYPE_LABELS,
   SendMessageDto,
 } from './dto/chat.dto';
 
-const DAVART_CHAT_TITLE = 'Davart';
+const DAVART_CHAT_TITLE = 'DAVart';
+const SUPPORT_ROSTER_REDIS_PREFIX = 'chat:support-roster:v3:';
+
+const PROJECT_WELCOME_MESSAGE = [
+  'Добро пожаловать в чат DAVart дизайн 😌',
+  '',
+  'Вопросы по проекту вы можете оставлять в чате.',
+  '',
+  'Также вы можете нам позвонить +74994445028 или написать',
+  'info@davart.ru.',
+  'Наш сайт davart.ru',
+  '',
+  'Договор на разработку проектов http://davart.ru/oferta',
+].join('\n');
 
 type MessageWithRelations = Prisma.MessageGetPayload<{
   include: {
@@ -37,13 +60,20 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly redis: RedisService,
+    private readonly pushService: PushService,
   ) {}
 
   async listChats(userId: string) {
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, extraRoles: true },
     });
+    const viewerRoles = viewer
+      ? [viewer.role, ...viewer.extraRoles]
+      : [];
+    const viewerRole =
+      viewerRoles.find((role) => isStudioRole(role)) ?? viewer?.role;
 
     const participants = await this.prisma.chatParticipant.findMany({
       where: { userId },
@@ -71,14 +101,15 @@ export class ChatService {
       orderBy: { chat: { updatedAt: 'desc' } },
     });
 
-    const items = participants.map((participant) => {
+    const items = participants
+      .map((participant) => {
       const lastMessage = participant.chat.messages[0];
       return {
         id: participant.chat.id,
         type: participant.chat.type,
         typeLabel: CHAT_TYPE_LABELS[participant.chat.type],
-        title: this.resolveChatTitle(participant.chat, viewer?.role, userId),
-        clientId: this.resolveClientId(participant.chat, viewer?.role),
+        title: this.resolveChatTitle(participant.chat, viewerRole, userId),
+        clientId: this.resolveClientId(participant.chat, viewerRole),
         projectId: participant.chat.projectId,
         unreadCount: participant.unreadCount,
         updatedAt: participant.chat.updatedAt,
@@ -94,7 +125,7 @@ export class ChatService {
       };
     });
 
-    if (viewer?.role === UserRole.client) {
+    if (viewerRole === UserRole.client) {
       items.sort((a, b) => {
         if (a.type === ChatType.support && b.type !== ChatType.support) {
           return -1;
@@ -118,6 +149,251 @@ export class ChatService {
     });
 
     return { total: result._sum.unreadCount ?? 0 };
+  }
+
+  async listContacts(userId: string, q?: string) {
+    const viewer = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, extraRoles: true },
+    });
+    if (!viewer) throw new NotFoundException('User not found');
+
+    const roles = allRolesOf(viewer);
+    const isStudio = roles.some((role) => isStudioRole(role));
+    const query = q?.trim();
+
+    const namePhoneFilter: Prisma.UserWhereInput | undefined = query
+      ? {
+          OR: [
+            { name: { contains: query, mode: 'insensitive' } },
+            { phone: { contains: query } },
+          ],
+        }
+      : undefined;
+
+    let users: Array<{
+      id: string;
+      name: string | null;
+      phone: string;
+      role: UserRole;
+    }>;
+
+    if (isStudio) {
+      const canSeeAllClients = roles.some(
+        (role) => role === UserRole.admin || role === UserRole.complectator,
+      );
+      const clientWhere: Prisma.UserWhereInput = canSeeAllClients
+        ? { role: UserRole.client, ...(namePhoneFilter ?? {}) }
+        : {
+            role: UserRole.client,
+            AND: [
+              ...(namePhoneFilter ? [namePhoneFilter] : []),
+              {
+                OR: [
+                  { clientProjects: { some: { designerId: userId } } },
+                  { clientProjects: { some: { surveyorId: userId } } },
+                  {
+                    projectMemberships: {
+                      some: {
+                        project: {
+                          OR: [
+                            { designerId: userId },
+                            { surveyorId: userId },
+                          ],
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          };
+
+      const [clients, colleagues] = await Promise.all([
+        this.prisma.user.findMany({
+          where: clientWhere,
+          select: { id: true, name: true, phone: true, role: true },
+          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+          take: 100,
+        }),
+        this.prisma.user.findMany({
+          where: {
+            id: { not: userId },
+            role: {
+              in: [
+                UserRole.admin,
+                UserRole.complectator,
+                UserRole.designer,
+                UserRole.surveyor,
+              ],
+            },
+            ...(namePhoneFilter ?? {}),
+          },
+          select: { id: true, name: true, phone: true, role: true },
+          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+          take: 100,
+        }),
+      ]);
+      users = [...clients, ...colleagues];
+    } else {
+      const projectStaff = await this.prisma.project.findMany({
+        where: {
+          isShowcase: false,
+          OR: [
+            { userId },
+            { members: { some: { userId } } },
+          ],
+        },
+        select: {
+          designerId: true,
+          surveyorId: true,
+          members: { select: { userId: true } },
+        },
+        take: 50,
+      });
+      const staffIds = new Set<string>();
+      for (const project of projectStaff) {
+        if (project.designerId) staffIds.add(project.designerId);
+        if (project.surveyorId) staffIds.add(project.surveyorId);
+        for (const member of project.members) staffIds.add(member.userId);
+      }
+
+      const support = await this.prisma.chat.findFirst({
+        where: {
+          type: ChatType.support,
+          participants: { some: { userId } },
+        },
+        include: {
+          participants: {
+            where: { userId: { not: userId } },
+            select: { userId: true },
+          },
+        },
+      });
+      for (const p of support?.participants ?? []) {
+        staffIds.add(p.userId);
+      }
+
+      users = await this.prisma.user.findMany({
+        where: {
+          id: { in: [...staffIds] },
+          ...(namePhoneFilter ?? {}),
+        },
+        select: { id: true, name: true, phone: true, role: true },
+        orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+        take: 100,
+      });
+    }
+
+    const seen = new Set<string>();
+    return {
+      items: users
+        .filter((user) => {
+          if (user.id === userId || seen.has(user.id)) return false;
+          seen.add(user.id);
+          return true;
+        })
+        .map((user) => ({
+          id: user.id,
+          name: this.publicDisplayName(user, {
+            revealPhone: isStudio && canSeeContactPhone(
+              roles.find((role) => isStudioRole(role)) ?? viewer.role,
+            ),
+          }),
+          phone: isStudio ? user.phone : undefined,
+          role: user.role,
+          roleLabel: this.contactRoleLabel(user.role),
+        })),
+    };
+  }
+
+  async getOrCreatePersonalChat(userId: string, otherUserId: string) {
+    if (userId === otherUserId) {
+      throw new BadRequestException('Cannot chat with yourself');
+    }
+
+    const other = await this.prisma.user.findUnique({
+      where: { id: otherUserId },
+      select: { id: true, name: true, phone: true, role: true },
+    });
+    if (!other) throw new NotFoundException('User not found');
+
+    const existing = await this.prisma.chat.findFirst({
+      where: {
+        type: ChatType.personal,
+        AND: [
+          { participants: { some: { userId } } },
+          { participants: { some: { userId: otherUserId } } },
+        ],
+      },
+      include: {
+        participants: { select: { userId: true } },
+        project: { select: { id: true, name: true, userId: true } },
+      },
+    });
+
+    const personal =
+      existing &&
+      existing.participants.length === 2 &&
+      existing.participants.every(
+        (p) => p.userId === userId || p.userId === otherUserId,
+      )
+        ? existing
+        : await this.createChatWithParticipants({
+            type: ChatType.personal,
+            userIds: [userId, otherUserId],
+          });
+
+    const viewer = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true, extraRoles: true },
+    });
+    const viewerRole =
+      viewer?.extraRoles.find((role) => isStudioRole(role)) ??
+      (viewer && isStudioRole(viewer.role) ? viewer.role : viewer?.role);
+
+    const chat = await this.prisma.chat.findUniqueOrThrow({
+      where: { id: personal.id },
+      include: {
+        project: { select: { id: true, name: true, userId: true } },
+        participants: {
+          include: {
+            user: {
+              select: { id: true, name: true, phone: true, role: true },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      id: chat.id,
+      type: chat.type,
+      typeLabel: CHAT_TYPE_LABELS[chat.type],
+      title: this.resolveChatTitle(chat, viewerRole, userId),
+      clientId: this.resolveClientId(chat, viewerRole),
+      projectId: chat.projectId,
+      unreadCount: 0,
+      updatedAt: chat.updatedAt,
+      lastMessage: null,
+    };
+  }
+
+  private contactRoleLabel(role: UserRole) {
+    switch (role) {
+      case UserRole.client:
+        return 'Клиент';
+      case UserRole.designer:
+        return 'Дизайнер';
+      case UserRole.surveyor:
+        return 'Замерщик';
+      case UserRole.complectator:
+        return 'Менеджер';
+      case UserRole.admin:
+        return 'Админ';
+      default:
+        return 'Контакт';
+    }
   }
 
   async getOtherParticipantIds(chatId: string, excludeUserId: string) {
@@ -252,25 +528,65 @@ export class ChatService {
       throw new NotFoundException('Chat not found');
     }
 
+    if (chat.type === ChatType.support) {
+      const client = chat.participants.find((p) => p.user.role === UserRole.client);
+      if (client) {
+        await this.syncStaffIntoSupportChat(
+          chat.id,
+          await this.listDutyStaffIds(),
+        );
+        await this.pruneSupportFieldStaffOnce(chat.id, client.user.id);
+      }
+    }
+
+    const refreshed =
+      chat.type === ChatType.support
+        ? await this.prisma.chat.findUnique({
+            where: { id: chatId },
+            include: {
+              project: { select: { id: true, name: true, userId: true } },
+              participants: {
+                include: {
+                  user: {
+                    select: { id: true, name: true, phone: true, role: true },
+                  },
+                },
+              },
+            },
+          })
+        : chat;
+
+    if (!refreshed) {
+      throw new NotFoundException('Chat not found');
+    }
+
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, extraRoles: true },
     });
+    const viewerRoles = viewer ? allRolesOf(viewer) : [];
+    const viewerIsStudio = hasStudioRole(viewerRoles);
+    const viewerRole =
+      viewer && hasSupportDutyRole(viewerRoles)
+        ? UserRole.complectator
+        : viewer?.role;
+
+    const visibleParticipants = viewerIsStudio
+      ? refreshed.participants
+      : refreshed.participants.filter((p) => p.user.id === userId);
 
     return {
-      id: chat.id,
-      type: chat.type,
-      typeLabel: CHAT_TYPE_LABELS[chat.type],
-      title: this.resolveChatTitle(chat, viewer?.role, userId),
-      projectId: chat.projectId,
-      projectName: chat.project?.name ?? null,
-      clientId: this.resolveClientId(chat, viewer?.role),
-      participants: chat.participants.map((participant) => ({
+      id: refreshed.id,
+      type: refreshed.type,
+      typeLabel: CHAT_TYPE_LABELS[refreshed.type],
+      title: this.resolveChatTitle(refreshed, viewerRole, userId),
+      projectId: refreshed.projectId,
+      projectName: refreshed.project?.name ?? null,
+      clientId: this.resolveClientId(refreshed, viewerRole),
+      participants: visibleParticipants.map((participant) => ({
         id: participant.user.id,
         name: this.publicDisplayName(participant.user),
-        phone: canSeeContactPhone(viewer?.role)
-          ? participant.user.phone
-          : '',
+        phone: canSeeContactPhone(viewerRoles) ? participant.user.phone : '',
         role: participant.user.role,
       })),
     };
@@ -411,13 +727,263 @@ export class ChatService {
     });
   }
 
-  /** Ensures client has a Davart support chat with all staff as participants. */
+  /** Ensures client has a Davart support chat with duty staff as participants. */
   async ensureDavartChat(clientId: string) {
     await this.getOrCreateSupportChat(clientId);
   }
 
-  /** Add a staff user to every existing support (Davart) chat. */
+  /**
+   * Staff opens a client's support thread.
+   * Duty (manager/admin) join automatically; field staff only if already invited.
+   */
+  async openClientSupportChat(staffId: string, clientId: string) {
+    await this.getOrCreateSupportChat(clientId);
+    const chat = await this.prisma.chat.findFirst({
+      where: {
+        type: ChatType.support,
+        participants: { some: { userId: clientId } },
+      },
+      select: { id: true },
+    });
+    if (!chat) {
+      throw new NotFoundException('Support chat not found');
+    }
+
+    const staff = await this.prisma.user.findUnique({
+      where: { id: staffId },
+      select: { role: true, extraRoles: true },
+    });
+    const roles = staff ? allRolesOf(staff) : [];
+    const already = await this.prisma.chatParticipant.findUnique({
+      where: { chatId_userId: { chatId: chat.id, userId: staffId } },
+    });
+
+    if (!already) {
+      if (!hasSupportDutyRole(roles)) {
+        throw new ForbiddenException(
+          'Ask a manager to add you to this client chat',
+        );
+      }
+      await this.prisma.chatParticipant.create({
+        data: { chatId: chat.id, userId: staffId },
+      });
+    }
+
+    const items = await this.listChats(staffId);
+    const item = items.find((row) => row.id === chat.id);
+    if (item) return item;
+
+    return {
+      id: chat.id,
+      type: ChatType.support,
+      typeLabel: CHAT_TYPE_LABELS[ChatType.support],
+      title: DAVART_CHAT_TITLE,
+      projectId: null,
+      unreadCount: 0,
+      updatedAt: new Date(),
+      lastMessage: null,
+    };
+  }
+
+  /**
+   * Manager/admin invites designer or surveyor into a client support chat.
+   * History stays; everyone gets a system notice.
+   */
+  async addSupportParticipant(
+    actorId: string,
+    chatId: string,
+    targetUserId: string,
+  ) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+    });
+    if (!actor || !hasSupportDutyRole(allRolesOf(actor))) {
+      throw new ForbiddenException('Only managers can add staff to support');
+    }
+
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      include: {
+        participants: {
+          include: { user: { select: { id: true, role: true } } },
+        },
+      },
+    });
+    if (!chat || chat.type !== ChatType.support) {
+      throw new BadRequestException('Only support chats accept staff invites');
+    }
+
+    await this.ensureParticipant(actorId, chatId);
+
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+    });
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+    const targetRoles = allRolesOf(target);
+    const isField =
+      targetRoles.includes(UserRole.designer) ||
+      targetRoles.includes(UserRole.surveyor);
+    if (!isField) {
+      throw new BadRequestException('Can only add designer or surveyor');
+    }
+
+    const existing = await this.prisma.chatParticipant.findUnique({
+      where: { chatId_userId: { chatId, userId: targetUserId } },
+    });
+    if (existing) {
+      return {
+        chat: await this.getChat(actorId, chatId),
+        message: null,
+      };
+    }
+
+    await this.prisma.chatParticipant.create({
+      data: { chatId, userId: targetUserId },
+    });
+
+    // After first invite, skip one-shot prune so invited field staff stay.
+    await this.redis.set(`${SUPPORT_ROSTER_REDIS_PREFIX}${chatId}`, '1');
+
+    const actorName = this.publicDisplayName(actor, { revealPhone: true });
+    const targetName = this.publicDisplayName(target, { revealPhone: true });
+    const roleLabel =
+      targetRoles.includes(UserRole.surveyor) &&
+      !targetRoles.includes(UserRole.designer)
+        ? 'замерщика'
+        : 'дизайнера';
+
+    const notice = await this.createSeedMessage({
+      chatId,
+      senderId: actorId,
+      type: MessageType.text,
+      content: `${actorName} добавил(а) ${roleLabel} ${targetName} в чат`,
+    });
+
+    return {
+      chat: await this.getChat(actorId, chatId),
+      message: await this.formatMessage(notice, actorId),
+    };
+  }
+
+  /** Assign designer/surveyor on a project and invite them into client support + project chat. */
+  async assignToClientProject(params: {
+    actorId: string;
+    projectId: string;
+    designerId?: string | null;
+    surveyorId?: string | null;
+  }) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: params.actorId },
+      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+    });
+    if (!actor || !hasSupportDutyRole(allRolesOf(actor))) {
+      throw new ForbiddenException('Only managers can assign project staff');
+    }
+
+    const project = await this.prisma.project.findFirst({
+      where: { id: params.projectId, isShowcase: false },
+      select: { id: true, name: true, userId: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const data: { designerId?: string | null; surveyorId?: string | null } = {};
+    if (params.designerId !== undefined) data.designerId = params.designerId;
+    if (params.surveyorId !== undefined) data.surveyorId = params.surveyorId;
+
+    if (Object.keys(data).length > 0) {
+      await this.prisma.project.update({
+        where: { id: project.id },
+        data,
+      });
+    }
+
+    const projectChat = await this.ensureProjectChat(project.id);
+    await this.getOrCreateSupportChat(project.userId);
+    const supportChat = await this.prisma.chat.findFirst({
+      where: {
+        type: ChatType.support,
+        participants: { some: { userId: project.userId } },
+      },
+      select: { id: true },
+    });
+
+    const inviteIds = [params.designerId, params.surveyorId].filter(
+      (id): id is string => Boolean(id),
+    );
+
+    const notices: Array<{
+      chatId: string;
+      message: {
+        type: string;
+        content?: string | null;
+        attachmentName?: string | null;
+        sender?: { name?: string | null };
+      };
+    }> = [];
+
+    for (const staffId of inviteIds) {
+      if (supportChat) {
+        const inSupport = await this.prisma.chatParticipant.findUnique({
+          where: {
+            chatId_userId: { chatId: supportChat.id, userId: staffId },
+          },
+        });
+        if (!inSupport) {
+          const { message } = await this.addSupportParticipant(
+            params.actorId,
+            supportChat.id,
+            staffId,
+          );
+          if (message) {
+            notices.push({
+              chatId: supportChat.id,
+              message,
+            });
+          }
+        }
+      }
+
+      if (projectChat) {
+        await this.prisma.chatParticipant.upsert({
+          where: {
+            chatId_userId: { chatId: projectChat.id, userId: staffId },
+          },
+          update: {},
+          create: { chatId: projectChat.id, userId: staffId },
+        });
+      }
+    }
+
+    const projectResult = await this.prisma.project.findUnique({
+      where: { id: project.id },
+      select: {
+        id: true,
+        name: true,
+        designerId: true,
+        surveyorId: true,
+        managerId: true,
+      },
+    });
+
+    return { project: projectResult, notices };
+  }
+
+  /** Add duty staff (complectator/admin) to every support chat — not field roles. */
   async syncStaffIntoAllSupportChats(staffId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: staffId },
+      select: { role: true, extraRoles: true },
+    });
+    if (!user || !hasSupportDutyRole(allRolesOf(user))) {
+      return;
+    }
+
     const chats = await this.prisma.chat.findMany({
       where: { type: ChatType.support },
       select: { id: true },
@@ -434,8 +1000,196 @@ export class ChatService {
     }
   }
 
+  /** Create or reuse the project working chat; skip showcase. */
+  async ensureProjectChat(projectId: string) {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        isShowcase: true,
+        designerId: true,
+        managerId: true,
+        surveyorId: true,
+        members: { select: { userId: true } },
+      },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    if (project.isShowcase) {
+      return null;
+    }
+
+    const existing = await this.prisma.chat.findFirst({
+      where: { projectId, type: ChatType.project },
+      select: { id: true },
+    });
+    if (existing) {
+      await this.syncProjectChatParticipants(existing.id, project);
+      await this.ensureProjectWelcomeMessage(existing.id, {
+        userId: project.userId,
+        designerId: project.designerId,
+        managerId: project.managerId,
+      });
+      return existing;
+    }
+
+    const userIds = this.collectProjectParticipantIds(project);
+    const chat = await this.createChatWithParticipants({
+      type: ChatType.project,
+      projectId: project.id,
+      title: project.name,
+      userIds,
+    });
+
+    await this.ensureProjectWelcomeMessage(chat.id, {
+      userId: project.userId,
+      designerId: project.designerId,
+      managerId: project.managerId,
+    });
+
+    return chat;
+  }
+
+  /** First system greeting for the client when a project chat appears. */
+  private async ensureProjectWelcomeMessage(
+    chatId: string,
+    project: {
+      userId: string;
+      designerId: string | null;
+      managerId: string | null;
+    },
+  ) {
+    const existingMessage = await this.prisma.message.findFirst({
+      where: { chatId },
+      select: { id: true },
+    });
+    if (existingMessage) return;
+
+    const duty = await this.listDutyStaffIds();
+    const senderId =
+      project.managerId ??
+      duty[0] ??
+      project.designerId ??
+      project.userId;
+
+    await this.createSeedMessage({
+      chatId,
+      senderId,
+      type: MessageType.text,
+      content: PROJECT_WELCOME_MESSAGE,
+    });
+
+    if (project.userId !== senderId) {
+      await this.pushService.sendToUser(project.userId, {
+        title: DAVART_CHAT_TITLE,
+        body: 'Добро пожаловать в чат DAVart дизайн 😌',
+        data: { type: 'chat', chatId },
+      });
+    }
+  }
+
+  /** Open project chat for an actor who can access the project (client or assigned staff). */
+  async openProjectChat(actorId: string, projectId: string) {
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { role: true, extraRoles: true },
+    });
+    const roles = actor ? [actor.role, ...actor.extraRoles] : [];
+
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        ...actorProjectAccessWhere(actorId, roles),
+      },
+      select: {
+        id: true,
+        name: true,
+        userId: true,
+        isShowcase: true,
+      },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    if (project.isShowcase) {
+      throw new BadRequestException('Showcase has no project chat');
+    }
+
+    const chat = await this.ensureProjectChat(projectId);
+    if (!chat) {
+      throw new NotFoundException('Project chat not found');
+    }
+
+    await this.prisma.chatParticipant.upsert({
+      where: { chatId_userId: { chatId: chat.id, userId: actorId } },
+      update: {},
+      create: { chatId: chat.id, userId: actorId },
+    });
+
+    const items = await this.listChats(actorId);
+    const item = items.find((row) => row.id === chat.id);
+    if (item) return item;
+
+    return {
+      id: chat.id,
+      type: ChatType.project,
+      typeLabel: CHAT_TYPE_LABELS[ChatType.project],
+      title: project.name,
+      clientId: project.userId,
+      projectId: project.id,
+      unreadCount: 0,
+      updatedAt: new Date(),
+      lastMessage: null,
+    };
+  }
+
+  async postProjectSystemMessage(projectId: string, content: string) {
+    const chat = await this.ensureProjectChat(projectId);
+    if (!chat) return;
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        userId: true,
+        designerId: true,
+        managerId: true,
+      },
+    });
+    if (!project) return;
+
+    const duty = await this.listDutyStaffIds();
+    const senderId =
+      project.managerId ??
+      duty[0] ??
+      project.designerId ??
+      project.userId;
+
+    await this.createSeedMessage({
+      chatId: chat.id,
+      senderId,
+      type: MessageType.text,
+      content,
+    });
+  }
+
   async getOrCreateSupportChat(userId: string) {
-    const staffIds = await this.listStaffIds();
+    const viewer = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, extraRoles: true },
+    });
+    if (!viewer) {
+      throw new NotFoundException('User not found');
+    }
+    if (isStudioRole(viewer.role) || viewer.extraRoles.some(isStudioRole)) {
+      throw new ForbiddenException(
+        'Support inbox is per client account and is not shared with staff logins',
+      );
+    }
+
+    const staffIds = await this.listDutyStaffIds();
 
     const existing = await this.prisma.chatParticipant.findFirst({
       where: {
@@ -467,6 +1221,7 @@ export class ChatService {
 
     if (existing) {
       await this.syncStaffIntoSupportChat(existing.chat.id, staffIds);
+      await this.pruneSupportFieldStaffOnce(existing.chat.id, userId);
       if (existing.chat.title !== DAVART_CHAT_TITLE) {
         await this.prisma.chat.update({
           where: { id: existing.chat.id },
@@ -475,10 +1230,6 @@ export class ChatService {
       }
 
       const lastMessage = existing.chat.messages[0];
-      const viewer = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { role: true },
-      });
       return {
         id: existing.chat.id,
         type: existing.chat.type,
@@ -509,6 +1260,7 @@ export class ChatService {
       title: DAVART_CHAT_TITLE,
       userIds,
     });
+    await this.redis.set(`${SUPPORT_ROSTER_REDIS_PREFIX}${chat.id}`, '1');
 
     const welcomeSenderId = staffIds[0] ?? userId;
     if (staffIds.length > 0) {
@@ -516,7 +1268,7 @@ export class ChatService {
         chatId: chat.id,
         senderId: welcomeSenderId,
         type: MessageType.text,
-        content: 'Здравствуйте! Команда Davart на связи.',
+        content: 'Здравствуйте! Команда DAVart на связи.',
       });
     }
 
@@ -543,51 +1295,114 @@ export class ChatService {
     const supportChat = await this.getOrCreateSupportChat(userId);
 
     const project = await this.prisma.project.findFirst({
-      where: { userId },
+      where: { userId, isShowcase: false },
       orderBy: { createdAt: 'asc' },
     });
 
     if (project) {
-      const designer =
-        (project.designerId
-          ? await this.prisma.user.findUnique({
-              where: { id: project.designerId },
-            })
-          : null) ??
-        (await this.prisma.user.upsert({
-          where: { phone: '+79009999999' },
-          update: { name: 'Анна Дизайнер', role: UserRole.designer },
-          create: {
-            phone: '+79009999999',
-            name: 'Анна Дизайнер',
-            role: UserRole.designer,
-          },
-        }));
-
-      const projectChat = await this.createChatWithParticipants({
-        type: ChatType.project,
-        projectId: project.id,
-        title: project.name,
-        userIds: [userId, designer.id],
-      });
-
-      await this.createSeedMessage({
-        chatId: projectChat.id,
-        senderId: designer.id,
-        type: MessageType.text,
-        content: `Добрый день! Начинаем работу над проектом «${project.name}».`,
-      });
+      await this.ensureProjectChat(project.id);
+      await this.postProjectSystemMessage(
+        project.id,
+        `Чат проекта «${project.name}» создан.`,
+      );
     }
 
     return { message: 'Demo chats created', supportChatId: supportChat.id };
   }
 
-  private async listStaffIds(): Promise<string[]> {
+  private async listDutyStaffIds(): Promise<string[]> {
     const staff = await this.prisma.user.findMany({
-      where: { role: { in: STUDIO_ROLES } },
+      where: {
+        OR: [
+          { role: { in: SUPPORT_DUTY_ROLES } },
+          { extraRoles: { hasSome: SUPPORT_DUTY_ROLES } },
+        ],
+      },
       select: { id: true },
     });
     return staff.map((user) => user.id);
+  }
+
+  /**
+   * One-shot cleanup: drop designers/surveyors from legacy mega-support chats.
+   * After a manager invites field staff, redis flag stays set so they are kept.
+   */
+  private async pruneSupportFieldStaffOnce(
+    chatId: string,
+    clientId: string,
+  ): Promise<void> {
+    const key = `${SUPPORT_ROSTER_REDIS_PREFIX}${chatId}`;
+    const done = await this.redis.get(key);
+    if (done) return;
+
+    const participants = await this.prisma.chatParticipant.findMany({
+      where: { chatId },
+      include: {
+        user: { select: { id: true, role: true, extraRoles: true } },
+      },
+    });
+
+    const removeIds: string[] = [];
+    for (const row of participants) {
+      if (row.userId === clientId) continue;
+      const roles = allRolesOf(row.user);
+      if (hasSupportDutyRole(roles)) continue;
+      if (
+        roles.includes(UserRole.designer) ||
+        roles.includes(UserRole.surveyor) ||
+        isStudioRole(row.user.role)
+      ) {
+        removeIds.push(row.userId);
+      }
+    }
+
+    if (removeIds.length > 0) {
+      await this.prisma.chatParticipant.deleteMany({
+        where: { chatId, userId: { in: removeIds } },
+      });
+    }
+
+    await this.redis.set(key, '1');
+  }
+
+  private collectProjectParticipantIds(project: {
+    userId: string;
+    designerId: string | null;
+    managerId: string | null;
+    surveyorId: string | null;
+    members: { userId: string }[];
+  }): string[] {
+    return Array.from(
+      new Set(
+        [
+          project.userId,
+          project.designerId,
+          project.managerId,
+          project.surveyorId,
+          ...project.members.map((m) => m.userId),
+        ].filter((id): id is string => Boolean(id)),
+      ),
+    );
+  }
+
+  private async syncProjectChatParticipants(
+    chatId: string,
+    project: {
+      userId: string;
+      designerId: string | null;
+      managerId: string | null;
+      surveyorId: string | null;
+      members: { userId: string }[];
+    },
+  ) {
+    const userIds = this.collectProjectParticipantIds(project);
+    for (const userId of userIds) {
+      await this.prisma.chatParticipant.upsert({
+        where: { chatId_userId: { chatId, userId } },
+        update: {},
+        create: { chatId, userId },
+      });
+    }
   }
 
   private async syncStaffIntoSupportChat(
@@ -633,16 +1448,29 @@ export class ChatService {
     senderId: string;
     type: MessageType;
     content: string;
-  }) {
-    await this.prisma.$transaction([
-      this.prisma.message.create({
-        data: {
-          chatId: params.chatId,
-          senderId: params.senderId,
-          type: params.type,
-          content: params.content,
+  }): Promise<MessageWithRelations> {
+    const message = await this.prisma.message.create({
+      data: {
+        chatId: params.chatId,
+        senderId: params.senderId,
+        type: params.type,
+        content: params.content,
+      },
+      include: {
+        sender: { select: { id: true, name: true, phone: true, role: true } },
+        product: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            imageUrl: true,
+            slug: true,
+          },
         },
-      }),
+      },
+    });
+
+    await this.prisma.$transaction([
       this.prisma.chat.update({
         where: { id: params.chatId },
         data: { updatedAt: new Date() },
@@ -652,6 +1480,8 @@ export class ChatService {
         data: { unreadCount: { increment: 1 } },
       }),
     ]);
+
+    return message;
   }
 
   async assertParticipant(userId: string, chatId: string) {
@@ -751,6 +1581,14 @@ export class ChatService {
       }
       return DAVART_CHAT_TITLE;
     }
+    if (chat.type === ChatType.personal && chat.participants && viewerId) {
+      const other = chat.participants.find((p) => p.user.id !== viewerId);
+      if (other) {
+        return this.publicDisplayName(other.user, {
+          revealPhone: canSeeContactPhone(viewerRole),
+        });
+      }
+    }
     if (chat.title) return chat.title;
     if (chat.project) return chat.project.name;
     return CHAT_TYPE_LABELS[chat.type];
@@ -808,7 +1646,7 @@ export class ChatService {
     });
     const senderName = message.sender?.name?.trim();
     return {
-      title: senderName && senderName.length > 0 ? senderName : 'Davart',
+      title: senderName && senderName.length > 0 ? senderName : 'DAVart',
       body: preview.length > 0 ? preview : 'Новое сообщение',
     };
   }

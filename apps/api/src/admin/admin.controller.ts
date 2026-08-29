@@ -21,6 +21,7 @@ import {
   AdminUserIdParamDto,
   CreateAdminUserDto,
   ElevateRoleDto,
+  SetRolesDto,
   UpdateAdminUserDto,
 } from './dto/admin.dto';
 
@@ -78,6 +79,7 @@ export class AdminController {
       phone: dto.phone,
       name: dto.name,
       role: dto.role,
+      roles: dto.roles,
     });
   }
 
@@ -89,5 +91,14 @@ export class AdminController {
     @Body() dto: ElevateRoleDto,
   ) {
     return this.adminService.elevateRole(actor.sub, params.id, dto.role);
+  }
+
+  @Patch('users/:id/roles')
+  setRoles(
+    @CurrentUser() actor: JwtPayload,
+    @Param() params: AdminUserIdParamDto,
+    @Body() dto: SetRolesDto,
+  ) {
+    return this.adminService.setRoles(actor.sub, params.id, dto.roles);
   }
 }

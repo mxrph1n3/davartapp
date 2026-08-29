@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,31 +6,26 @@ import 'package:intl/intl.dart';
 
 import '../../../core/layout/tab_page.dart';
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/chat_models.dart';
-import '../data/chat_repository.dart';
 import 'chat_notifier.dart';
 
-final _timeFormat = DateFormat('dd.MM HH:mm');
+final _timeFormat = DateFormat('HH:mm');
+final _dayFormat = DateFormat('dd.MM.yy');
 
-enum _ChatTab { all, projects }
+const _weekdaysRu = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
-class ChatScreen extends ConsumerStatefulWidget {
+class ChatScreen extends ConsumerWidget {
   const ChatScreen({super.key});
 
   @override
-  ConsumerState<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends ConsumerState<ChatScreen> {
-  var _tab = _ChatTab.all;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
     final chatsAsync = ref.watch(chatsListProvider);
     final isAuthenticated = ref.watch(authProvider).isAuthenticated;
 
@@ -39,94 +35,77 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               title: 'Войдите по номеру',
               subtitle: 'Чтобы писать в поддержку и видеть переписку по проекту',
             )
-          : chatsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (_, _) => ErrorState(
-          message: 'Не удалось загрузить чаты',
-          onRetry: () => ref.invalidate(chatsListProvider),
-        ),
-        data: (chats) {
-          final allChats =
-              chats.where((chat) => chat.type != 'project').toList();
-          final projectChats =
-              chats.where((chat) => chat.type == 'project').toList();
-          final visible = _tab == _ChatTab.all ? allChats : projectChats;
-          final allUnread = allChats.fold<int>(0, (sum, c) => sum + c.unreadCount);
-          final projectUnread =
-              projectChats.fold<int>(0, (sum, c) => sum + c.unreadCount);
-
-          return RefreshIndicator(
-            onRefresh: () async {
-              ref.invalidate(chatsListProvider);
-              await ref.read(unreadTotalProvider.notifier).refresh();
-            },
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const ScreenHeader(title: 'Чаты'),
-                const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    CategoryChip(
-                      label: allUnread > 0 ? 'Все · $allUnread' : 'Все',
-                      selected: _tab == _ChatTab.all,
-                      onSelected: (_) => setState(() => _tab = _ChatTab.all),
-                    ),
-                    const SizedBox(width: 8),
-                    CategoryChip(
-                      label: projectUnread > 0
-                          ? 'Проекты · $projectUnread'
-                          : 'Проекты',
-                      selected: _tab == _ChatTab.projects,
-                      onSelected: (_) =>
-                          setState(() => _tab = _ChatTab.projects),
+                ScreenHeader(
+                  title: 'Мессенджер',
+                  actions: [
+                    HeaderIconButton(
+                      icon: CupertinoIcons.square_pencil,
+                      onPressed: () => context.push(
+                        newChatPathForRole(ref.read(authProvider).user?.role),
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-                if (chats.isEmpty)
-                  EmptyState(
-                    icon: Icons.chat_bubble_outline,
-                    title: 'Чатов пока нет',
-                    subtitle: 'Напишите в поддержку или загрузите демо',
-                    actionLabel: 'Загрузить демо',
-                    onAction: () async {
-                      await ref.read(chatRepositoryProvider).seedDemo();
-                      ref.invalidate(chatsListProvider);
-                      ref.read(unreadTotalProvider.notifier).refresh();
-                    },
-                  )
-                else if (visible.isEmpty)
-                  EmptyState(
-                    icon: _tab == _ChatTab.projects
-                        ? Icons.folder_outlined
-                        : Icons.chat_bubble_outline,
-                    title: _tab == _ChatTab.projects
-                        ? 'Проектных чатов нет'
-                        : 'Личных чатов нет',
-                    subtitle: _tab == _ChatTab.projects
-                        ? 'Они появятся, когда откроется проект'
-                        : 'Поддержка и личные переписки будут здесь',
-                  )
-                else
-                  ...visible.map(
-                    (chat) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: _ChatListItem(
-                        chat: chat,
-                        onTap: () => _openChat(chat),
-                      ),
+                Expanded(
+                  child: chatsAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (_, _) => ErrorState(
+                      message: 'Не удалось загрузить чаты',
+                      onRetry: () => ref.invalidate(chatsListProvider),
                     ),
+                    data: (chats) {
+                      final sorted = [...chats]..sort(
+                          (a, b) => b.updatedAt.compareTo(a.updatedAt),
+                        );
+
+                      return RefreshIndicator(
+                        onRefresh: () async {
+                          ref.invalidate(chatsListProvider);
+                          await ref.read(unreadTotalProvider.notifier).refresh();
+                        },
+                        child: sorted.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                children: const [
+                                  SizedBox(height: 80),
+                                  EmptyState(
+                                    icon: Icons.chat_bubble_outline,
+                                    title: 'Чатов пока нет',
+                                    subtitle:
+                                        'Нажмите кнопку сверху, чтобы написать контакту',
+                                  ),
+                                ],
+                              )
+                            : ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                itemCount: sorted.length,
+                                separatorBuilder: (_, _) => Divider(
+                                  height: 1,
+                                  indent: 76,
+                                  color: colors.divider,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final chat = sorted[index];
+                                  return _TelegramChatTile(
+                                    chat: chat,
+                                    onTap: () => _openChat(context, chat),
+                                  );
+                                },
+                              ),
+                      );
+                    },
                   ),
+                ),
               ],
             ),
-          );
-        },
-      ),
     );
   }
 
-  void _openChat(ChatSummary chat) {
+  void _openChat(BuildContext context, ChatSummary chat) {
     final params = <String, String>{
       'title': chat.title,
       if (chat.clientId != null) 'clientId': chat.clientId!,
@@ -139,80 +118,130 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-class _ChatListItem extends StatelessWidget {
-  const _ChatListItem({required this.chat, required this.onTap});
+class _TelegramChatTile extends StatelessWidget {
+  const _TelegramChatTile({required this.chat, required this.onTap});
 
   final ChatSummary chat;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
+    final colors = AppColors.of(context);
+    final preview = chat.lastMessage?.preview ?? 'Нет сообщений';
+    final timeLabel = chat.lastMessage != null
+        ? _formatChatTime(chat.lastMessage!.createdAt)
+        : '';
+    final hasUnread = chat.unreadCount > 0;
+
+    return InkWell(
       onTap: onTap,
-      child: Row(
-        children: [
-          AppAvatar(label: chat.title, size: 48),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        chat.title,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (chat.lastMessage != null)
-                      Text(
-                        _timeFormat.format(chat.lastMessage!.createdAt),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        chat.lastMessage?.preview ?? 'Нет сообщений',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (chat.unreadCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primary,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.screenPadding,
+          vertical: 10,
+        ),
+        child: Row(
+          children: [
+            AppAvatar(label: chat.title, size: 54),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          '${chat.unreadCount}',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onPrimary,
-                              ),
+                          chat.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        timeLabel,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: hasUnread
+                                  ? colors.accent
+                                  : colors.textSecondary,
+                              fontWeight: hasUnread
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
                       ),
                     ],
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          chat.type == 'project' && chat.lastMessage == null
+                              ? 'Проект'
+                              : preview,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: colors.textSecondary,
+                                    fontWeight: hasUnread
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
+                                  ),
+                        ),
+                      ),
+                      if (hasUnread) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          constraints: const BoxConstraints(minWidth: 22),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            chat.unreadCount > 99
+                                ? '99+'
+                                : '${chat.unreadCount}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: colors.textOnAccent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+String _formatChatTime(DateTime raw) {
+  final local = raw.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return _timeFormat.format(local);
+  if (diff == 1) return 'вчера';
+  if (diff < 7) return _weekdaysRu[local.weekday - 1];
+  return _dayFormat.format(local);
 }

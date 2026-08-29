@@ -21,19 +21,7 @@ class ProjectDocumentsSection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text('Документы', style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            TextButton(
-              onPressed: () async {
-                await ref.read(documentsActionsProvider).seedDemo(projectId);
-                ref.invalidate(projectDocumentsProvider(projectId));
-              },
-              child: const Text('Демо'),
-            ),
-          ],
-        ),
+        Text('Документы', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         documentsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),

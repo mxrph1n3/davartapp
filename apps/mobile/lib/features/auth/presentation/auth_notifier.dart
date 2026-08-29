@@ -65,11 +65,7 @@ class AuthNotifier extends Notifier<AuthState> {
       final user = await _repository.getMe();
       state = AuthState.authenticated(user);
     } on DioException catch (error) {
-      // Only treat auth failures as logout; keep tokens on network/5xx.
-      if (error.response?.statusCode != 401) {
-        state = const AuthState.unauthenticated();
-        return;
-      }
+      // Always try refresh when /me fails; clear tokens only on confirmed 401.
       try {
         final tokens = await _repository.refresh(refreshToken);
         await _tokenStorage.saveTokens(
@@ -78,8 +74,17 @@ class AuthNotifier extends Notifier<AuthState> {
         );
         final user = await _repository.getMe();
         state = AuthState.authenticated(user);
+      } on DioException catch (refreshError) {
+        if (refreshError.response?.statusCode == 401 ||
+            error.response?.statusCode == 401) {
+          await _tokenStorage.clear();
+        }
+        // Network/5xx: keep tokens so the next online request can restore.
+        state = const AuthState.unauthenticated();
       } catch (_) {
-        await _tokenStorage.clear();
+        if (error.response?.statusCode == 401) {
+          await _tokenStorage.clear();
+        }
         state = const AuthState.unauthenticated();
       }
     } catch (_) {
@@ -90,18 +95,23 @@ class AuthNotifier extends Notifier<AuthState> {
 
   void updateUserProfile(profile.UserProfile profile) {
     if (!state.isAuthenticated) return;
+    final current = state.user;
     state = AuthState.authenticated(
       UserProfile(
         id: profile.id,
         phone: profile.phone,
         name: profile.name,
         role: profile.role,
+        extraRoles:
+            profile.extraRoles.isNotEmpty
+                ? profile.extraRoles
+                : (current?.extraRoles ?? const []),
       ),
     );
   }
 
-  Future<void> sendOtp(String phone) async {
-    await _repository.sendOtp(phone);
+  Future<String?> sendOtp(String phone) {
+    return _repository.sendOtp(phone);
   }
 
   Future<void> verifyOtp({
@@ -114,7 +124,15 @@ class AuthNotifier extends Notifier<AuthState> {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       );
-      final user = await _repository.getMe();
+
+      // Prefer user from verify response so UI can leave OTP even if /me is slow.
+      var user = tokens.user;
+      try {
+        user = await _repository.getMe().timeout(const Duration(seconds: 12));
+      } catch (_) {
+        user ??= UserProfile(id: 'session', phone: phone);
+      }
+
       state = AuthState.authenticated(user);
       unawaited(
         ref.read(chatSocketServiceProvider).connect(force: true),
@@ -122,7 +140,10 @@ class AuthNotifier extends Notifier<AuthState> {
       unawaited(ref.read(pushServiceProvider).initialize());
     } on DioException catch (error) {
       final message = _extractError(error);
-      state = AuthState.unauthenticated(errorMessage: message);
+      // A duplicate verify (auto-submit + button) must not wipe a just-issued session.
+      if (!state.isAuthenticated) {
+        state = AuthState.unauthenticated(errorMessage: message);
+      }
       throw Exception(message);
     }
   }

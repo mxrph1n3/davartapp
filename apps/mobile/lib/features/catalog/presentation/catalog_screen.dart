@@ -11,13 +11,8 @@ import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
-import '../../commerce/presentation/active_project_provider.dart';
 import '../../commerce/presentation/commerce_notifier.dart';
-import '../../commerce/presentation/project_cart_banner.dart';
-import '../../commerce/presentation/project_picker_sheet.dart';
 import '../../staff/presentation/staff_cart_actions.dart';
-import '../../staff/presentation/working_client_banner.dart';
-import '../../staff/presentation/working_client_provider.dart';
 import 'catalog_notifier.dart';
 import 'widgets/active_filters_chips.dart';
 import 'widgets/catalog_skeleton.dart';
@@ -73,11 +68,8 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final state = ref.watch(catalogProvider);
-    final isStaff = ref.watch(authProvider).user?.role.isStudio == true;
-    final working = ref.watch(workingClientProvider);
-    final activeProject = ref.watch(activeProjectProvider);
-    final ownCartCount = ref.watch(cartProvider).itemCount;
     final favoritesState = ref.watch(favoritesProvider);
 
     late final Widget body;
@@ -95,37 +87,18 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
           controller: _scrollController,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            if (!isStaff)
-              const SliverToBoxAdapter(child: ProjectCartBanner()),
             SliverToBoxAdapter(
               child: ScreenHeader(
-                title: 'Каталог',
+                title: 'Магазин',
                 actions: [
                   HeaderIconButton(
                     icon: Icons.favorite_border,
-                    onPressed: () => context.push(AppRoutes.favorites),
-                  ),
-                  if (!isStaff)
-                    HeaderIconButton(
-                      icon: Icons.shopping_bag_outlined,
-                      badge: ownCartCount > 0 ? ownCartCount : null,
-                      onPressed: () => context.go(AppRoutes.cart),
-                    )
-                  else if (working != null)
-                    HeaderIconButton(
-                      icon: Icons.shopping_bag_outlined,
-                      onPressed: () async {
-                        final projectId = activeProject?.id ??
-                            await ensureActiveProject(
-                              context,
-                              ref,
-                              staffClientId: working.id,
-                            );
-                        if (projectId != null && context.mounted) {
-                          context.push(AppRoutes.staffProjectCart(projectId));
-                        }
-                      },
+                    onPressed: () => context.push(
+                      favoritesPathForRole(
+                        ref.read(authProvider).user?.role,
+                      ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -139,7 +112,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 ),
                 child: AppSearchBar(
                   hintText: 'Поиск товаров',
-                  onTap: () => context.push(AppRoutes.search),
+                  onTap: () => context.push(
+                    searchPathForRole(ref.read(authProvider).user?.role),
+                  ),
                   onFilterTap: _openFilters,
                 ),
               ),
@@ -204,9 +179,9 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                 ),
                 sliver: SliverList.separated(
                   itemCount: state.products.length,
-                  separatorBuilder: (_, _) => const Divider(
+                  separatorBuilder: (_, _) => Divider(
                     height: 1,
-                    color: AppColors.divider,
+                    color: colors.divider,
                   ),
                   itemBuilder: (context, index) {
                     final product = state.products[index];
@@ -222,7 +197,10 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
                       inStock: product.inStock,
                       isFavorite: favoritesState.isFavorite(product.id),
                       onTap: () => context.push(
-                        AppRoutes.productDetail(product.id),
+                        productPathForRole(
+                          ref.read(authProvider).user?.role,
+                          product.id,
+                        ),
                       ),
                       onFavoriteToggle: () async {
                         try {
@@ -259,14 +237,6 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       );
     }
 
-    return TabPage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (isStaff) const WorkingClientBanner(),
-          Expanded(child: body),
-        ],
-      ),
-    );
+    return TabPage(child: body);
   }
 }

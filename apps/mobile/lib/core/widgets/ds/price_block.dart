@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../utils/price_formatter.dart';
-import '../../theme/app_typography.dart';
 
 class PriceBlock extends StatelessWidget {
   const PriceBlock({
@@ -16,10 +15,11 @@ class PriceBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     final mainStyle = switch (size) {
-      PriceSize.large => AppTypography.textTheme.headlineMedium,
-      PriceSize.medium => AppTypography.textTheme.titleLarge,
-      PriceSize.small => AppTypography.textTheme.titleMedium,
+      PriceSize.large => textTheme.headlineMedium,
+      PriceSize.medium => textTheme.titleLarge,
+      PriceSize.small => textTheme.titleMedium,
     };
 
     return Row(
@@ -33,7 +33,7 @@ class PriceBlock extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             formatPrice(compareAtPrice!),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            style: textTheme.bodySmall?.copyWith(
                   decoration: TextDecoration.lineThrough,
                 ),
           ),

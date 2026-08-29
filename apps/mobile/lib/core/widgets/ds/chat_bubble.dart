@@ -19,6 +19,7 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -31,7 +32,7 @@ class ChatBubble extends StatelessWidget {
           vertical: AppSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: isMine ? AppColors.accent : AppColors.surfaceMuted,
+          color: isMine ? colors.accent : colors.surfaceMuted,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(18),
             topRight: const Radius.circular(18),
@@ -39,7 +40,7 @@ class ChatBubble extends StatelessWidget {
             bottomRight: Radius.circular(isMine ? 4 : 18),
           ),
           border: Border.all(
-            color: isMine ? AppColors.accent : AppColors.border,
+            color: isMine ? colors.accent : colors.border,
           ),
         ),
         child: Column(
@@ -115,6 +116,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final minutes = widget.recordSeconds ~/ 60;
     final seconds = widget.recordSeconds % 60;
     final clock = '$minutes:${seconds.toString().padLeft(2, '0')}';
@@ -131,9 +133,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
         AppSpacing.sm,
         AppSpacing.sm + MediaQuery.paddingOf(context).bottom,
       ),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        border: Border(top: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        color: colors.background,
+        border: Border(top: BorderSide(color: colors.divider)),
       ),
       child: Row(
         children: [
@@ -142,14 +144,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
               onPressed: widget.onRecordCancel,
               icon: Icon(
                 _willCancel ? Icons.delete : Icons.delete_outline,
-                color: AppColors.error,
+                color: colors.error,
               ),
             )
           else
             IconButton(
               onPressed: widget.isSending ? null : widget.onAttach,
               icon: const Icon(Icons.add, size: 24),
-              color: AppColors.textPrimary,
+              color: colors.textPrimary,
             ),
           Expanded(
             child: widget.isRecording
@@ -161,9 +163,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         progress: 1,
                         height: 26,
                         playedColor: _willCancel
-                            ? AppColors.error
-                            : AppColors.textPrimary,
-                        unplayedColor: AppColors.textPrimary.withValues(
+                            ? colors.error
+                            : colors.textPrimary,
+                        unplayedColor: colors.textPrimary.withValues(
                           alpha: 0.2,
                         ),
                       ),
@@ -171,9 +173,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         _willCancel ? 'Отпустите, чтобы удалить' : clock,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: _willCancel
-                                  ? AppColors.error
-                                  : AppColors.textSecondary,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                                  ? colors.error
+                                  : colors.textSecondary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
                             ),
                       ),
                     ],
@@ -181,11 +185,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 : TextField(
                     controller: widget.controller,
                     enabled: !widget.isSending,
+                    style: Theme.of(context).textTheme.bodyLarge,
                     decoration: InputDecoration(
                       hintText: widget.isSending ? 'Отправка…' : 'Сообщение',
                       hintStyle: Theme.of(context).textTheme.bodyMedium,
                       filled: true,
-                      fillColor: AppColors.surfaceMuted,
+                      fillColor: colors.surfaceMuted,
                       border: OutlineInputBorder(
                         borderRadius: AppRadius.inputRadius,
                         borderSide: BorderSide.none,
@@ -204,18 +209,18 @@ class _ChatInputBarState extends State<ChatInputBar> {
           const SizedBox(width: 4),
           if (widget.hasText && !widget.isRecording && !widget.isSending)
             Material(
-              color: AppColors.textPrimary,
+              color: colors.textPrimary,
               shape: const CircleBorder(),
               child: InkWell(
                 onTap: widget.onSend,
                 customBorder: const CircleBorder(),
-                child: const SizedBox(
+                child: SizedBox(
                   width: 44,
                   height: 44,
                   child: Icon(
                     Icons.arrow_upward,
                     size: 20,
-                    color: AppColors.background,
+                    color: colors.background,
                   ),
                 ),
               ),
@@ -250,8 +255,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 duration: const Duration(milliseconds: 160),
                 child: Material(
                   color: widget.isRecording
-                      ? (_willCancel ? AppColors.error : AppColors.accent)
-                      : AppColors.accent,
+                      ? (_willCancel ? colors.error : colors.accent)
+                      : colors.accent,
                   shape: const CircleBorder(),
                   elevation: widget.isRecording ? 4 : 0,
                   child: SizedBox(
@@ -263,8 +268,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : Icons.mic,
                       size: 24,
                       color: widget.isRecording && _willCancel
-                          ? AppColors.background
-                          : AppColors.textPrimary,
+                          ? colors.background
+                          : colors.textOnAccent,
                     ),
                   ),
                 ),

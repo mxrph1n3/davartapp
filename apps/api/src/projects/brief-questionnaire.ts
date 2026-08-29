@@ -17,7 +17,12 @@ export const BRIEF_GENERAL_FIELDS: BriefField[] = [
   { id: 'phone', label: 'Контактный телефон' },
   { id: 'email', label: 'Электронная почта' },
   { id: 'objectType', label: 'Тип объекта' },
+  { id: 'floors', label: 'Количество этажей' },
+  { id: 'area', label: 'Площадь, м²' },
+  { id: 'commercialType', label: 'Тип коммерческого объекта' },
+  { id: 'kitchenLayout', label: 'Кухня или кухня-гостиная' },
   { id: 'householdKind', label: 'Кто будет жить' },
+  { id: 'householdMembers', label: 'Состав семьи' },
   { id: 'household', label: 'Состав проживающих (имена и возраст)' },
   { id: 'kids', label: 'Дети' },
   { id: 'pets', label: 'Домашние животные' },
@@ -29,6 +34,7 @@ export const BRIEF_GENERAL_FIELDS: BriefField[] = [
   { id: 'interestsNote', label: 'Уточнение к увлечениям' },
   { id: 'likedColors', label: 'Цвета, которые нравятся' },
   { id: 'likedStyles', label: 'Стили, которые нравятся' },
+  { id: 'likedStylesCustom', label: 'Свой стиль' },
   { id: 'disliked', label: 'Что категорически не нравится' },
   { id: 'budget', label: 'Бюджет на ремонт' },
   { id: 'replan', label: 'Перепланировка: стены оставляем или двигаем?' },
@@ -67,12 +73,16 @@ export const BRIEF_VALUE_LABELS: Record<string, Record<string, string>> = {
     charcoal: 'Уголь',
     mustard: 'Горчица',
     cream: 'Крем',
+    metal: 'Металл',
   },
   likedStyles: {
     scandi: 'Скандинавский',
     minimal: 'Минимализм',
     japandi: 'Джапанди',
     classic: 'Современная классика',
+    classical: 'Классический',
+    travans: 'Траванс',
+    provence: 'Прованс',
     loft: 'Лофт',
     mediterranean: 'Средиземноморский',
     eclectic: 'Эклектика',
@@ -80,7 +90,22 @@ export const BRIEF_VALUE_LABELS: Record<string, Record<string, string>> = {
   objectType: {
     apartment: 'Квартира',
     house: 'Дом',
+    office: 'Офис',
+    commercial: 'Коммерческое помещение',
     townhouse: 'Таунхаус',
+  },
+  commercialType: {
+    office: 'Офис',
+    retail: 'Магазин / шоурум',
+    cafe: 'Кафе / ресторан',
+    clinic: 'Клиника',
+    salon: 'Салон / студия',
+    coworking: 'Коворкинг',
+    other: 'Другое',
+  },
+  kitchenLayout: {
+    kitchen: 'Кухня',
+    kitchen_living: 'Кухня-гостиная',
   },
   householdKind: {
     alone: 'Живу один / одна',
@@ -214,6 +239,39 @@ const other: BriefField = {
 
 export const BRIEF_ROOM_SECTIONS: BriefRoomSection[] = [
   {
+    id: 'kitchen',
+    title: 'Кухня',
+    fields: [
+      lighting,
+      finishes(', фартук'),
+      {
+        id: 'hood',
+        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
+      },
+      {
+        id: 'diningTable',
+        label:
+          'Есть ли предпочтения по форме обеденного стола и по материалу?',
+      },
+      { id: 'island', label: 'Нужен ли стол-остров?' },
+      {
+        id: 'dishwasher',
+        label: 'Нужна ли посудомойка? Какого размера?',
+      },
+      { id: 'cooktop', label: 'На сколько конфорок варочная панель?' },
+      {
+        id: 'oven',
+        label:
+          'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
+      },
+      {
+        id: 'fridge',
+        label: 'Холодильник встроенный или отдельностоящий?',
+      },
+      other,
+    ],
+  },
+  {
     id: 'kitchen_living',
     title: 'Кухня-гостиная',
     fields: [
@@ -296,7 +354,7 @@ export const BRIEF_ROOM_SECTIONS: BriefRoomSection[] = [
   },
   {
     id: 'bathroom',
-    title: 'Ванная',
+    title: 'Санузел',
     fields: [
       finishes(),
       lighting,
@@ -322,6 +380,25 @@ export const BRIEF_ROOM_SECTIONS: BriefRoomSection[] = [
       },
       { id: 'washerKg', label: 'На сколько кг стиральная машина?' },
       { id: 'dryer', label: 'Нужна ли сушильная машина?' },
+      other,
+    ],
+  },
+  {
+    id: 'wardrobe',
+    title: 'Гардеробная',
+    fields: [
+      finishes(),
+      lighting,
+      {
+        id: 'system',
+        label: 'Какая система хранения нужна: корпусная, встроенная, открытая?',
+      },
+      {
+        id: 'zones',
+        label: 'Какие зоны нужны: одежда, обувь, сумки, бельё?',
+      },
+      { id: 'island', label: 'Нужен ли остров / пуф в гардеробной?' },
+      { id: 'mirror', label: 'Нужно ли зеркало?' },
       other,
     ],
   },

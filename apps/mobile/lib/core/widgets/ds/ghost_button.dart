@@ -14,10 +14,11 @@ class GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: colors.textPrimary,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       child: Text(

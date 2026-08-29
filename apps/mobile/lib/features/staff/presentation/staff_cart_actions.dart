@@ -6,7 +6,6 @@ import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../../commerce/data/commerce_models.dart';
-import '../../commerce/presentation/active_project_provider.dart';
 import '../../commerce/presentation/commerce_notifier.dart';
 import '../../commerce/presentation/project_picker_sheet.dart';
 import '../data/staff_repository.dart';
@@ -75,6 +74,7 @@ Future<Cart?> addProductToActiveCart(
         context,
         ref,
         staffClientId: working.id,
+        silent: true,
       );
       if (projectId == null) return null;
 
@@ -84,8 +84,7 @@ Future<Cart?> addProductToActiveCart(
           );
       ref.invalidate(staffProjectCartProvider(projectId));
       if (context.mounted) {
-        final projectName = ref.read(activeProjectProvider)?.name ?? 'проекта';
-        _showSnack(context, 'В корзину · $projectName');
+        _showSnack(context, 'Добавлено в корзину');
       }
       return cart;
     }
@@ -95,18 +94,12 @@ Future<Cart?> addProductToActiveCart(
       return ref.read(cartProvider).cart;
     }
 
-    final projectId = await ensureActiveProject(context, ref);
+    final projectId = await ensureActiveProject(context, ref, silent: true);
     if (projectId == null) return null;
 
     await ref.read(cartProvider.notifier).addProduct(productId);
     if (context.mounted) {
-      final projectName = ref.read(activeProjectProvider)?.name;
-      _showSnack(
-        context,
-        projectName == null
-            ? 'Добавлено в корзину'
-            : 'В корзину · $projectName',
-      );
+      _showSnack(context, 'Добавлено в корзину');
     }
     return ref.read(cartProvider).cart;
   } catch (error) {

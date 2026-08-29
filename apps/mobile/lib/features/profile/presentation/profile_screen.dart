@@ -10,6 +10,7 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/profile_repository.dart';
 import 'profile_notifier.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -30,78 +31,48 @@ class ProfileScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         children: [
-          ScreenHeader(
-            title: 'Профиль',
-            actions: [
-              HeaderIconButton(
-                icon: Icons.settings_outlined,
-                onPressed: () => context.push(AppRoutes.settings),
-              ),
-            ],
-          ),
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: () => context.push(AppRoutes.editProfile),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    AppAvatar(
-                      label: name?.isNotEmpty == true ? name! : phone,
-                      size: 72,
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name ?? 'Пользователь',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            email ?? phone,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Редактировать',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right, size: 20),
-                  ],
+          const ScreenHeader(title: 'Профиль'),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                AppAvatar(
+                  label: name?.isNotEmpty == true ? name! : phone,
+                  size: 72,
                 ),
-              ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name ?? 'Пользователь',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        email ?? phone,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          ListItem(
-            title: 'Мои проекты',
-            leading: const Icon(Icons.layers_outlined, size: 22),
-            onTap: () => context.go(AppRoutes.projects),
-          ),
+          const ProfileAccountSection(),
           ListItem(
             title: 'Заказы',
             leading: const Icon(Icons.shopping_bag_outlined, size: 22),
             onTap: () => context.push(AppRoutes.orders),
           ),
           ListItem(
-            title: 'Адреса объектов',
-            leading: const Icon(Icons.location_on_outlined, size: 22),
-            onTap: () => context.push(AppRoutes.addresses),
-          ),
-          ListItem(
             title: 'Избранное',
             leading: const Icon(Icons.favorite_border, size: 22),
-            onTap: () => context.push(AppRoutes.favorites),
+            onTap: () => context.push(
+              favoritesPathForRole(ref.read(authProvider).user?.role),
+            ),
           ),
           ListItem(
             title: 'Поддержка',
@@ -124,7 +95,9 @@ class ProfileScreen extends ConsumerWidget {
               }
             },
           ),
-          const SizedBox(height: AppSpacing.md),
+          const ProfileThemeSection(),
+          const ProfileNotificationsSection(),
+          const SizedBox(height: AppSpacing.xl),
           SecondaryButton(
             label: 'Выйти',
             onPressed: () async {
@@ -147,15 +120,7 @@ class _GuestProfile extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(AppSpacing.screenPadding),
         children: [
-          ScreenHeader(
-            title: 'Профиль',
-            actions: [
-              HeaderIconButton(
-                icon: Icons.settings_outlined,
-                onPressed: () => context.push(AppRoutes.settings),
-              ),
-            ],
-          ),
+          const ScreenHeader(title: 'Профиль'),
           Text(
             'Войдите по номеру',
             style: Theme.of(context).textTheme.titleLarge,
@@ -171,6 +136,8 @@ class _GuestProfile extends ConsumerWidget {
             onPressed: () => promptLogin(context, ref),
           ),
           const SizedBox(height: AppSpacing.xl),
+          const ProfileThemeSection(),
+          const ProfileNotificationsSection(),
           ListItem(
             title: 'Вопросы и ответы',
             leading: const Icon(Icons.help_outline, size: 22),

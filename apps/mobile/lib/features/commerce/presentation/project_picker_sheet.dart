@@ -28,11 +28,13 @@ Future<ActiveProject?> showProjectPickerSheet(
 
 /// Ensures an active project is set. Shows picker when needed.
 /// Returns projectId or null if cancelled / no projects.
+/// When [silent] is true, never shows the picker — reuses current or first project.
 Future<String?> ensureActiveProject(
   BuildContext context,
   WidgetRef ref, {
   String? staffClientId,
   bool forcePicker = false,
+  bool silent = false,
 }) async {
   final current = ref.read(activeProjectProvider);
   if (!forcePicker && current != null) {
@@ -45,13 +47,8 @@ Future<String?> ensureActiveProject(
   if (projects.isEmpty) {
     try {
       final created = staffClientId != null
-          ? await ref.read(staffRepositoryProvider).createProject(
-                staffClientId,
-                name: 'Мой проект',
-              )
-          : await ref.read(projectsRepositoryProvider).createProject(
-                name: 'Мой проект',
-              );
+          ? await ref.read(staffRepositoryProvider).createProject(staffClientId)
+          : await ref.read(projectsRepositoryProvider).createProject();
       projects = [created];
     } catch (_) {
       if (context.mounted) {
@@ -65,7 +62,7 @@ Future<String?> ensureActiveProject(
     }
   }
 
-  if (!forcePicker && projects.length == 1) {
+  if (!forcePicker && (silent || projects.length == 1)) {
     final p = projects.first;
     final active = ActiveProject(
       id: p.id,
@@ -181,7 +178,7 @@ class _ProjectPickerSheetState extends ConsumerState<_ProjectPickerSheet> {
                             ? Text(project.address!)
                             : null,
                         trailing: selected
-                            ? const Icon(Icons.check, color: AppColors.accent)
+                            ? Icon(Icons.check, color: AppColors.of(context).accent)
                             : null,
                         onTap: () {
                           Navigator.of(context).pop(

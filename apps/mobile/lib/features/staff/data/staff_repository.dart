@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/dio_provider.dart';
+import '../../chat/data/chat_models.dart';
 import '../../commerce/data/commerce_models.dart';
 import '../../profile/data/profile_repository.dart' show CreateAddressRequest, UserAddress;
 import '../../projects/data/projects_models.dart';
@@ -29,6 +30,48 @@ class StaffRepository {
       },
     );
     return StaffClientsPage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ChatSummary> getClientChat(String clientId) async {
+    final response = await _dio.get('/staff/clients/$clientId/chat');
+    return ChatSummary.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<StaffRosterMember>> listRoster({
+    required String role,
+  }) async {
+    final response = await _dio.get(
+      '/staff/roster',
+      queryParameters: {'role': role},
+    );
+    final items = response.data['items'] as List<dynamic>? ?? [];
+    return items
+        .map((e) => StaffRosterMember.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> assignProjectStaff({
+    required String projectId,
+    String? designerId,
+    String? surveyorId,
+  }) async {
+    await _dio.patch(
+      '/staff/projects/$projectId/staff',
+      data: {
+        if (designerId != null) 'designerId': designerId,
+        if (surveyorId != null) 'surveyorId': surveyorId,
+      },
+    );
+  }
+
+  Future<void> inviteByPhone({required String phone, String? name}) async {
+    await _dio.post(
+      '/staff/clients/invite',
+      data: {
+        'phone': phone,
+        if (name != null && name.isNotEmpty) 'name': name,
+      },
+    );
   }
 
   Future<StaffClientProfile> getClient(String clientId) async {
@@ -63,11 +106,13 @@ class StaffRepository {
 
   Future<Project> createProject(
     String clientId, {
-    required String name,
+    String? name,
   }) async {
     final response = await _dio.post(
       '/staff/clients/$clientId/projects',
-      data: {'name': name},
+      data: {
+        if (name != null && name.isNotEmpty) 'name': name,
+      },
     );
     return Project.fromJson(response.data as Map<String, dynamic>);
   }
@@ -237,6 +282,29 @@ class StaffClient {
 
   String get displayName =>
       (name != null && name!.trim().isNotEmpty) ? name!.trim() : phone;
+}
+
+class StaffRosterMember {
+  const StaffRosterMember({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.role,
+  });
+
+  factory StaffRosterMember.fromJson(Map<String, dynamic> json) {
+    return StaffRosterMember(
+      id: json['id'] as String,
+      name: json['name'] as String? ?? json['phone'] as String? ?? '',
+      phone: json['phone'] as String? ?? '',
+      role: json['role'] as String? ?? '',
+    );
+  }
+
+  final String id;
+  final String name;
+  final String phone;
+  final String role;
 }
 
 class StaffClientProfile {

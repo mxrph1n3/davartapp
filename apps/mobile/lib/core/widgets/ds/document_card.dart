@@ -19,16 +19,18 @@ class DocumentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final brightness = Theme.of(context).brightness;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.only(bottom: AppSpacing.sm),
         padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: colors.surface,
           borderRadius: AppRadius.cardRadius,
-          boxShadow: AppShadows.subtle,
-          border: Border.all(color: AppColors.border),
+          boxShadow: AppShadows.subtleFor(brightness),
+          border: Border.all(color: colors.border),
         ),
         child: Row(
           children: [
@@ -36,12 +38,12 @@ class DocumentCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: AppColors.surfaceMuted,
+                color: colors.surfaceMuted,
                 borderRadius: AppRadius.buttonRadius,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.description_outlined,
-                color: AppColors.textPrimary,
+                color: colors.textPrimary,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -58,11 +60,18 @@ class DocumentCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   if (subtitle != null)
-                    Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      subtitle!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: AppColors.textSecondary, size: 20),
+            Icon(
+              Icons.chevron_right,
+              color: colors.textSecondary,
+              size: 20,
+            ),
           ],
         ),
       ),

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -16,6 +16,74 @@ const brands = [
   { name: 'Kerama Marazzi', slug: 'kerama-marazzi' },
 ];
 
+const staffUsers: Array<{
+  phone: string;
+  name: string;
+  role: UserRole;
+}> = [
+  { phone: '+79009999999', name: 'Анна Дизайнер', role: UserRole.designer },
+  { phone: '+79009999998', name: 'Ирина Менеджер', role: UserRole.complectator },
+  { phone: '+79009999997', name: 'Павел Замерщик', role: UserRole.surveyor },
+  { phone: '+79009999990', name: 'Artur', role: UserRole.admin },
+];
+
+const demoProducts = [
+  {
+    name: 'Керамогранит Italon Contro Natural',
+    slug: 'italon-contro-natural',
+    sku: 'DEMO-ITL-001',
+    price: 2890,
+    categorySlug: 'keramogranit',
+    brandSlug: 'italon',
+    isPopular: true,
+  },
+  {
+    name: 'Плитка Kerama Marazzi Беллеза',
+    slug: 'kerama-belleza',
+    sku: 'DEMO-KM-001',
+    price: 2140,
+    categorySlug: 'nastennaya-plitka',
+    brandSlug: 'kerama-marazzi',
+    isPopular: true,
+  },
+  {
+    name: 'Диван Modular Soft',
+    slug: 'sofa-modular-soft',
+    sku: 'DEMO-MB-001',
+    price: 89900,
+    categorySlug: 'mebel',
+    brandSlug: null,
+    isPopular: true,
+  },
+  {
+    name: 'Раковина накладная Nova',
+    slug: 'sink-nova',
+    sku: 'DEMO-ST-001',
+    price: 12400,
+    categorySlug: 'santehnika',
+    brandSlug: null,
+    isPopular: false,
+  },
+  {
+    name: 'Обои Scandinavian Linen',
+    slug: 'wallpaper-scandi-linen',
+    sku: 'DEMO-OB-001',
+    price: 3200,
+    categorySlug: 'oboi',
+    brandSlug: null,
+    isPopular: true,
+  },
+  {
+    name: 'Структурированная плитка Ridge',
+    slug: 'tile-ridge-struct',
+    sku: 'DEMO-SP-001',
+    price: 3560,
+    categorySlug: 'strukturirovannaya-plitka',
+    brandSlug: 'italon',
+    isPopular: false,
+  },
+];
+
 async function main() {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PROD_SEED !== 'true') {
     throw new Error(
@@ -23,7 +91,7 @@ async function main() {
     );
   }
 
-  console.log('Seeding catalog taxonomy (no dummy products)…');
+  console.log('Seeding catalog taxonomy…');
 
   for (const brand of brands) {
     await prisma.brand.upsert({
@@ -41,10 +109,57 @@ async function main() {
     });
   }
 
-  const products = await prisma.product.count();
-  console.log(
-    `Taxonomy ready. Products in DB: ${products}. Use catalog:ingest-italon / catalog:ingest-kerama for SKUs.`,
+  console.log('Seeding staff accounts…');
+  for (const staff of staffUsers) {
+    await prisma.user.upsert({
+      where: { phone: staff.phone },
+      update: { name: staff.name, role: staff.role, extraRoles: [] },
+      create: {
+        phone: staff.phone,
+        name: staff.name,
+        role: staff.role,
+      },
+    });
+  }
+
+  const categoryBySlug = Object.fromEntries(
+    (await prisma.category.findMany()).map((c) => [c.slug, c.id]),
   );
+  const brandBySlug = Object.fromEntries(
+    (await prisma.brand.findMany()).map((b) => [b.slug, b.id]),
+  );
+
+  console.log('Seeding demo products…');
+  for (const item of demoProducts) {
+    const categoryId = categoryBySlug[item.categorySlug];
+    if (!categoryId) continue;
+    await prisma.product.upsert({
+      where: { sku: item.sku },
+      update: {
+        name: item.name,
+        slug: item.slug,
+        price: item.price,
+        inStock: true,
+        isPopular: item.isPopular,
+        categoryId,
+        brandId: item.brandSlug ? brandBySlug[item.brandSlug] ?? null : null,
+      },
+      create: {
+        name: item.name,
+        slug: item.slug,
+        sku: item.sku,
+        price: item.price,
+        inStock: true,
+        isPopular: item.isPopular,
+        categoryId,
+        brandId: item.brandSlug ? brandBySlug[item.brandSlug] ?? null : null,
+        description: 'Демо-товар для staging / TestFlight',
+      },
+    });
+  }
+
+  const products = await prisma.product.count();
+  console.log(`Ready. Products in DB: ${products}. Staff phones seeded.`);
 }
 
 main()

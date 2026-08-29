@@ -34,6 +34,7 @@ export class OrdersController {
       dto.address,
       dto.comment,
       dto.cartItemIds,
+      user.extraRoles ?? [],
     );
   }
 

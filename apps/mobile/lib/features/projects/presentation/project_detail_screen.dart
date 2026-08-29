@@ -11,8 +11,10 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../documents/presentation/project_documents_section.dart';
 import '../data/projects_models.dart';
 import '../data/projects_repository.dart';
+import '../data/project_summary.dart';
 import 'brief_answers_view.dart';
 import 'projects_notifier.dart';
+import 'surveyor_request.dart';
 
 class ProjectDetailScreen extends ConsumerWidget {
   const ProjectDetailScreen({super.key, required this.projectId});
@@ -21,12 +23,13 @@ class ProjectDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
     final projectAsync = ref.watch(projectDetailProvider(projectId));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: colors.background,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
@@ -49,6 +52,103 @@ class ProjectDetailScreen extends ConsumerWidget {
           onRetry: () => ref.invalidate(projectDetailProvider(projectId)),
         ),
         data: (project) {
+          if (project.isShowcase) {
+            return DefaultTabController(
+              length: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenPadding,
+                      0,
+                      AppSpacing.screenPadding,
+                      AppSpacing.md,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Builder(
+                            builder: (context) {
+                              final colors = AppColors.of(context);
+                              final summary = projectBriefSummary(project);
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    project.name,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .headlineMedium
+                                        ?.copyWith(fontWeight: FontWeight.w700),
+                                  ),
+                                  if (summary != null) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      summary,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: colors.textSecondary,
+                                          ),
+                                    ),
+                                  ],
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        StatusBadge(
+                          label: project.statusLabel,
+                          highlighted: project.status == 'in_progress',
+                        ),
+                      ],
+                    ),
+                  ),
+                  TabBar(
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    labelColor: colors.textPrimary,
+                    unselectedLabelColor: colors.textSecondary,
+                    labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                    unselectedLabelStyle: Theme.of(context).textTheme.bodyLarge,
+                    indicatorColor: colors.textPrimary,
+                    indicatorWeight: 2.5,
+                    indicatorSize: TabBarIndicatorSize.label,
+                    dividerColor: colors.divider,
+                    tabs: const [
+                      Tab(text: 'Общая информация'),
+                      Tab(text: 'Документы'),
+                    ],
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [
+                        _GeneralInfoTab(project: project, projectId: projectId),
+                        ListView(
+                          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                          children: [
+                            ProjectDocumentsSection(projectId: projectId),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           return DefaultTabController(
             length: 3,
             child: Column(
@@ -65,18 +165,67 @@ class ProjectDetailScreen extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        child: Text(
-                          project.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
+                        child: Builder(
+                          builder: (context) {
+                            final colors = AppColors.of(context);
+                            final summary = projectBriefSummary(project);
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  project.name,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .headlineMedium
+                                      ?.copyWith(fontWeight: FontWeight.w700),
+                                ),
+                                if (summary != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    summary,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: colors.textSecondary,
+                                        ),
+                                  ),
+                                ],
+                              ],
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 12),
-                      StatusBadge(
-                        label: project.statusLabel,
-                        highlighted: project.status == 'in_progress',
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          StatusBadge(
+                            label: project.statusLabel,
+                            highlighted: project.status == 'in_progress' ||
+                                project.status == 'measurement',
+                          ),
+                          if (!project.isShowcase &&
+                              (project.status == 'brief_filling' ||
+                                  project.status == 'measurement')) ...[
+                            const SizedBox(height: 8),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: () => requestSurveyorConfirm(
+                                context,
+                                ref,
+                                projectId,
+                              ),
+                              child: const Text('Вызов замерщика'),
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),
@@ -86,16 +235,16 @@ class ProjectDetailScreen extends ConsumerWidget {
                   tabAlignment: TabAlignment.start,
                   labelPadding: const EdgeInsets.symmetric(horizontal: 16),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
-                  labelColor: AppColors.textPrimary,
-                  unselectedLabelColor: AppColors.textSecondary,
+                  labelColor: colors.textPrimary,
+                  unselectedLabelColor: colors.textSecondary,
                   labelStyle: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         fontWeight: FontWeight.w600,
                       ),
                   unselectedLabelStyle: Theme.of(context).textTheme.bodyLarge,
-                  indicatorColor: AppColors.textPrimary,
+                  indicatorColor: colors.textPrimary,
                   indicatorWeight: 2.5,
                   indicatorSize: TabBarIndicatorSize.label,
-                  dividerColor: AppColors.divider,
+                  dividerColor: colors.divider,
                   tabs: const [
                     Tab(text: 'Общая информация'),
                     Tab(text: 'Анкета'),
@@ -134,10 +283,13 @@ class _GeneralInfoTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final description = project.brief?.wishes;
+    final colors = AppColors.of(context);
     final membersAsync = project.isShowcase
         ? null
         : ref.watch(projectMembersProvider(projectId));
+    final objectType = projectObjectTypeLabel(project);
+    final address = projectAddressValue(project);
+    final area = projectAreaValue(project);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -147,67 +299,19 @@ class _GeneralInfoTab extends ConsumerWidget {
         AppSpacing.xl,
       ),
       children: [
-        if (project.objectType != null)
-          _DetailRow(label: 'Тип объекта', value: project.objectType!),
-        if (project.address != null)
-          _DetailRow(label: 'Адрес', value: project.address!),
-        if (project.area != null)
-          _DetailRow(label: 'Площадь', value: '${project.area!.round()} м²'),
-        if (project.style != null)
-          _DetailRow(label: 'Стиль', value: project.style!),
-        _DetailRow(label: 'Этап', value: projectStageLabel(project.status)),
-        if (project.manager != null)
-          _DetailRow(
-            label: 'Менеджер',
-            value: project.manager!.name,
-            trailing: AppAvatar(label: project.manager!.name, size: 28),
-          ),
-        if (project.designer != null)
-          _DetailRow(
-            label: 'Дизайнер',
-            value: project.designer!.name,
-            trailing: AppAvatar(label: project.designer!.name, size: 28),
-          ),
-        if (project.surveyor != null)
-          _DetailRow(
-            label: 'Замерщик',
-            value: project.surveyor!.name,
-            trailing: AppAvatar(label: project.surveyor!.name, size: 28),
-          ),
-        if (description != null && description.isNotEmpty) ...[
+        if (objectType != null)
+          _DetailRow(label: 'Тип объекта', value: objectType),
+        if (address != null) _DetailRow(label: 'Адрес', value: address),
+        const _DetailRow(label: 'Тип проекта', value: 'Полный проект'),
+        if (area != null)
+          _DetailRow(label: 'Площадь', value: '${area.round()} м²'),
+        if (membersAsync != null) ...[
           const SizedBox(height: AppSpacing.xl),
           Text(
-            'Описание',
+            'Участники',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            description,
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  height: 1.45,
-                  color: AppColors.textPrimary,
-                ),
-          ),
-        ],
-        if (membersAsync != null) ...[
-          const SizedBox(height: AppSpacing.xl),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Участники',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => _inviteMember(context, ref),
-                child: const Text('Добавить'),
-              ),
-            ],
           ),
           const SizedBox(height: AppSpacing.sm),
           membersAsync.when(
@@ -224,7 +328,7 @@ class _GeneralInfoTab extends ConsumerWidget {
                 return Text(
                   'Пока только вы',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
+                        color: colors.textSecondary,
                       ),
                 );
               }
@@ -235,12 +339,21 @@ class _GeneralInfoTab extends ConsumerWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: AppAvatar(label: m.user.displayName, size: 36),
                         title: Text(m.user.displayName),
-                        subtitle: Text('${m.roleLabel} · ${m.user.phone}'),
+                        subtitle: Text(
+                          m.user.phone.isNotEmpty
+                              ? '${m.roleLabel} · ${m.user.phone}'
+                              : m.roleLabel,
+                        ),
                       ),
                     )
                     .toList(),
               );
             },
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SecondaryButton(
+            label: 'Добавить участника',
+            onPressed: () => _inviteMember(context, ref),
           ),
         ],
       ],
@@ -338,7 +451,7 @@ class _BriefTab extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: Text(
-              'Анкета заблокирована — проект в работе',
+              'Анкета заблокирована — этап планировки завершён',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -357,20 +470,19 @@ class _DetailRow extends StatelessWidget {
   const _DetailRow({
     required this.label,
     required this.value,
-    this.trailing,
   });
 
   final String label;
   final String value;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: AppColors.divider),
+          bottom: BorderSide(color: colors.divider),
         ),
       ),
       child: Row(
@@ -381,7 +493,7 @@ class _DetailRow extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
+                    color: colors.textSecondary,
                   ),
             ),
           ),
@@ -394,10 +506,6 @@ class _DetailRow extends StatelessWidget {
                   ),
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: 10),
-            trailing!,
-          ],
         ],
       ),
     );

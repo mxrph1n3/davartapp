@@ -50,15 +50,16 @@ class _BriefChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return FilledButton(
       onPressed: onTap,
       style: FilledButton.styleFrom(
         elevation: 0,
         shadowColor: Colors.transparent,
-        backgroundColor: selected ? AppColors.accent : AppColors.surfaceMuted,
-        foregroundColor: AppColors.textPrimary,
-        disabledBackgroundColor: AppColors.surfaceMuted,
-        disabledForegroundColor: AppColors.textDisabled,
+        backgroundColor: selected ? colors.accent : colors.surfaceMuted,
+        foregroundColor: colors.textPrimary,
+        disabledBackgroundColor: colors.surfaceMuted,
+        disabledForegroundColor: colors.textDisabled,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         minimumSize: const Size(48, 44),
         tapTargetSize: MaterialTapTargetSize.padded,
@@ -67,7 +68,7 @@ class _BriefChip extends StatelessWidget {
           fontSize: 14,
           height: 1.2,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          color: AppColors.textPrimary,
+          color: colors.textPrimary,
         ),
       ),
       child: Text(label),
@@ -134,6 +135,7 @@ class _SwatchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final color = Color(swatch.hex);
     final isLight = color.computeLuminance() > 0.72;
 
@@ -154,8 +156,8 @@ class _SwatchTile extends StatelessWidget {
               shape: BoxShape.circle,
               border: Border.all(
                 color: selected
-                    ? AppColors.textPrimary
-                    : (isLight ? AppColors.border : Colors.transparent),
+                    ? colors.textPrimary
+                    : (isLight ? colors.border : Colors.transparent),
                 width: selected ? 3 : 1,
               ),
               boxShadow: selected
@@ -172,7 +174,7 @@ class _SwatchTile extends StatelessWidget {
                 ? Icon(
                     Icons.check,
                     size: 22,
-                    color: isLight ? AppColors.textPrimary : Colors.white,
+                    color: isLight ? colors.textPrimary : Colors.white,
                   )
                 : null,
           ),
@@ -186,8 +188,8 @@ class _SwatchTile extends StatelessWidget {
                   fontSize: 11,
                   height: 1.2,
                   color: selected
-                      ? AppColors.textPrimary
-                      : AppColors.textSecondary,
+                      ? colors.textPrimary
+                      : colors.textSecondary,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
           ),
@@ -251,8 +253,17 @@ class _ImageChoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final labelStyle = Theme.of(context).textTheme.bodyLarge?.copyWith(
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          fontSize: 14,
+          height: 1.25,
+          color: colors.textPrimary,
+        );
+    final labelHeight = (labelStyle?.fontSize ?? 14) * (labelStyle?.height ?? 1.25) * 2;
+
     return Material(
-      color: selected ? AppColors.accent : AppColors.surface,
+      color: selected ? colors.accent : colors.surface,
       borderRadius: AppRadius.cardRadius,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -261,8 +272,8 @@ class _ImageChoiceCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: AppRadius.cardRadius,
             border: Border.all(
-              color: selected ? AppColors.accent : AppColors.border,
-              width: selected ? 2 : 1,
+              color: selected ? colors.accent : colors.border,
+              width: 2,
             ),
           ),
           child: Column(
@@ -285,15 +296,17 @@ class _ImageChoiceCard extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                child: Text(
-                  option.label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
-                      ),
+                child: SizedBox(
+                  height: labelHeight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      option.label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: labelStyle,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -309,14 +322,15 @@ class _SelectedBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       width: 28,
       height: 28,
-      decoration: const BoxDecoration(
-        color: AppColors.accent,
+      decoration: BoxDecoration(
+        color: colors.accent,
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.check, size: 16, color: AppColors.textPrimary),
+      child: Icon(Icons.check, size: 16, color: colors.textPrimary),
     );
   }
 }

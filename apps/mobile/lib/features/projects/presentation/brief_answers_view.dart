@@ -36,7 +36,8 @@ class BriefAnswersView extends StatelessWidget {
 
     final generalItems = <Widget>[
       for (final field in briefGeneralFields)
-        if (_filled(field.id, answers.general[field.id]))
+        if (field.id != 'householdMembers')
+          if (_filled(field.id, answers.general[field.id]))
           if (field.id == 'likedColors')
             _ColorAnswer(label: field.label, raw: answers.general[field.id])
           else
@@ -125,6 +126,7 @@ class _ColorAnswer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final ids = briefSelectedIds(raw);
     final swatches = [
       for (final id in ids)
@@ -156,7 +158,7 @@ class _ColorAnswer extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: Color(swatch.hex),
                           shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(color: colors.border),
                         ),
                       ),
                       const SizedBox(width: 8),

@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../widgets/ds/bottom_navigation.dart';
+import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/chat/presentation/chat_notifier.dart';
-import '../../features/staff/presentation/working_client_banner.dart';
 
 class StaffShell extends ConsumerWidget {
   const StaffShell({super.key, required this.navigationShell});
@@ -15,17 +15,12 @@ class StaffShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadAsync = ref.watch(unreadTotalProvider);
     final unreadTotal = unreadAsync.value ?? 0;
+    final canSeeClients = ref.watch(authProvider).user?.canSeeClients ?? false;
     final currentIndex = navigationShell.currentIndex;
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const WorkingClientBanner(),
-          Expanded(child: navigationShell),
-        ],
-      ),
+      body: navigationShell,
       bottomNavigationBar: DavartBottomNavigation(
         currentIndex: currentIndex,
         onTap: (index) {
@@ -36,20 +31,20 @@ class StaffShell extends ConsumerWidget {
         },
         items: [
           DavartNavItem(
-            icon: Icons.chat_bubble_outline,
-            selectedIcon: Icons.chat_bubble,
+            icon: Icons.send_outlined,
+            selectedIcon: Icons.send,
             label: 'Чаты',
             badge: unreadTotal > 0 ? unreadTotal : null,
           ),
-          const DavartNavItem(
-            icon: Icons.people_outline,
-            selectedIcon: Icons.people,
-            label: 'Клиенты',
+          DavartNavItem(
+            icon: canSeeClients ? Icons.people_outline : Icons.folder_outlined,
+            selectedIcon: canSeeClients ? Icons.people : Icons.folder,
+            label: canSeeClients ? 'Клиенты' : 'Проекты',
           ),
           const DavartNavItem(
             icon: Icons.grid_view_outlined,
             selectedIcon: Icons.grid_view,
-            label: 'Каталог',
+            label: 'Магазин',
           ),
           const DavartNavItem(
             icon: Icons.person_outline,

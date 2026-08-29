@@ -16,7 +16,6 @@ import '../data/commerce_models.dart';
 import 'active_project_provider.dart';
 import 'cart_selection_provider.dart';
 import 'commerce_notifier.dart';
-import 'project_cart_banner.dart';
 import 'project_picker_sheet.dart';
 
 /// Cart tab inside [MainShell] — bottom nav stays visible and tappable.
@@ -50,6 +49,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final state = ref.watch(cartProvider);
     final cart = state.cart;
     final selection = ref.watch(cartSelectionProvider);
@@ -71,7 +71,6 @@ class _CartScreenState extends ConsumerState<CartScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const ProjectCartBanner(),
             const ScreenHeader(title: 'Корзина'),
             Expanded(
               child: state.isLoading && cart == null
@@ -117,9 +116,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                     AppSpacing.md,
                                   ),
                                   itemCount: cart.items.length,
-                                  separatorBuilder: (_, _) => const Divider(
+                                  separatorBuilder: (_, _) => Divider(
                                     height: 24,
-                                    color: AppColors.divider,
+                                    color: colors.divider,
                                   ),
                                   itemBuilder: (context, index) {
                                     final item = cart.items[index];
@@ -146,7 +145,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                                   .state = next;
                                             },
                                       onTap: () => context.push(
-                                        AppRoutes.productDetail(
+                                        productPathForRole(
+                                          ref.read(authProvider).user?.role,
                                           item.product.id,
                                         ),
                                       ),
@@ -215,6 +215,7 @@ class _CartLineItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final locked = item.locked;
 
     return Opacity(
@@ -235,9 +236,9 @@ class _CartLineItem extends StatelessWidget {
                 height: 80,
                 child: item.product.imageUrl != null
                     ? Image.network(item.product.imageUrl!, fit: BoxFit.cover)
-                    : const ColoredBox(
-                        color: AppColors.imagePlaceholder,
-                        child: Icon(Icons.image_outlined),
+                    : ColoredBox(
+                        color: colors.imagePlaceholder,
+                        child: const Icon(Icons.image_outlined),
                       ),
               ),
             ),
@@ -261,7 +262,7 @@ class _CartLineItem extends StatelessWidget {
                   Text(
                     'В заказе',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: AppColors.textSecondary,
+                          color: colors.textSecondary,
                         ),
                   ),
                 ],
@@ -291,7 +292,7 @@ class _CartLineItem extends StatelessWidget {
             IconButton(
               onPressed: onRemove,
               icon: const Icon(Icons.delete_outline, size: 20),
-              color: AppColors.textSecondary,
+              color: colors.textSecondary,
               style: IconButton.styleFrom(
                 minimumSize: const Size(44, 44),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -316,8 +317,9 @@ class _CartSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
-      color: AppColors.background,
+      color: colors.background,
       child: Container(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.screenPadding,
@@ -325,8 +327,8 @@ class _CartSummary extends StatelessWidget {
           AppSpacing.screenPadding,
           AppSpacing.md,
         ),
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.divider)),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: colors.divider)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,

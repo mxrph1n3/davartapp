@@ -116,8 +116,51 @@ class BriefFormNotifier extends AutoDisposeFamilyNotifier<BriefFormState, String
   void setRoomIncluded(String roomId, bool included) {
     final rooms = Map<String, BriefRoomAnswers>.from(state.answers.rooms);
     final current = rooms[roomId] ?? const BriefRoomAnswers();
-    rooms[roomId] = current.copyWith(included: included);
+    final fields = Map<String, String>.from(current.fields);
+    if (included && (fields['count'] == null || fields['count']!.isEmpty)) {
+      fields['count'] = '1';
+    }
+    rooms[roomId] = current.copyWith(included: included, fields: fields);
     state = state.copyWith(answers: state.answers.copyWith(rooms: rooms));
+  }
+
+  void setRoomCount(String roomId, int count) {
+    final safe = count < 1 ? 1 : count;
+    final rooms = Map<String, BriefRoomAnswers>.from(state.answers.rooms);
+    final current = rooms[roomId] ?? const BriefRoomAnswers();
+    final fields = Map<String, String>.from(current.fields);
+    fields['count'] = '$safe';
+    rooms[roomId] = current.copyWith(included: true, fields: fields);
+    state = state.copyWith(answers: state.answers.copyWith(rooms: rooms));
+  }
+
+  void setFamilyMembers(List<BriefFamilyMember> members) {
+    setGeneral('householdMembers', briefEncodeFamilyMembers(members));
+    setGeneral('household', briefFamilyMembersSummary(members));
+  }
+
+  void addFamilyMember() {
+    final members = [
+      ...briefParseFamilyMembers(state.answers.general['householdMembers']),
+      const BriefFamilyMember(role: 'self'),
+    ];
+    setFamilyMembers(members);
+  }
+
+  void updateFamilyMember(int index, BriefFamilyMember member) {
+    final members =
+        briefParseFamilyMembers(state.answers.general['householdMembers']);
+    if (index < 0 || index >= members.length) return;
+    members[index] = member;
+    setFamilyMembers(members);
+  }
+
+  void removeFamilyMember(int index) {
+    final members =
+        briefParseFamilyMembers(state.answers.general['householdMembers']);
+    if (index < 0 || index >= members.length) return;
+    members.removeAt(index);
+    setFamilyMembers(members);
   }
 
   void setRoomField(String roomId, String fieldId, String value) {

@@ -8,6 +8,7 @@ class AppInput extends StatelessWidget {
   const AppInput({
     super.key,
     this.controller,
+    this.initialValue,
     this.labelText,
     this.hintText,
     this.validator,
@@ -22,6 +23,7 @@ class AppInput extends StatelessWidget {
   });
 
   final TextEditingController? controller;
+  final String? initialValue;
   final String? labelText;
   final String? hintText;
   final String? Function(String?)? validator;
@@ -36,8 +38,10 @@ class AppInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return TextFormField(
       controller: controller,
+      initialValue: controller == null ? initialValue : null,
       validator: validator,
       keyboardType: keyboardType,
       inputFormatters: inputFormatters,
@@ -53,24 +57,25 @@ class AppInput extends StatelessWidget {
         hintText: hintText,
         hintStyle: Theme.of(context).textTheme.bodyMedium,
         filled: true,
-        fillColor: AppColors.surfaceMuted,
+        fillColor: colors.surfaceMuted,
         border: OutlineInputBorder(
           borderRadius: AppRadius.inputRadius,
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.inputRadius,
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: colors.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.inputRadius,
-          borderSide: const BorderSide(color: AppColors.textPrimary, width: 1.5),
+          borderSide: BorderSide(color: colors.textPrimary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.inputRadius,
-          borderSide: const BorderSide(color: AppColors.error),
+          borderSide: BorderSide(color: colors.error),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
         counterText: '',
       ),
     );

@@ -18,34 +18,35 @@ class AppSearchBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.surfaceMuted,
+          color: colors.surfaceMuted,
           borderRadius: AppRadius.pillRadius,
         ),
         child: Row(
           children: [
-            const Icon(Icons.search, size: 22, color: AppColors.textSecondary),
+            Icon(Icons.search, size: 22, color: colors.textSecondary),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 hintText,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.textSecondary,
+                      color: colors.textSecondary,
                     ),
               ),
             ),
             if (onFilterTap != null)
               GestureDetector(
                 onTap: onFilterTap,
-                child: const Icon(
+                child: Icon(
                   Icons.tune,
                   size: 22,
-                  color: AppColors.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
           ],

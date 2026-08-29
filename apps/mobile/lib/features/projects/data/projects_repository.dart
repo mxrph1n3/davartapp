@@ -72,7 +72,7 @@ class ProjectsRepository {
   }
 
   Future<Project> createProject({
-    required String name,
+    String? name,
     String? address,
     double? area,
     String? style,
@@ -80,7 +80,7 @@ class ProjectsRepository {
     final response = await _dio.post(
       '/projects',
       data: {
-        'name': name,
+        if (name != null && name.isNotEmpty) 'name': name,
         'address': ?address,
         'area': ?area,
         'style': ?style,
@@ -113,5 +113,14 @@ class ProjectsRepository {
     required String userId,
   }) async {
     await _dio.delete('/projects/$projectId/members/$userId');
+  }
+
+  Future<Project> requestSurveyor(String projectId) async {
+    final response = await _dio.post('/projects/$projectId/request-surveyor');
+    return Project.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteProject(String projectId) async {
+    await _dio.delete('/projects/$projectId');
   }
 }

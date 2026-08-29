@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-# Скопируй на Ubuntu и запусти:
-#   cd ~/davartapp
-#   bash scripts/setup-staging-env.sh
+# Staging env for VPS / LAN.
+#   PUBLIC_IP=217.198.6.88 SMSRU_API_ID=xxx bash scripts/setup-staging-env.sh
 #
-# Или скачай с GitHub (raw) и:
-#   bash setup-staging-env.sh
-#
-# Пересоздаёт infra/.env.staging с безопасными паролями (только hex).
-# Старый .env.staging будет перезаписан.
+# Or on the server itself (auto LAN/public IP):
+#   cd ~/davartapp && bash scripts/setup-staging-env.sh
 
 set -euo pipefail
 
@@ -18,11 +14,23 @@ NEW_PG=$(openssl rand -hex 16)
 NEW_JWT=$(openssl rand -hex 32)
 NEW_MEILI=$(openssl rand -hex 32)
 NEW_S3=$(openssl rand -hex 16)
-LAN_IP=$(hostname -I | awk '{print $1}')
 
-if [[ -z "${LAN_IP}" ]]; then
-  echo "Не удалось определить LAN IP. Впиши вручную в infra/.env.staging"
-  LAN_IP="192.168.1.CHANGE_ME"
+if [[ -n "${PUBLIC_IP:-}" ]]; then
+  HOST_IP="$PUBLIC_IP"
+else
+  HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+fi
+
+if [[ -z "${HOST_IP}" ]]; then
+  echo "Не удалось определить IP. Задай PUBLIC_IP=…"
+  HOST_IP="CHANGE_ME"
+fi
+
+SMS_PROVIDER="${SMS_PROVIDER:-mock}"
+SMSRU_LINE=""
+if [[ -n "${SMSRU_API_ID:-}" ]]; then
+  SMS_PROVIDER=smsru
+  SMSRU_LINE="SMSRU_API_ID=${SMSRU_API_ID}"
 fi
 
 mkdir -p infra
@@ -40,17 +48,19 @@ CORS_ORIGIN=*
 S3_ACCESS_KEY=davart
 S3_SECRET_KEY=${NEW_S3}
 S3_BUCKET=davart
-S3_PUBLIC_BASE_URL=http://${LAN_IP}:9000/davart
+S3_PUBLIC_BASE_URL=http://${HOST_IP}:9000/davart
 
-SMS_PROVIDER=mock
+SMS_PROVIDER=${SMS_PROVIDER}
+${SMSRU_LINE}
 EOF
 
 echo "OK: записан ${ROOT}/infra/.env.staging"
-echo "LAN IP: ${LAN_IP}"
+echo "Public IP: ${HOST_IP}"
+echo "SMS_PROVIDER: ${SMS_PROVIDER}"
 echo
-echo "Дальше:"
-echo "  docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging down -v"
+echo "Дальше на сервере:"
 echo "  docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d --build"
-echo "  sleep 20"
 echo "  curl http://127.0.0.1:3000/api/health"
-echo "  docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging logs --tail=50 api"
+echo
+echo "На телефоне (Xcode / flutter):"
+echo "  --dart-define=API_BASE_URL=http://${HOST_IP}:3000/api"

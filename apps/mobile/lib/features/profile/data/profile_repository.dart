@@ -145,6 +145,7 @@ class UserProfile {
     this.email,
     required this.notificationsEnabled,
     this.role = UserRole.client,
+    this.extraRoles = const [],
   });
 
   final String id;
@@ -153,8 +154,12 @@ class UserProfile {
   final String? email;
   final bool notificationsEnabled;
   final UserRole role;
+  final List<UserRole> extraRoles;
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
+    final extra = (json['extraRoles'] as List<dynamic>? ?? [])
+        .map((item) => UserRole.fromJson(item as String?))
+        .toList();
     return UserProfile(
       id: json['id'] as String,
       phone: json['phone'] as String,
@@ -162,6 +167,7 @@ class UserProfile {
       email: json['email'] as String?,
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
       role: UserRole.fromJson(json['role'] as String?),
+      extraRoles: extra,
     );
   }
 }

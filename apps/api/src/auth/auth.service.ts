@@ -15,6 +15,7 @@ import { createHash, randomBytes, randomInt } from 'crypto';
 import { ChatService } from '../chat/chat.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { allRolesOf, hasStudioRole } from './roles';
 import { SmsService } from './sms.service';
 
 const OTP_LENGTH = 4;
@@ -27,6 +28,13 @@ const OTP_VERIFY_LOCK_SECONDS = 900;
 export interface AuthTokens {
   accessToken: string;
   refreshToken: string;
+  user: {
+    id: string;
+    phone: string;
+    name: string | null;
+    role: UserRole;
+    extraRoles: UserRole[];
+  };
 }
 
 @Injectable()
@@ -41,17 +49,31 @@ export class AuthService {
     private readonly chatService: ChatService,
   ) {}
 
-  async sendOtp(phone: string): Promise<{ message: string }> {
+  async sendOtp(
+    phone: string,
+  ): Promise<{ message: string; debugCode?: string }> {
     await this.ensureRedisAvailable();
     await this.enforceOtpRateLimit(phone);
 
     const code = randomInt(0, 10 ** OTP_LENGTH)
       .toString()
       .padStart(OTP_LENGTH, '0');
-    await this.redis.set(`otp:${phone}`, code, OTP_TTL_SECONDS);
+    await this.redis.set(
+      `otp:${phone}`,
+      this.hashOtp(code),
+      OTP_TTL_SECONDS,
+    );
     await this.smsService.sendOtp(phone, code);
 
-    return { message: 'OTP sent' };
+    const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
+    const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+    const debugCode =
+      provider === 'mock' && nodeEnv !== 'production' ? code : undefined;
+
+    return {
+      message: 'OTP sent',
+      ...(debugCode ? { debugCode } : {}),
+    };
   }
 
   async verifyOtp(phone: string, code: string): Promise<AuthTokens> {
@@ -59,6 +81,7 @@ export class AuthService {
 
     const lockKey = `otp:verify:lock:${phone}`;
     const attemptsKey = `otp:verify:attempts:${phone}`;
+    const otpKey = `otp:${phone}`;
 
     const locked = await this.redis.get(lockKey);
     if (locked) {
@@ -68,7 +91,8 @@ export class AuthService {
       );
     }
 
-    const matched = await this.redis.compareAndDelete(`otp:${phone}`, code);
+    const stored = await this.redis.get(otpKey);
+    const matched = stored != null && stored === this.hashOtp(code);
 
     if (!matched) {
       const attempts = await this.redis.incr(attemptsKey);
@@ -78,7 +102,7 @@ export class AuthService {
 
       if (attempts >= OTP_VERIFY_MAX_ATTEMPTS) {
         await this.redis.set(lockKey, '1', OTP_VERIFY_LOCK_SECONDS);
-        await this.redis.del(`otp:${phone}`);
+        await this.redis.del(otpKey);
         await this.redis.del(attemptsKey);
         throw new HttpException(
           'Too many invalid OTP attempts. Try again later.',
@@ -89,26 +113,33 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    await this.redis.del(attemptsKey);
-    await this.redis.del(lockKey);
-
     const user = await this.prisma.user.upsert({
       where: { phone },
       update: {},
       create: { phone, role: 'client' },
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        role: true,
+        extraRoles: true,
+      },
     });
 
-    if (user.role === 'client') {
+    // Consume OTP only after user row is ready (so DB errors don't burn the code).
+    await this.redis.del(otpKey);
+    await this.redis.del(attemptsKey);
+    await this.redis.del(lockKey);
+
+    const roles = allRolesOf(user);
+    if (user.role === UserRole.client && !hasStudioRole(roles)) {
       await this.chatService.ensureDavartChat(user.id);
-    } else if (
-      user.role === 'designer' ||
-      user.role === 'complectator' ||
-      user.role === 'admin'
-    ) {
+    }
+    if (hasStudioRole(roles)) {
       await this.chatService.syncStaffIntoAllSupportChats(user.id);
     }
 
-    return this.issueTokens(user.id, user.phone, user.role);
+    return this.issueTokens(user);
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
@@ -116,7 +147,17 @@ export class AuthService {
 
     const storedToken = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
-      include: { user: true },
+      include: {
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            name: true,
+            role: true,
+            extraRoles: true,
+          },
+        },
+      },
     });
 
     if (!storedToken || storedToken.expiresAt < new Date()) {
@@ -129,11 +170,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    return this.issueTokens(
-      storedToken.user.id,
-      storedToken.user.phone,
-      storedToken.user.role,
-    );
+    return this.issueTokens(storedToken.user);
   }
 
   async logout(refreshToken: string): Promise<{ message: string }> {
@@ -151,15 +188,18 @@ export class AuthService {
     }
   }
 
-  private async issueTokens(
-    userId: string,
-    phone: string,
-    role: UserRole,
-  ): Promise<AuthTokens> {
+  private async issueTokens(user: {
+    id: string;
+    phone: string;
+    name?: string | null;
+    role: UserRole;
+    extraRoles: UserRole[];
+  }): Promise<AuthTokens> {
     const accessToken = await this.jwtService.signAsync({
-      sub: userId,
-      phone,
-      role,
+      sub: user.id,
+      phone: user.phone,
+      role: user.role,
+      extraRoles: user.extraRoles,
     });
 
     const refreshToken = randomBytes(48).toString('hex');
@@ -171,12 +211,22 @@ export class AuthService {
     await this.prisma.refreshToken.create({
       data: {
         tokenHash: this.hashToken(refreshToken),
-        userId,
+        userId: user.id,
         expiresAt: this.parseDuration(refreshExpiresIn),
       },
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name ?? null,
+        role: user.role,
+        extraRoles: user.extraRoles,
+      },
+    };
   }
 
   private async enforceOtpRateLimit(phone: string): Promise<void> {
@@ -193,6 +243,10 @@ export class AuthService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+  }
+
+  private hashOtp(code: string): string {
+    return createHash('sha256').update(`davart-otp:${code}`).digest('hex');
   }
 
   private hashToken(token: string): string {

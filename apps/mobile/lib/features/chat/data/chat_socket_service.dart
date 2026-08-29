@@ -9,7 +9,11 @@ import 'chat_models.dart';
 
 typedef MessageHandler = void Function(ChatMessage message);
 typedef UnreadHandler = void Function(int total);
-typedef TypingHandler = void Function(String chatId, String userId);
+typedef TypingHandler = void Function(
+  String chatId,
+  String userId,
+  String preview,
+);
 
 final chatSocketServiceProvider = Provider<ChatSocketService>((ref) {
   final service = ChatSocketService(ref.watch(tokenStorageProvider));
@@ -95,8 +99,9 @@ class ChatSocketService {
         }
         final chatId = data['chatId'] as String;
         final userId = data['userId'] as String;
+        final preview = data['preview'] as String? ?? '';
         for (final listener in List<TypingHandler>.from(_typingListeners)) {
-          listener(chatId, userId);
+          listener(chatId, userId, preview);
         }
       });
   }
@@ -109,8 +114,8 @@ class ChatSocketService {
     _socket?.emit('leave', chatId);
   }
 
-  void sendTyping(String chatId) {
-    _socket?.emit('typing', {'chatId': chatId});
+  void sendTyping(String chatId, {String preview = ''}) {
+    _socket?.emit('typing', {'chatId': chatId, 'preview': preview});
   }
 
   void sendRead(String chatId) {

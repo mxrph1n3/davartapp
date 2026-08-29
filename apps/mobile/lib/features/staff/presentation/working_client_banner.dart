@@ -15,6 +15,7 @@ class WorkingClientBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
     final working = ref.watch(workingClientProvider);
     final project = ref.watch(activeProjectProvider);
     if (working == null) return const SizedBox.shrink();
@@ -24,7 +25,7 @@ class WorkingClientBanner extends ConsumerWidget {
         : 'Клиент: ${working.displayName} — выберите проект';
 
     return Material(
-      color: AppColors.accent.withValues(alpha: 0.35),
+      color: colors.accent.withValues(alpha: 0.35),
       child: SafeArea(
         bottom: false,
         child: InkWell(

@@ -10,6 +10,7 @@ import '../data/brief_questionnaire.dart';
 import '../data/projects_models.dart';
 import 'brief_pickers.dart';
 import 'projects_notifier.dart';
+import 'surveyor_request.dart';
 
 class BriefScreen extends ConsumerStatefulWidget {
   const BriefScreen({super.key, required this.projectId});
@@ -115,20 +116,28 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
   }
 
   List<_BriefStep> _steps(BriefAnswers answers) {
+    final objectType = answers.general['objectType'] ?? '';
+    final isCommercial =
+        objectType == 'office' || objectType == 'commercial';
     final rooms = briefRoomSections
         .where((section) => _roomIncluded(answers, section.id))
         .toList();
     return [
-      const _BriefStep(id: 'family', title: 'Кто будет жить?'),
-      const _BriefStep(id: 'routine', title: 'Как проходит день?'),
-      const _BriefStep(id: 'hobbies', title: 'Чем увлекаетесь?'),
-      const _BriefStep(id: 'interests', title: 'Что должно быть дома?'),
+      const _BriefStep(id: 'object', title: 'Объект и адрес'),
+      const _BriefStep(id: 'rooms', title: 'Какие комнаты есть?'),
+      if (!isCommercial)
+        const _BriefStep(id: 'kitchen', title: 'Кухня или кухня-гостиная?'),
+      if (!isCommercial) const _BriefStep(id: 'family', title: 'Состав семьи'),
+      if (!isCommercial)
+        const _BriefStep(id: 'routine', title: 'Как проходит день?'),
+      if (!isCommercial)
+        const _BriefStep(id: 'hobbies', title: 'Чем увлекаетесь?'),
+      if (!isCommercial)
+        const _BriefStep(id: 'interests', title: 'Что должно быть дома?'),
       const _BriefStep(id: 'colors', title: 'Какие цвета близки?'),
       const _BriefStep(id: 'styles', title: 'Какой стиль откликается?'),
       const _BriefStep(id: 'disliked', title: 'Чего точно не хотите?'),
       const _BriefStep(id: 'budget', title: 'Какой бюджет?'),
-      const _BriefStep(id: 'object', title: 'Какой объект?'),
-      const _BriefStep(id: 'rooms', title: 'Какие комнаты есть?'),
       const _BriefStep(id: 'extras', title: 'Инженерные решения'),
       ...rooms.map(
         (section) => _BriefStep(
@@ -141,10 +150,24 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     ];
   }
 
+  void _applyKitchenLayout(BriefFormNotifier notifier, String layout) {
+    notifier.setRoomIncluded('kitchen', layout == 'kitchen');
+    notifier.setRoomIncluded('kitchen_living', layout == 'kitchen_living');
+    _syncZones(
+      notifier,
+      ref.read(briefFormProvider(widget.projectId)).answers,
+    );
+  }
+
   void _syncZones(BriefFormNotifier notifier, BriefAnswers answers) {
     final zones = briefRoomSections
         .where((section) => _roomIncluded(answers, section.id))
-        .map((section) => section.title)
+        .map((section) {
+          final count =
+              int.tryParse(answers.rooms[section.id]?.fields['count'] ?? '1') ??
+                  1;
+          return count > 1 ? '${section.title} ×$count' : section.title;
+        })
         .join(', ');
     notifier.setGeneral('zones', zones);
   }
@@ -174,16 +197,18 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     }
   }
 
-  void _goBack(String fallback) {
-    if (_step > 0) {
-      setState(() => _step -= 1);
-      return;
+  Future<void> _exitBrief(String fallback) async {
+    final brief = ref.read(briefProvider(widget.projectId)).asData?.value;
+    if (brief != null && !brief.isLocked) {
+      await ref.read(briefFormProvider(widget.projectId).notifier).save();
     }
+    if (!mounted) return;
     popOrGo(context, fallback);
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final briefAsync = ref.watch(briefProvider(widget.projectId));
     final formState = ref.watch(briefFormProvider(widget.projectId));
     ref.watch(profileProvider);
@@ -202,25 +227,19 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         leading: IconButton(
-          tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-          icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => _goBack(fallback),
+          tooltip: 'Закрыть анкету',
+          icon: const Icon(Icons.close, size: 22),
+          onPressed: () => _exitBrief(fallback),
         ),
         title: const Text('Анкета'),
         actions: [
-          IconButton(
-            onPressed: () async {
-              final success = await ref
-                  .read(briefFormProvider(widget.projectId).notifier)
-                  .downloadPdf();
-              if (success && context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('PDF открыт')),
-                );
-              }
-            },
-            icon: const Icon(Icons.picture_as_pdf_outlined),
-            tooltip: 'Скачать PDF',
+          TextButton(
+            onPressed: () => requestSurveyorConfirm(
+              context,
+              ref,
+              widget.projectId,
+            ),
+            child: const Text('Вызов замерщика'),
           ),
         ],
       ),
@@ -255,8 +274,8 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                   child: LinearProgressIndicator(
                     value: progress,
                     minHeight: 4,
-                    color: AppColors.accent,
-                    backgroundColor: AppColors.surfaceMuted,
+                    color: colors.accent,
+                    backgroundColor: colors.surfaceMuted,
                   ),
                 ),
               ),
@@ -295,7 +314,7 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                   ),
                   child: Text(
                     formState.errorMessage!,
-                    style: const TextStyle(color: AppColors.error),
+                    style: TextStyle(color: colors.error),
                   ),
                 ),
               BottomActionBar(
@@ -377,30 +396,31 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
 
     switch (step.id) {
       case 'family':
+        final members = briefParseFamilyMembers(general['householdMembers']);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             BriefStepHeader(
               eyebrow: eyebrow,
               title: step.title,
-              subtitle: 'Семья, дети, питомцы — от этого зависит планировка.',
+              subtitle: 'Добавьте, кто будет жить, и возраст.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            chips(choices: briefHouseholdChoices, fieldId: 'householdKind', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Дети', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefKidsChoices, fieldId: 'kids', exclusiveNone: true),
+            for (var i = 0; i < members.length; i++) ...[
+              _FamilyMemberCard(
+                member: members[i],
+                enabled: enabled,
+                onChanged: (member) => notifier.updateFamilyMember(i, member),
+                onRemove: enabled ? () => notifier.removeFamilyMember(i) : null,
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            if (enabled)
+              _AddFamilyButton(onPressed: notifier.addFamilyMember),
             const SizedBox(height: AppSpacing.xl),
             Text('Питомцы', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             chips(choices: briefPetChoices, fieldId: 'pets', exclusiveNone: true),
-            const SizedBox(height: AppSpacing.xl),
-            note(
-              'household',
-              'Имена и возраст, если хотите уточнить',
-              lines: 3,
-            ),
           ],
         );
       case 'routine':
@@ -485,6 +505,10 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
               enabled: enabled,
               onToggle: (id) => notifier.toggleChoice('likedStyles', id, max: 2),
             ),
+            const SizedBox(height: AppSpacing.xl),
+            Text('Свой стиль', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            note('likedStylesCustom', 'Опишите стиль своими словами', lines: 2),
           ],
         );
       case 'disliked':
@@ -514,13 +538,14 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
           ],
         );
       case 'object':
+        final objectType = general['objectType'] ?? '';
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             BriefStepHeader(
               eyebrow: eyebrow,
               title: step.title,
-              subtitle: 'От типа объекта зависит набор комнат.',
+              subtitle: 'Тип объекта и адрес — от этого зависит анкета.',
             ),
             const SizedBox(height: AppSpacing.xl),
             BriefImageChoiceGrid(
@@ -545,6 +570,72 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                 );
               },
             ),
+            const SizedBox(height: AppSpacing.xl),
+            Text('Адрес', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            note(
+              'address',
+              'Город, ЖК, улица, дом, квартира',
+              lines: 2,
+            ),
+            if (objectType == 'apartment' ||
+                objectType == 'house' ||
+                objectType == 'office' ||
+                objectType == 'commercial') ...[
+              const SizedBox(height: AppSpacing.xl),
+              if (objectType == 'house') ...[
+                Text(
+                  'Количество этажей',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                note('floors', 'Например, 2', lines: 1),
+                const SizedBox(height: AppSpacing.xl),
+              ],
+              if (objectType == 'commercial') ...[
+                Text(
+                  'Тип коммерческого объекта',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                chips(
+                  choices: briefCommercialTypeChoices,
+                  fieldId: 'commercialType',
+                  max: 1,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+              ],
+              Text('Площадь, м²', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              note(
+                'area',
+                objectType == 'house'
+                    ? 'Общая площадь дома'
+                    : 'Общая площадь',
+                lines: 1,
+              ),
+            ],
+          ],
+        );
+      case 'kitchen':
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            BriefStepHeader(
+              eyebrow: eyebrow,
+              title: step.title,
+              subtitle: 'От этого зависят вопросы по зоне готовки.',
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            BriefChipWrap(
+              choices: briefKitchenLayoutChoices,
+              selectedIds: briefSelectedIds(general['kitchenLayout']),
+              enabled: enabled,
+              onToggle: (id) {
+                notifier.setGeneral('kitchenLayout', id);
+                _applyKitchenLayout(notifier, id);
+              },
+            ),
           ],
         );
       case 'rooms':
@@ -554,7 +645,7 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
             BriefStepHeader(
               eyebrow: eyebrow,
               title: step.title,
-              subtitle: 'Отметьте помещения, которые есть или появятся.',
+              subtitle: 'Отметьте помещения и укажите, сколько их.',
             ),
             const SizedBox(height: AppSpacing.xl),
             BriefImageChoiceGrid(
@@ -588,6 +679,28 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                 );
               },
             ),
+            const SizedBox(height: AppSpacing.xl),
+            for (final section in briefRoomSections)
+              if (_roomIncluded(formState.answers, section.id))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: _RoomCountRow(
+                    title: section.title,
+                    count: int.tryParse(
+                          formState.answers.rooms[section.id]?.fields['count'] ??
+                              '1',
+                        ) ??
+                        1,
+                    enabled: enabled,
+                    onChanged: (value) {
+                      notifier.setRoomCount(section.id, value);
+                      _syncZones(
+                        notifier,
+                        ref.read(briefFormProvider(widget.projectId)).answers,
+                      );
+                    },
+                  ),
+                ),
           ],
         );
       case 'extras':
@@ -703,10 +816,11 @@ class _LockedBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.surfaceMuted,
+        color: colors.surfaceMuted,
         borderRadius: BorderRadius.circular(16),
       ),
       child: const Row(
@@ -715,6 +829,207 @@ class _LockedBanner extends StatelessWidget {
           SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text('Проект в работе — редактирование недоступно'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoomCountRow extends StatelessWidget {
+  const _RoomCountRow({
+    required this.title,
+    required this.count,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String title;
+  final int count;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+          _CountChip(
+            enabled: enabled && count > 1,
+            icon: Icons.remove,
+            onTap: () => onChanged(count - 1),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              '$count',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          _CountChip(
+            enabled: enabled,
+            icon: Icons.add,
+            onTap: () => onChanged(count + 1),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountChip extends StatelessWidget {
+  const _CountChip({
+    required this.enabled,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final bool enabled;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Material(
+      color: enabled ? colors.surfaceMuted : colors.surfaceMuted.withValues(alpha: 0.5),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(
+            icon,
+            size: 18,
+            color: enabled ? colors.textPrimary : colors.textDisabled,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddFamilyButton extends StatelessWidget {
+  const _AddFamilyButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Center(
+      child: Material(
+        color: colors.accent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Icon(Icons.add, size: 28, color: colors.textOnAccent),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FamilyMemberCard extends StatelessWidget {
+  const _FamilyMemberCard({
+    required this.member,
+    required this.enabled,
+    required this.onChanged,
+    this.onRemove,
+  });
+
+  final BriefFamilyMember member;
+  final bool enabled;
+  final ValueChanged<BriefFamilyMember> onChanged;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Кто',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              if (onRemove != null)
+                IconButton(
+                  onPressed: onRemove,
+                  icon: const Icon(Icons.close, size: 20),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final choice in briefFamilyRoleChoices)
+                ChoiceChip(
+                  label: Text(choice.label),
+                  selected: member.role == choice.id,
+                  onSelected: enabled
+                      ? (selected) {
+                          if (!selected) return;
+                          onChanged(member.copyWith(role: choice.id));
+                        }
+                      : null,
+                ),
+            ],
+          ),
+          if (member.role == 'other') ...[
+            const SizedBox(height: AppSpacing.sm),
+            AppInput(
+              initialValue: member.customRole,
+              hintText: 'Кто именно',
+              enabled: enabled,
+              onChanged: (value) =>
+                  onChanged(member.copyWith(customRole: value)),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          AppInput(
+            initialValue: member.age,
+            labelText: 'Возраст',
+            hintText: 'Например, 32',
+            keyboardType: TextInputType.number,
+            enabled: enabled,
+            onChanged: (value) => onChanged(member.copyWith(age: value)),
           ),
         ],
       ),

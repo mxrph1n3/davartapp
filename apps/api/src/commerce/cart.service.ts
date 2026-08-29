@@ -5,16 +5,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { isStudioRole } from '../auth/roles';
-import { userCanAccessProjectWhere } from '../projects/project-access';
+import {
+  canAccessAnyClientProject,
+  staffAssignedToProjectWhere,
+  userCanAccessProjectWhere,
+} from '../projects/project-access';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class CartService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getCart(projectId: string, actorId: string, actorRole: UserRole) {
-    await this.assertProjectCartAccess(projectId, actorId, actorRole);
+  async getCart(
+    projectId: string,
+    actorId: string,
+    actorRole: UserRole,
+    extraRoles: UserRole[] = [],
+  ) {
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
     const cart = await this.getOrCreateCart(projectId);
     return this.formatCart(cart.id);
   }
@@ -25,8 +36,12 @@ export class CartService {
     actorRole: UserRole,
     productId: string,
     quantity: number,
+    extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, actorRole);
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
 
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -72,8 +87,12 @@ export class CartService {
     actorRole: UserRole,
     itemId: string,
     quantity: number,
+    extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, actorRole);
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
     const cart = await this.getOrCreateCart(projectId);
     const item = await this.prisma.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
@@ -100,8 +119,12 @@ export class CartService {
     actorId: string,
     actorRole: UserRole,
     itemId: string,
+    extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, actorRole);
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
     const cart = await this.getOrCreateCart(projectId);
     const item = await this.prisma.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
@@ -119,8 +142,16 @@ export class CartService {
     return this.formatCart(cart.id);
   }
 
-  async clearCart(projectId: string, actorId: string, actorRole: UserRole) {
-    await this.assertProjectCartAccess(projectId, actorId, actorRole);
+  async clearCart(
+    projectId: string,
+    actorId: string,
+    actorRole: UserRole,
+    extraRoles: UserRole[] = [],
+  ) {
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
     const cart = await this.getOrCreateCart(projectId);
     await this.prisma.cartItem.deleteMany({
       where: { cartId: cart.id, lockedAt: null },
@@ -137,9 +168,15 @@ export class CartService {
   async assertProjectCartAccess(
     projectId: string,
     actorId: string,
-    actorRole: UserRole,
+    roles: UserRole[],
   ) {
-    if (isStudioRole(actorRole)) {
+    const asOwner = await this.prisma.project.findFirst({
+      where: userCanAccessProjectWhere(actorId, projectId),
+      select: { id: true },
+    });
+    if (asOwner) return;
+
+    if (canAccessAnyClientProject(roles)) {
       const project = await this.prisma.project.findFirst({
         where: { id: projectId, isShowcase: false },
         select: { id: true },
@@ -150,14 +187,16 @@ export class CartService {
       return;
     }
 
-    const project = await this.prisma.project.findFirst({
-      where: userCanAccessProjectWhere(actorId, projectId),
+    const assigned = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        ...staffAssignedToProjectWhere(actorId),
+      },
       select: { id: true },
     });
+    if (assigned) return;
 
-    if (!project) {
-      throw new ForbiddenException('No access to this project cart');
-    }
+    throw new ForbiddenException('No access to this project cart');
   }
 
   private async getOrCreateCart(projectId: string) {

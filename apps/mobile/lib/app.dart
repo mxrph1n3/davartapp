@@ -60,7 +60,7 @@ class _DavartAppState extends ConsumerState<DavartApp> {
     final themeModeAsync = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
-      title: 'Davart',
+      title: 'DAVart',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

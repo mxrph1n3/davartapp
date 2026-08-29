@@ -30,12 +30,12 @@ export class OrdersService {
     address: string,
     comment?: string,
     cartItemIds?: string[],
+    extraRoles: UserRole[] = [],
   ) {
-    await this.cartService.assertProjectCartAccess(
-      projectId,
-      userId,
+    await this.cartService.assertProjectCartAccess(projectId, userId, [
       actorRole,
-    );
+      ...extraRoles,
+    ]);
 
     if (!cartItemIds?.length) {
       throw new BadRequestException('cartItemIds is required');

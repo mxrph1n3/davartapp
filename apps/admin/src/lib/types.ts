@@ -1,4 +1,9 @@
-export type UserRole = 'client' | 'designer' | 'complectator' | 'admin';
+export type UserRole =
+  | 'client'
+  | 'designer'
+  | 'complectator'
+  | 'surveyor'
+  | 'admin';
 
 export type SessionUser = {
   id: string;
@@ -6,7 +11,18 @@ export type SessionUser = {
   name: string | null;
   email: string | null;
   role: UserRole;
+  extraRoles?: UserRole[];
 };
+
+export function sessionRoles(user: SessionUser): UserRole[] {
+  return [user.role, ...(user.extraRoles ?? [])];
+}
+
+/** CRM is for complectators / admins (incl. via extraRoles). */
+export function canUseCrm(user: SessionUser): boolean {
+  const roles = sessionRoles(user);
+  return roles.includes('complectator') || roles.includes('admin');
+}
 
 export type ClientScope = 'all' | 'projects' | 'orders' | 'mine';
 

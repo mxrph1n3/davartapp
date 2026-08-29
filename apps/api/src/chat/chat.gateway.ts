@@ -9,9 +9,12 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
+import { hasStudioRole } from '../auth/roles';
 import { resolveCorsOrigins } from '../common/env.validation';
+import { PrismaService } from '../prisma/prisma.service';
 import { ChatService } from './chat.service';
 
 interface AuthedSocket extends Socket {
@@ -31,9 +34,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly chatService: ChatService,
+    private readonly prisma: PrismaService,
   ) {}
 
-  handleConnection(client: AuthedSocket) {
+  async handleConnection(client: AuthedSocket) {
     const token = this.extractToken(client);
     if (!token) {
       client.disconnect();
@@ -41,8 +45,27 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     try {
-      const payload = this.jwtService.verify<JwtPayload>(token);
-      client.data.user = payload;
+      const payload = this.jwtService.verify<{
+        sub: string;
+        phone?: string;
+        role?: UserRole;
+      }>(token);
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { phone: true, role: true, extraRoles: true },
+      });
+      if (!user) {
+        client.disconnect();
+        return;
+      }
+
+      client.data.user = {
+        sub: payload.sub,
+        phone: user.phone,
+        role: user.role,
+        extraRoles: user.extraRoles,
+      };
       client.join(`user:${payload.sub}`);
     } catch {
       client.disconnect();
@@ -82,7 +105,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('typing')
   async handleTyping(
     @ConnectedSocket() client: AuthedSocket,
-    @MessageBody() body: { chatId: string },
+    @MessageBody() body: { chatId: string; preview?: string },
   ) {
     const user = client.data.user;
     if (!user || !body?.chatId) return;
@@ -93,9 +116,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
+    const roles = [user.role, ...(user.extraRoles ?? [])];
+    const previewText =
+      !hasStudioRole(roles) && typeof body.preview === 'string'
+        ? body.preview.slice(0, 280)
+        : '';
+
     client.to(`chat:${body.chatId}`).emit('typing', {
       chatId: body.chatId,
       userId: user.sub,
+      preview: previewText,
     });
   }
 

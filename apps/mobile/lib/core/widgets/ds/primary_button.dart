@@ -27,14 +27,15 @@ class _PrimaryButtonState extends State<PrimaryButton> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final child = AnimatedScale(
       scale: _pressed ? 0.98 : 1,
       duration: AppMotion.fast,
       curve: AppMotion.curve,
       child: Material(
         color: widget.onPressed == null && !widget.isLoading
-            ? AppColors.accent.withValues(alpha: 0.4)
-            : (_pressed ? AppColors.accentPressed : AppColors.accent),
+            ? colors.accent.withValues(alpha: 0.4)
+            : (_pressed ? colors.accentPressed : colors.accent),
         borderRadius: AppRadius.buttonRadius,
         child: InkWell(
           onTap: widget.isLoading ? null : widget.onPressed,
@@ -47,12 +48,12 @@ class _PrimaryButtonState extends State<PrimaryButton> {
             width: widget.expand ? double.infinity : null,
             child: Center(
               child: widget.isLoading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 22,
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.textPrimary,
+                        color: colors.textOnAccent,
                       ),
                     )
                   : Padding(

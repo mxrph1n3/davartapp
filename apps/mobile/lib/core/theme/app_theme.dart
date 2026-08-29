@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -19,54 +20,110 @@ abstract final class AppTheme {
 
   static ThemeData _theme(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
+    final colors = isDark ? DavartColors.dark : DavartColors.light;
+    final textTheme = AppTypography.textTheme(brightness);
 
     return ThemeData(
       useMaterial3: true,
       brightness: brightness,
-      scaffoldBackgroundColor:
-          isDark ? AppColors.darkBackground : AppColors.background,
+      extensions: <ThemeExtension<dynamic>>[colors],
+      scaffoldBackgroundColor: colors.background,
       colorScheme: ColorScheme(
         brightness: brightness,
-        primary: AppColors.accent,
-        onPrimary: AppColors.textOnAccent,
-        secondary: AppColors.textPrimary,
-        onSecondary: AppColors.background,
-        surface: isDark ? AppColors.darkSurface : AppColors.surface,
-        onSurface: isDark ? AppColors.background : AppColors.textPrimary,
-        error: AppColors.error,
-        onError: AppColors.background,
-        outline: AppColors.border,
+        primary: colors.accent,
+        onPrimary: colors.textOnAccent,
+        secondary: colors.textPrimary,
+        onSecondary: colors.background,
+        surface: colors.surface,
+        onSurface: colors.textPrimary,
+        error: colors.error,
+        onError: colors.background,
+        outline: colors.border,
       ),
-      textTheme: AppTypography.textTheme,
-      dividerColor: AppColors.divider,
+      textTheme: textTheme,
+      iconTheme: IconThemeData(color: colors.textPrimary),
+      dividerColor: colors.divider,
+      dividerTheme: DividerThemeData(
+        color: colors.divider,
+        thickness: 1,
+        space: 1,
+      ),
       splashFactory: InkRipple.splashFactory,
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        backgroundColor:
-            isDark ? AppColors.darkBackground : AppColors.background,
-        foregroundColor:
-            isDark ? AppColors.background : AppColors.textPrimary,
+        backgroundColor: colors.background,
+        foregroundColor: colors.textPrimary,
         systemOverlayStyle: isDark
             ? SystemUiOverlayStyle.light
             : SystemUiOverlayStyle.dark,
-        titleTextStyle: AppTypography.textTheme.titleLarge,
+        titleTextStyle: textTheme.titleLarge,
+        iconTheme: IconThemeData(color: colors.textPrimary),
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
-        color: AppColors.textPrimary,
+      progressIndicatorTheme: ProgressIndicatorThemeData(
+        color: colors.textPrimary,
         strokeWidth: 2,
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.textPrimary,
-        contentTextStyle: const TextStyle(color: AppColors.background),
+        backgroundColor: isDark ? colors.surfaceMuted : colors.textPrimary,
+        contentTextStyle: TextStyle(
+          color: isDark ? colors.textPrimary : colors.background,
+        ),
         shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
-      bottomSheetTheme: const BottomSheetThemeData(
-        backgroundColor: AppColors.background,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.sheetRadius),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: AppRadius.sheetRadius,
+        ),
         elevation: 0,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: colors.surface,
+        titleTextStyle: textTheme.titleLarge,
+        contentTextStyle: textTheme.bodyLarge,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.cardRadius),
+      ),
+      cardTheme: CardThemeData(
+        color: colors.surface,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.cardRadius,
+          side: BorderSide(color: colors.border),
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colors.surfaceMuted,
+        hintStyle: textTheme.bodyMedium?.copyWith(color: colors.textDisabled),
+        labelStyle: textTheme.bodyMedium,
+        border: OutlineInputBorder(
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.border),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: AppRadius.inputRadius,
+          borderSide: BorderSide(color: colors.textPrimary, width: 1.5),
+        ),
+      ),
+      cupertinoOverrideTheme: CupertinoThemeData(
+        brightness: brightness,
+        primaryColor: colors.accent,
+        scaffoldBackgroundColor: colors.background,
+        barBackgroundColor: colors.surface,
+        textTheme: CupertinoTextThemeData(
+          primaryColor: colors.textPrimary,
+          textStyle: textTheme.bodyLarge,
+          actionTextStyle: textTheme.bodyLarge?.copyWith(
+            color: colors.textPrimary,
+          ),
+        ),
       ),
     );
   }

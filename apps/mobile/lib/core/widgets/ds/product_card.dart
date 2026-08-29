@@ -35,6 +35,7 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final textTheme = Theme.of(context).textTheme;
     final showBrand = brand != null &&
         brand!.isNotEmpty &&
@@ -57,14 +58,15 @@ class ProductCard extends StatelessWidget {
                   ClipRRect(
                     borderRadius: AppRadius.imageRadius,
                     child: ColoredBox(
-                      color: AppColors.imagePlaceholder,
+                      color: colors.imagePlaceholder,
                       child: imageUrl != null
                           ? Image.network(
                               imageUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => _placeholder(),
+                              errorBuilder: (_, _, _) =>
+                                  _placeholder(colors),
                             )
-                          : _placeholder(),
+                          : _placeholder(colors),
                     ),
                   ),
                   if (!inStock)
@@ -77,13 +79,13 @@ class ProductCard extends StatelessWidget {
                           vertical: 3,
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.textPrimary.withValues(alpha: 0.7),
+                          color: colors.textPrimary.withValues(alpha: 0.7),
                           borderRadius: AppRadius.pillRadius,
                         ),
-                        child: const Text(
+                        child: Text(
                           'Нет в наличии',
                           style: TextStyle(
-                            color: AppColors.background,
+                            color: colors.background,
                             fontSize: 10,
                           ),
                         ),
@@ -134,7 +136,7 @@ class ProductCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                           ),
                         ),
                       ],
@@ -145,7 +147,7 @@ class ProductCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.textSecondary,
+                            color: colors.textSecondary,
                             height: 1.3,
                           ),
                         ),
@@ -173,9 +175,9 @@ class ProductCard extends StatelessWidget {
     );
   }
 
-  Widget _placeholder() {
-    return const Center(
-      child: Icon(Icons.image_outlined, color: AppColors.textSecondary),
+  Widget _placeholder(DavartColors colors) {
+    return Center(
+      child: Icon(Icons.image_outlined, color: colors.textSecondary),
     );
   }
 }
@@ -195,6 +197,7 @@ class _HeartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
       color: Colors.transparent,
       shape: const CircleBorder(),
@@ -206,7 +209,7 @@ class _HeartButton extends StatelessWidget {
           child: Icon(
             selected ? Icons.favorite : Icons.favorite_border,
             size: 20,
-            color: AppColors.textPrimary,
+            color: colors.textPrimary,
           ),
         ),
       ),

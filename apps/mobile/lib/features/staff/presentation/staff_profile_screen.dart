@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/layout/tab_page.dart';
-import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/ds/ds.dart';
-import '../../../core/router/app_router.dart';
-import '../../auth/data/auth_repository.dart';
-import '../../auth/presentation/auth_notifier.dart';
-import '../../profile/presentation/profile_notifier.dart';
 import 'package:go_router/go_router.dart';
 
-/// Minimal staff profile tab (settings + logout). Client-only menus hidden.
+import '../../../core/layout/tab_page.dart';
+import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/ds/ds.dart';
+import '../../auth/presentation/auth_notifier.dart';
+import '../../profile/presentation/profile_notifier.dart';
+import '../../profile/presentation/settings_screen.dart';
+
+/// Minimal staff profile tab. Client-only menus hidden.
 class StaffProfileScreen extends ConsumerWidget {
   const StaffProfileScreen({super.key});
 
@@ -27,37 +27,40 @@ class StaffProfileScreen extends ConsumerWidget {
         children: [
           const ScreenHeader(title: 'Профиль'),
           const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              AppAvatar(
-                label: name?.isNotEmpty == true ? name! : phone,
-                size: 72,
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name ?? 'Сотрудник',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(phone, style: Theme.of(context).textTheme.bodyMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      authState.user?.role == UserRole.admin
-                          ? 'Админ Davart'
-                          : 'Сотрудник Davart',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: Row(
+              children: [
+                AppAvatar(
+                  label: name?.isNotEmpty == true ? name! : phone,
+                  size: 72,
                 ),
-              ),
-            ],
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name ?? 'Сотрудник',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(phone, style: Theme.of(context).textTheme.bodyMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        authState.user?.canAssignRoles == true
+                            ? 'Админ DAVart'
+                            : 'Сотрудник DAVart',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: AppSpacing.xl),
-          if (authState.user?.role == UserRole.admin)
+          if (authState.user?.canAssignRoles == true)
             ListItem(
               title: 'Пользователи',
               subtitle: 'Роли и аккаунты по номеру',
@@ -70,10 +73,15 @@ class StaffProfileScreen extends ConsumerWidget {
             onTap: () => context.push(AppRoutes.staffAudit),
           ),
           ListItem(
-            title: 'Настройки',
-            leading: const Icon(Icons.settings_outlined),
-            onTap: () => context.push(AppRoutes.settings),
+            title: 'Личные данные',
+            leading: const Icon(Icons.person_outline, size: 22),
+            onTap: () => context.push(
+              editProfilePathForRole(ref.read(authProvider).user?.role),
+            ),
           ),
+          const ProfileThemeSection(),
+          const ProfileNotificationsSection(),
+          const SizedBox(height: AppSpacing.xl),
           ListItem(
             title: 'Выйти',
             leading: const Icon(Icons.logout),

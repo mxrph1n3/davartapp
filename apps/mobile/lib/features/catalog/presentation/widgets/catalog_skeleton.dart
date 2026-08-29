@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
+
 class CatalogSkeleton extends StatelessWidget {
   const CatalogSkeleton({super.key});
 
@@ -87,6 +89,10 @@ class _SkeletonBoxState extends State<_SkeletonBox>
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final base = colors.surfaceMuted;
+    final highlight = Color.lerp(colors.surfaceMuted, colors.border, 0.35)!;
+
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
@@ -94,11 +100,7 @@ class _SkeletonBoxState extends State<_SkeletonBox>
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            color: Color.lerp(
-              const Color(0xFFECE8E1),
-              const Color(0xFFF7F4EF),
-              _controller.value,
-            ),
+            color: Color.lerp(base, highlight, _controller.value),
             borderRadius: BorderRadius.circular(12),
           ),
         );

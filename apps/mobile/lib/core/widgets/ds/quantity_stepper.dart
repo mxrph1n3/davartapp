@@ -14,32 +14,33 @@ class AddButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     final enabled = onPressed != null;
     return Material(
       color: enabled
-          ? AppColors.accent
-          : AppColors.accent.withValues(alpha: 0.4),
+          ? colors.accent
+          : colors.accent.withValues(alpha: 0.4),
       borderRadius: _radius,
       child: InkWell(
         onTap: onPressed,
         borderRadius: _radius,
-        child: const SizedBox(
+        child: SizedBox(
           height: _height,
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.add_shopping_cart_outlined,
                   size: 16,
-                  color: AppColors.textOnAccent,
+                  color: colors.textOnAccent,
                 ),
-                SizedBox(width: 6),
+                const SizedBox(width: 6),
                 Text(
                   'В корзину',
                   style: TextStyle(
-                    color: AppColors.textOnAccent,
+                    color: colors.textOnAccent,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     height: 1,
@@ -68,10 +69,11 @@ class QuantityStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Container(
       decoration: BoxDecoration(
         borderRadius: AppRadius.buttonRadius,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -100,6 +102,7 @@ class _Btn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -112,8 +115,8 @@ class _Btn extends StatelessWidget {
             icon,
             size: 18,
             color: onPressed == null
-                ? AppColors.textDisabled
-                : AppColors.textPrimary,
+                ? colors.textDisabled
+                : colors.textPrimary,
           ),
         ),
       ),

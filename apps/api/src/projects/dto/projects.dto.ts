@@ -12,9 +12,10 @@ import {
 } from 'class-validator';
 
 export class CreateProjectDto {
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsString()
