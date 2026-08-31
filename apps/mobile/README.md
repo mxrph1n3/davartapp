@@ -1,17 +1,20 @@
-# davart_mobile
+# Mobile (Flutter)
 
-A new Flutter project.
+## iPhone одной командой (staging VPS)
 
-## Getting Started
+```bash
+# из корня репозитория
+git pull
+bash scripts/run-ios-device.sh
+```
 
-This project is a starting point for a Flutter application.
+Нужны: Flutter, Xcode, CocoaPods, iPhone по USB, Developer Mode, Team в Signing.
 
-A few resources to get you started if this is your first Flutter project:
+Через Xcode:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+```bash
+bash scripts/run-ios-device.sh --xcode
+# затем ⌘R на выбранном iPhone
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+API по умолчанию: `http://217.198.6.88:3000/api` (файл `dart_defines.device.json`).

@@ -2,9 +2,10 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 
 /**
- * OTP / invite SMS.
- * - SMS_PROVIDER=mock (default): confirm send without logging the code
+ * OTP / invite delivery.
+ * - SMS_PROVIDER=mock (default): dev-only, logs code
  * - SMS_PROVIDER=smsru: SMS.ru (`SMSRU_API_ID` required)
+ * - SMS_PROVIDER=p1sms: P1SMS (`P1SMS_API_KEY` required), Telegram by default
  */
 @Injectable()
 export class SmsService {
@@ -26,13 +27,17 @@ export class SmsService {
           'SMS provider is not configured for production',
         );
       }
-      // Dev-only: real SMS.ru never logs the body. Mock prints the code for local login.
       this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
       return;
     }
 
     if (provider === 'smsru') {
       await this.sendViaSmsRu(phone, message);
+      return;
+    }
+
+    if (provider === 'p1sms') {
+      await this.sendViaP1Sms(phone, message);
       return;
     }
 
@@ -49,6 +54,66 @@ export class SmsService {
       `SMS provider "${provider}" is not configured, falling back to mock (non-production only)`,
     );
     this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
+  }
+
+  private async sendViaP1Sms(phone: string, message: string): Promise<void> {
+    const apiKey = this.configService.get<string>('P1SMS_API_KEY');
+    if (!apiKey) {
+      throw new ServiceUnavailableException('P1SMS_API_KEY is not configured');
+    }
+
+    const channel = this.configService.get<string>('P1SMS_CHANNEL', 'telegram');
+    const botUsername = this.configService.get<string>('P1SMS_BOT_USERNAME');
+    const normalizedPhone = phone.replace(/^\+/, '');
+
+    const smsItem: Record<string, unknown> = {
+      channel,
+      phone: normalizedPhone,
+      text: message,
+    };
+
+    if (channel === 'telegram') {
+      if (!botUsername) {
+        throw new ServiceUnavailableException(
+          'P1SMS_BOT_USERNAME is required for Telegram OTP',
+        );
+      }
+      smsItem.tgParameters = [
+        {
+          botUsername,
+          content: [{ baseMessage: true, priority: 1 }],
+        },
+      ];
+    }
+
+    const response = await fetch('https://admin.p1sms.ru/apiSms/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({ apiKey, sms: [smsItem] }),
+    });
+
+    if (!response.ok) {
+      this.logger.error(`P1SMS HTTP ${response.status}`);
+      throw new ServiceUnavailableException('Failed to send OTP via P1SMS');
+    }
+
+    const body = (await response.json()) as {
+      status?: string;
+      data?: unknown;
+      error?: string;
+    };
+
+    if (body.status && body.status !== 'success' && body.status !== 'OK') {
+      this.logger.error(`P1SMS error: ${JSON.stringify(body)}`);
+      throw new ServiceUnavailableException(
+        body.error ?? 'Failed to send OTP via P1SMS',
+      );
+    }
+
+    this.logger.log(`P1SMS ${channel} sent to ${phone}`);
   }
 
   private async sendViaSmsRu(phone: string, message: string): Promise<void> {

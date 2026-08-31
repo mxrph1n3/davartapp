@@ -83,7 +83,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 Text('Вход', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Мы отправим SMS с кодом подтверждения',
+                  'Мы отправим код подтверждения в Telegram',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.xl),

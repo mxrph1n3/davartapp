@@ -93,9 +93,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     : () async {
                         setState(() => _isSaving = true);
                         try {
+                          final name = _nameController.text.trim();
+                          final email = _emailController.text.trim();
                           await ref.read(profileActionsProvider).updateProfile(
-                                name: _nameController.text.trim(),
-                                email: _emailController.text.trim(),
+                                name: name.isEmpty ? null : name,
+                                email: email.isEmpty ? null : email,
                               );
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -105,6 +107,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                               context,
                               profilePathForRole(
                                 ref.read(authProvider).user?.role,
+                              ),
+                            );
+                          }
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Не удалось сохранить профиль'),
                               ),
                             );
                           }

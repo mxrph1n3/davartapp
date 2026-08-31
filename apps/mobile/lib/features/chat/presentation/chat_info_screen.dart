@@ -71,10 +71,16 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
         leading: IconButton(
           tooltip: 'Назад',
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => popOrGo(
-            context,
-            chatPathForRole(ref.watch(authProvider).user?.role),
-          ),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+              return;
+            }
+            popOrGo(
+              context,
+              chatPathForRole(ref.watch(authProvider).user?.role),
+            );
+          },
         ),
       ),
       body: detailsAsync.when(

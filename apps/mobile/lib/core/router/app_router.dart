@@ -115,9 +115,7 @@ String newChatPathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffNewChat : AppRoutes.newChat;
 
 String chatInfoPathForRole(UserRole? role, String chatId) =>
-    role?.isStudio == true
-        ? AppRoutes.staffChatInfo(chatId)
-        : AppRoutes.chatInfo(chatId);
+    AppRoutes.chatInfo(chatId);
 
 String productPathForRole(UserRole? role, String id) =>
     role?.isStudio == true
@@ -259,6 +257,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             clientId: clientId,
             projectId: projectId,
           );
+        },
+      ),
+      GoRoute(
+        path: '/chat/:id/info',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final chatId = state.pathParameters['id']!;
+          return ChatInfoScreen(chatId: chatId);
         },
       ),
       StatefulShellRoute.indexedStack(

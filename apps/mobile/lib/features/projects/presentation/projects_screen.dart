@@ -155,21 +155,32 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                   )
                 else ...[
                   ...ordered.map(
-                    (project) => ProjectCard(
-                      compact: true,
-                      name: project.name,
-                      status: project.status,
-                      statusLabel: project.statusLabel,
-                      address: projectBriefSummary(project) ??
-                          project.objectType ??
-                          project.address,
-                      coverUrl: projectCoverUrl(project.id),
-                      onTap: () =>
-                          context.push(AppRoutes.projectDetail(project.id)),
-                      onMorePressed: project.status == 'brief_filling'
-                          ? () => _showProjectActions(project)
-                          : null,
-                    ),
+                    (project) {
+                      final statusLabel = showProjectStatusOnList(project.status)
+                          ? resolveProjectStatusLabel(
+                              status: project.status,
+                              statusLabel: project.statusLabel,
+                            )
+                          : '';
+                      return ProjectCard(
+                        compact: true,
+                        name: project.name,
+                        status: project.status,
+                        statusLabel: statusLabel,
+                        address: projectBriefSummary(project) ??
+                            project.objectType ??
+                            project.address,
+                        coverUrl: projectCoverUrl(project.id),
+                        onTap: () =>
+                            context.push(AppRoutes.projectDetail(project.id)),
+                        onMorePressed: isProjectDeletable(
+                          status: project.status,
+                          statusLabel: project.statusLabel,
+                        )
+                            ? () => _showProjectActions(project)
+                            : null,
+                      );
+                    },
                   ),
                   _OrderProjectButton(
                     isLoading: _creating,

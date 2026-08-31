@@ -99,3 +99,21 @@ String projectStageLabel(String status) {
       return status;
   }
 }
+
+/// Client-side label: prefer stage from [status], map legacy API labels.
+String resolveProjectStatusLabel({
+  required String status,
+  required String statusLabel,
+}) {
+  if (statusLabel == 'На паузе') return projectStageLabel('brief_filling');
+  final fromStatus = projectStageLabel(status);
+  if (fromStatus != status) return fromStatus;
+  return statusLabel;
+}
+
+/// Hide stage on list cards while the brief is still being filled.
+bool showProjectStatusOnList(String status) => status != 'brief_filling';
+
+/// Deletable on brief stage (incl. legacy «На паузе» label from old API).
+bool isProjectDeletable({required String status, required String statusLabel}) =>
+    status == 'brief_filling' || statusLabel == 'На паузе';

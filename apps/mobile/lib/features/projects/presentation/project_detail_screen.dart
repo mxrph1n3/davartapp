@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
@@ -104,7 +105,10 @@ class ProjectDetailScreen extends ConsumerWidget {
                         ),
                         const SizedBox(width: 12),
                         StatusBadge(
-                          label: project.statusLabel,
+                          label: resolveProjectStatusLabel(
+                            status: project.status,
+                            statusLabel: project.statusLabel,
+                          ),
                           highlighted: project.status == 'in_progress',
                         ),
                       ],
@@ -203,7 +207,10 @@ class ProjectDetailScreen extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           StatusBadge(
-                            label: project.statusLabel,
+                            label: resolveProjectStatusLabel(
+                              status: project.status,
+                              statusLabel: project.statusLabel,
+                            ),
                             highlighted: project.status == 'in_progress' ||
                                 project.status == 'measurement',
                           ),
@@ -339,11 +346,17 @@ class _GeneralInfoTab extends ConsumerWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: AppAvatar(label: m.user.displayName, size: 36),
                         title: Text(m.user.displayName),
-                        subtitle: Text(
-                          m.user.phone.isNotEmpty
-                              ? '${m.roleLabel} · ${m.user.phone}'
-                              : m.roleLabel,
-                        ),
+                        subtitle: m.participantSubtitle != null
+                            ? Text(
+                                m.participantSubtitle!,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: colors.textSecondary,
+                                    ),
+                              )
+                            : null,
                       ),
                     )
                     .toList(),
@@ -351,8 +364,7 @@ class _GeneralInfoTab extends ConsumerWidget {
             },
           ),
           const SizedBox(height: AppSpacing.md),
-          SecondaryButton(
-            label: 'Добавить участника',
+          _DashedAddMemberButton(
             onPressed: () => _inviteMember(context, ref),
           ),
         ],
@@ -411,6 +423,79 @@ class _GeneralInfoTab extends ConsumerWidget {
       }
     }
   }
+}
+
+class _DashedAddMemberButton extends StatelessWidget {
+  const _DashedAddMemberButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: AppRadius.buttonRadius,
+        child: CustomPaint(
+          painter: _DashedBorderPainter(
+            color: colors.border,
+            radius: AppRadius.button,
+          ),
+          child: SizedBox(
+            height: 54,
+            width: double.infinity,
+            child: Center(
+              child: Text(
+                'Добавить участника',
+                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorderPainter extends CustomPainter {
+  _DashedBorderPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      const dash = 6.0;
+      const gap = 4.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorderPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
 class _BriefTab extends StatelessWidget {

@@ -7,15 +7,23 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+
+function emptyToUndefined(value: unknown) {
+  if (value === '' || value === null) return undefined;
+  return value;
+}
 
 export class UpdateUserDto {
   @IsOptional()
+  @Transform(({ value }) => emptyToUndefined(value))
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   name?: string;
 
   @IsOptional()
+  @Transform(({ value }) => emptyToUndefined(value))
   @IsEmail()
   email?: string;
 

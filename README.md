@@ -99,22 +99,31 @@ npm run dev
 http://localhost:3001 — OTP комплектатора `+79009999998`, код в логе API.  
 Деплой-заготовка: [apps/admin/DEPLOY.md](./apps/admin/DEPLOY.md).
 
-### 5. Физическое устройство (iPhone / Android)
+### 5. Физический iPhone (одна команда → VPS API)
 
-Симулятор ходит на `localhost`. На устройстве нужен LAN-IP Mac и `--dart-define`:
+iPhone по кабелю, на Mac уже стоят Flutter + Xcode + CocoaPods. Signing один раз: Team = Apple ID в `Runner.xcworkspace`.
 
 ```bash
-# узнать IP (macOS)
-ipconfig getifaddr en0
-
-cd /Users/sadism/Documents/davartapp/apps/mobile
-flutter run -d <device-id> \
-  --dart-define=API_BASE_URL=http://192.168.x.x:3000/api
+git pull
+bash scripts/run-ios-device.sh
 ```
 
-- Mac и телефон в одной Wi‑Fi сети  
-- API слушает `0.0.0.0` (Nest по умолчанию)  
-- В `.env` API: `ALLOW_DEV_ENDPOINTS=true` только локально (см. `.env.example`)
+Скрипт сам: `pub get` → `pod install` → ставит приложение на телефон с `API_BASE_URL=http://217.198.6.88:3000/api`.
+
+Через Xcode (Product → Run / ⌘R):
+
+```bash
+bash scripts/run-ios-device.sh --xcode
+```
+
+Другой хост API: `bash scripts/run-ios-device.sh 192.168.1.10`
+
+Локальный API по LAN (не VPS):
+
+```bash
+ipconfig getifaddr en0
+bash scripts/run-ios-device.sh "$(ipconfig getifaddr en0)"
+```
 
 Release / TestFlight: см. [docs/release/beta-guide.md](./docs/release/beta-guide.md).
 

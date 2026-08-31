@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/ds/chat_bubble.dart';
+import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../commerce/presentation/project_picker_sheet.dart';
 import '../../staff/presentation/working_client_provider.dart';
@@ -215,6 +216,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ),
         ),
         actions: [
+          IconButton(
+            tooltip: 'О чате',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => context.push(AppRoutes.chatInfo(widget.chatId)),
+          ),
           if (isStaff && (clientId != null || widget.projectId != null)) ...[
             IconButton(
               tooltip: 'Корзина проекта',
@@ -249,8 +255,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           Expanded(
             child: messagesAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, _) =>
-                  const Center(child: Text('Не удалось загрузить сообщения')),
+              error: (_, _) => ErrorState(
+                message: 'Не удалось загрузить сообщения',
+                onRetry: () =>
+                    ref.invalidate(chatMessagesProvider(widget.chatId)),
+              ),
               data: (thread) {
                 final messages = thread.messages;
                 if (messages.isEmpty) {

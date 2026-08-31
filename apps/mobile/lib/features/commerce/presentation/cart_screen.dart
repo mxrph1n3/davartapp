@@ -30,8 +30,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(Duration.zero, () {
-      ref.read(cartProvider.notifier).loadCart();
+    Future<void>.delayed(Duration.zero, () async {
+      if (!mounted) return;
+      if (ref.read(authProvider).isAuthenticated) {
+        await ensureActiveProject(context, ref, silent: true);
+      }
+      if (mounted) ref.read(cartProvider.notifier).loadCart();
     });
   }
 

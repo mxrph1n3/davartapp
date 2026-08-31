@@ -13,6 +13,8 @@ import 'ask_display_name.dart';
 import 'auth_notifier.dart';
 import 'require_login.dart';
 
+const _otpLength = 6;
+
 class OtpScreen extends ConsumerStatefulWidget {
   const OtpScreen({super.key, required this.phone, this.initialCode});
 
@@ -39,7 +41,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _suppressAutoVerify = true;
     _controller = TextEditingController(text: initial);
     _startTimer();
-    if (initial.length == 4) {
+    if (initial.length == _otpLength) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _suppressAutoVerify = false;
@@ -96,9 +98,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
 
     final code = _controller.text.trim();
-    if (code.length != 4) {
+    if (code.length != _otpLength) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Код должен содержать 4 цифры')),
+        SnackBar(content: Text('Код должен содержать $_otpLength цифр')),
       );
       return;
     }
@@ -112,7 +114,6 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       _leaveOtpIfAuthenticated();
     } on Exception catch (error) {
       if (mounted) {
-        // Session may already be valid from a parallel auto-submit.
         if (ref.read(authProvider).isAuthenticated) {
           _leaveOtpIfAuthenticated();
           return;
@@ -144,7 +145,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         await _verify();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Код отправлен повторно')),
+          const SnackBar(content: Text('Код отправлен в Telegram')),
         );
       }
     } on Exception catch (error) {
@@ -179,25 +180,31 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Код из SMS', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32)),
+              Text(
+                'Код из Telegram',
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32),
+              ),
               const SizedBox(height: AppSpacing.sm),
-              Text('Отправлен на ${widget.phone}', style: Theme.of(context).textTheme.bodyMedium),
+              Text(
+                'Отправлен на ${widget.phone}',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
               const SizedBox(height: AppSpacing.xl),
               AppInput(
                 controller: _controller,
-                hintText: '0000',
+                hintText: '000000',
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, letterSpacing: 10, fontWeight: FontWeight.w600),
+                style: const TextStyle(fontSize: 28, letterSpacing: 8, fontWeight: FontWeight.w600),
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(4),
+                  LengthLimitingTextInputFormatter(_otpLength),
                 ],
                 onChanged: (value) {
                   if (_suppressAutoVerify || _isLoading || _verifyInFlight) {
                     return;
                   }
-                  if (value.length == 4) _verify();
+                  if (value.length == _otpLength) _verify();
                 },
               ),
               const SizedBox(height: AppSpacing.md),

@@ -18,7 +18,7 @@ import { RedisService } from '../redis/redis.service';
 import { allRolesOf, hasStudioRole } from './roles';
 import { SmsService } from './sms.service';
 
-const OTP_LENGTH = 4;
+const OTP_LENGTH = 6;
 const OTP_TTL_SECONDS = 300;
 const OTP_RATE_LIMIT = 3;
 const OTP_RATE_WINDOW_SECONDS = 900;

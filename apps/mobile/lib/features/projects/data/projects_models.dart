@@ -312,12 +312,23 @@ class ProjectMember {
   String get roleLabel {
     switch (role) {
       case 'owner':
-        return 'Владелец';
+        return 'Клиент';
       case 'viewer':
         return 'Наблюдатель';
       default:
         return 'Участник';
     }
+  }
+
+  /// Subtitle under the participant name in project detail.
+  String? get participantSubtitle {
+    if (role == 'owner') {
+      return user.name != null && user.name!.trim().isNotEmpty
+          ? (user.phone.isNotEmpty ? user.phone : null)
+          : 'Клиент';
+    }
+    if (user.phone.isNotEmpty) return user.phone;
+    return roleLabel;
   }
 
   factory ProjectMember.fromJson(Map<String, dynamic> json) {

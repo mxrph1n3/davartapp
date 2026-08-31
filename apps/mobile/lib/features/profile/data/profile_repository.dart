@@ -27,7 +27,8 @@ class ProfileRepository {
       '/users/me',
       data: {
         if (name != null) 'name': name,
-        if (email != null) 'email': email,
+        // Empty string fails @IsEmail on API — omit rather than send "".
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
         if (notificationsEnabled != null)
           'notificationsEnabled': notificationsEnabled,
       },

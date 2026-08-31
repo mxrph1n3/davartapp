@@ -152,7 +152,8 @@ class _CompactProjectCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onMorePressed;
 
-  bool get _canDelete => status == 'brief_filling';
+  bool get _canDelete =>
+      status == 'brief_filling' || statusLabel == 'На паузе';
 
   @override
   Widget build(BuildContext context) {
@@ -218,14 +219,16 @@ class _CompactProjectCard extends StatelessWidget {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
-                  const SizedBox(height: 6),
-                  Text(
-                    statusLabel,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: statusColor,
-                          fontWeight: FontWeight.w500,
-                        ),
-                  ),
+                  if (statusLabel.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      statusLabel,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: statusColor,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ],
                 ],
               ),
             ),
