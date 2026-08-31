@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
 # One command: pull + clean deps + install DAVart on a physical iPhone (VPS API).
 #
-#   bash scripts/run-ios-device.sh
-#   bash scripts/run-ios-device.sh --xcode
+#   bash scripts/run-ios-device.sh              # deps + open Xcode (⌘R)
+#   bash scripts/run-ios-device.sh --run        # deps + flutter run on phone
 #   bash scripts/run-ios-device.sh 217.198.6.88
-#   DEVICE_ID=00008110-… bash scripts/run-ios-device.sh
+#   DEVICE_ID=00008110-… bash scripts/run-ios-device.sh --run
+#
+# No local .env needed: app defaults to staging VPS API.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="217.198.6.88"
-OPEN_XCODE=0
+# Default: open Xcode (teammates hit Run). Use --run for flutter run.
+OPEN_XCODE=1
 
 for arg in "$@"; do
   case "$arg" in
     --xcode) OPEN_XCODE=1 ;;
+    --run) OPEN_XCODE=0 ;;
     -h|--help)
-      sed -n '2,10p' "$0"
+      sed -n '2,12p' "$0"
       exit 0
       ;;
     *) HOST="$arg" ;;

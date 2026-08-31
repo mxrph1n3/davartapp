@@ -2,17 +2,13 @@
 
 ## iPhone одной командой (staging VPS)
 
+Локальный `.env` не нужен — API по умолчанию `http://217.198.6.88:3000/api`.
+
 ```bash
 cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
 ```
 
-Скрипт повторяет рабочий пайплайн: SPM off → clean → pub get → сброс Pods → `pod install --repo-update` → `flutter run` на телефон с `API_BASE_URL=http://217.198.6.88:3000/api`.
-
-Через Xcode:
-
-```bash
-cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh --xcode
-```
+Откроет Xcode → выбери iPhone → ⌘R.
 
 Клон с нуля:
 

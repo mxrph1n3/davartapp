@@ -101,17 +101,15 @@ http://localhost:3001 — OTP комплектатора `+79009999998`, код 
 
 ### 5. Физический iPhone (одна команда → VPS API)
 
+Локальный `.env` **не нужен** — приложение по умолчанию ходит на VPS `http://217.198.6.88:3000/api`.
+
 ```bash
 cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
 ```
 
-Скрипт: выключает SPM, `flutter clean` → `pub get` → сброс Pods → `pod install --repo-update` → ставит на телефон с API `http://217.198.6.88:3000/api`.
+Скрипт: SPM off → clean → pub get → сброс Pods → `pod install` → открывает Xcode. Дальше ⌘R на iPhone.
 
-Через Xcode (⌘R):
-
-```bash
-cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh --xcode
-```
+Сразу `flutter run` без Xcode: `bash scripts/run-ios-device.sh --run`
 
 Первый раз (если репо ещё нет):
 

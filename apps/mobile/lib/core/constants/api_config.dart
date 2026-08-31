@@ -1,14 +1,18 @@
-import 'dart:io' show Platform;
-
+/// API / socket endpoints for the mobile app.
+///
+/// Teammates install on a phone via Xcode without any local `.env`.
+/// Default is the staging VPS. Override when needed:
+///   `--dart-define=API_BASE_URL=http://localhost:3000/api`
+///   or `apps/mobile/dart_defines.device.json` via `scripts/run-ios-device.sh`
 abstract final class ApiConfig {
   static const _fromEnvironment = String.fromEnvironment('API_BASE_URL');
 
-  /// Override with `--dart-define=API_BASE_URL=http://…`.
-  /// Android emulator defaults to `10.0.2.2` (host loopback).
+  /// Staging VPS used when no dart-define is passed (Xcode Product → Run).
+  static const stagingBaseUrl = 'http://217.198.6.88:3000/api';
+
   static String get baseUrl {
     if (_fromEnvironment.isNotEmpty) return _fromEnvironment;
-    if (Platform.isAndroid) return 'http://10.0.2.2:3000/api';
-    return 'http://localhost:3000/api';
+    return stagingBaseUrl;
   }
 
   static String get socketUrl {
