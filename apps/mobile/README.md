@@ -3,18 +3,19 @@
 ## iPhone одной командой (staging VPS)
 
 ```bash
-# из корня репозитория
-git pull
-bash scripts/run-ios-device.sh
+cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
 ```
 
-Нужны: Flutter, Xcode, CocoaPods, iPhone по USB, Developer Mode, Team в Signing.
+Скрипт повторяет рабочий пайплайн: SPM off → clean → pub get → сброс Pods → `pod install --repo-update` → `flutter run` на телефон с `API_BASE_URL=http://217.198.6.88:3000/api`.
 
 Через Xcode:
 
 ```bash
-bash scripts/run-ios-device.sh --xcode
-# затем ⌘R на выбранном iPhone
+cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh --xcode
 ```
 
-API по умолчанию: `http://217.198.6.88:3000/api` (файл `dart_defines.device.json`).
+Клон с нуля:
+
+```bash
+git clone https://github.com/mxrph1n3/davartapp.git ~/davartapp && cd ~/davartapp && bash scripts/run-ios-device.sh
+```

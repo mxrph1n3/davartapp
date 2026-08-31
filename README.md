@@ -101,29 +101,25 @@ http://localhost:3001 — OTP комплектатора `+79009999998`, код 
 
 ### 5. Физический iPhone (одна команда → VPS API)
 
-iPhone по кабелю, на Mac уже стоят Flutter + Xcode + CocoaPods. Signing один раз: Team = Apple ID в `Runner.xcworkspace`.
-
 ```bash
-git pull
-bash scripts/run-ios-device.sh
+cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
 ```
 
-Скрипт сам: `pub get` → `pod install` → ставит приложение на телефон с `API_BASE_URL=http://217.198.6.88:3000/api`.
+Скрипт: выключает SPM, `flutter clean` → `pub get` → сброс Pods → `pod install --repo-update` → ставит на телефон с API `http://217.198.6.88:3000/api`.
 
-Через Xcode (Product → Run / ⌘R):
-
-```bash
-bash scripts/run-ios-device.sh --xcode
-```
-
-Другой хост API: `bash scripts/run-ios-device.sh 192.168.1.10`
-
-Локальный API по LAN (не VPS):
+Через Xcode (⌘R):
 
 ```bash
-ipconfig getifaddr en0
-bash scripts/run-ios-device.sh "$(ipconfig getifaddr en0)"
+cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh --xcode
 ```
+
+Первый раз (если репо ещё нет):
+
+```bash
+git clone https://github.com/mxrph1n3/davartapp.git ~/davartapp && cd ~/davartapp && bash scripts/run-ios-device.sh
+```
+
+Нужны: Flutter, Xcode, CocoaPods, iPhone по USB, Developer Mode, Team в Signing.
 
 Release / TestFlight: см. [docs/release/beta-guide.md](./docs/release/beta-guide.md).
 
