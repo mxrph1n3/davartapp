@@ -33,6 +33,18 @@ export class CreatePersonalChatDto {
   userId!: string;
 }
 
+export class InviteChatByPhoneDto {
+  @IsString()
+  @MinLength(10)
+  @MaxLength(20)
+  phone!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+}
+
 export class ChatContactsQueryDto {
   @IsOptional()
   @IsString()

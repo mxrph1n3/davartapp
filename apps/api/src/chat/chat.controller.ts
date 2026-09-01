@@ -25,10 +25,12 @@ import {
   ChatContactsQueryDto,
   ChatIdParamDto,
   CreatePersonalChatDto,
+  InviteChatByPhoneDto,
   MessagesQueryDto,
   ProjectChatParamDto,
   SendMessageDto,
 } from './dto/chat.dto';
+
 
 @Controller('chats')
 @UseGuards(JwtAuthGuard)
@@ -68,6 +70,15 @@ export class ChatController {
     @Body() dto: CreatePersonalChatDto,
   ) {
     return this.chatService.getOrCreatePersonalChat(user.sub, dto.userId);
+  }
+
+  @Post('invite')
+  @HttpCode(200)
+  inviteByPhone(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: InviteChatByPhoneDto,
+  ) {
+    return this.chatService.inviteByPhone(user.sub, dto.phone, dto.name);
   }
 
   @Get('project/:projectId')

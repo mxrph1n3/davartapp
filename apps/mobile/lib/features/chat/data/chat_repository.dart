@@ -137,6 +137,21 @@ class ChatRepository {
     return ChatSummary.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Invite by phone: creates user if needed, opens personal chat, sends SMS.
+  Future<ChatSummary> inviteByPhone({
+    required String phone,
+    String? name,
+  }) async {
+    final response = await _dio.post(
+      '/chats/invite',
+      data: {
+        'phone': phone,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+      },
+    );
+    return ChatSummary.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<ChatDetails> getChat(String chatId) async {
     final response = await _dio.get('/chats/$chatId');
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);

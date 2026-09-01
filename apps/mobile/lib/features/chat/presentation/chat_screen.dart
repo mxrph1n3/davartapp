@@ -76,7 +76,7 @@ class ChatScreen extends ConsumerWidget {
                                     icon: Icons.chat_bubble_outline,
                                     title: 'Чатов пока нет',
                                     subtitle:
-                                        'Нажмите кнопку сверху, чтобы написать контакту',
+                                        'Нажмите ✎ сверху — чат с контактом или приглашение по SMS',
                                   ),
                                 ],
                               )

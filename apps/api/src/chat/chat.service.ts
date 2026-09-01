@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ChatType, MessageType, Prisma, UserRole } from '@prisma/client';
 import {
   canSeeContactPhone,
@@ -13,6 +14,7 @@ import {
   allRolesOf,
   SUPPORT_DUTY_ROLES,
 } from '../auth/roles';
+import { SmsService } from '../auth/sms.service';
 import { actorProjectAccessWhere } from '../projects/project-access';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +26,7 @@ import {
   CHAT_TYPE_LABELS,
   SendMessageDto,
 } from './dto/chat.dto';
+
 
 const DAVART_CHAT_TITLE = 'DAVart';
 const SUPPORT_ROSTER_REDIS_PREFIX = 'chat:support-roster:v3:';
@@ -62,6 +65,8 @@ export class ChatService {
     private readonly storage: StorageService,
     private readonly redis: RedisService,
     private readonly pushService: PushService,
+    private readonly smsService: SmsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async listChats(userId: string) {
@@ -377,6 +382,69 @@ export class ChatService {
       updatedAt: chat.updatedAt,
       lastMessage: null,
     };
+  }
+
+  /** Start personal chat by phone; create user if needed and send SMS invite. */
+  async inviteByPhone(actorId: string, phoneRaw: string, name?: string) {
+    const phone = this.normalizeRuPhone(phoneRaw);
+    if (!phone) {
+      throw new BadRequestException('Телефон в формате +7XXXXXXXXXX');
+    }
+
+    const actor = await this.prisma.user.findUnique({
+      where: { id: actorId },
+      select: { id: true, phone: true, name: true },
+    });
+    if (!actor) throw new NotFoundException('User not found');
+    if (actor.phone === phone) {
+      throw new BadRequestException('Нельзя пригласить себя');
+    }
+
+    const existing = await this.prisma.user.findUnique({
+      where: { phone },
+      select: { id: true },
+    });
+    const isNew = existing == null;
+
+    const invitee = await this.prisma.user.upsert({
+      where: { phone },
+      update: name?.trim() ? { name: name.trim() } : {},
+      create: {
+        phone,
+        name: name?.trim() || null,
+        role: UserRole.client,
+      },
+      select: { id: true, phone: true, name: true },
+    });
+
+    const chat = await this.getOrCreatePersonalChat(actorId, invitee.id);
+
+    const appUrl =
+      this.configService.get<string>('APP_DOWNLOAD_URL') ??
+      'https://davart.ru/app';
+    const from =
+      actor.name?.trim() ||
+      actor.phone ||
+      'пользователь DAVart';
+    await this.smsService.sendText(
+      phone,
+      `${from} приглашает вас в чат DAVart. Скачать: ${appUrl}`,
+    );
+
+    return { ...chat, invited: isNew, phone: invitee.phone };
+  }
+
+  private normalizeRuPhone(phoneRaw: string): string | null {
+    const digits = phoneRaw.replace(/\D/g, '');
+    let phone = phoneRaw.trim();
+    if (digits.length === 11 && digits.startsWith('8')) {
+      phone = `+7${digits.slice(1)}`;
+    } else if (digits.length === 11 && digits.startsWith('7')) {
+      phone = `+${digits}`;
+    } else if (digits.length === 10) {
+      phone = `+7${digits}`;
+    }
+    return /^\+7\d{10}$/.test(phone) ? phone : null;
   }
 
   private contactRoleLabel(role: UserRole) {
