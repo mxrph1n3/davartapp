@@ -13,6 +13,8 @@ class AppInput extends StatelessWidget {
     this.hintText,
     this.validator,
     this.keyboardType,
+    this.textCapitalization = TextCapitalization.none,
+    this.autofocus = false,
     this.inputFormatters,
     this.textAlign,
     this.style,
@@ -28,6 +30,8 @@ class AppInput extends StatelessWidget {
   final String? hintText;
   final String? Function(String?)? validator;
   final TextInputType? keyboardType;
+  final TextCapitalization textCapitalization;
+  final bool autofocus;
   final List<TextInputFormatter>? inputFormatters;
   final TextAlign? textAlign;
   final TextStyle? style;
@@ -44,6 +48,8 @@ class AppInput extends StatelessWidget {
       initialValue: controller == null ? initialValue : null,
       validator: validator,
       keyboardType: keyboardType,
+      textCapitalization: textCapitalization,
+      autofocus: autofocus,
       inputFormatters: inputFormatters,
       textAlign: textAlign ?? TextAlign.start,
       style: style ?? Theme.of(context).textTheme.bodyLarge,

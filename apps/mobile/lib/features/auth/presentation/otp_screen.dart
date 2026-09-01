@@ -56,15 +56,23 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final auth = ref.read(authProvider);
     if (!auth.isAuthenticated || !mounted || _leavingOtp) return;
     _leavingOtp = true;
-    await maybeAskDisplayName(context, ref);
-    if (!mounted) return;
-    if (isEmbeddedLogin(GoRouterState.of(context))) {
+
+    final embedded = isEmbeddedLogin(GoRouterState.of(context));
+    final home = AppRoutes.homeForRole(auth.user?.role ?? UserRole.client);
+
+    // Leave OTP first so the user never sees a second «code» screen.
+    if (embedded) {
       finishEmbeddedLogin(context);
-      return;
+    } else if (mounted) {
+      context.go(home);
     }
-    context.go(
-      AppRoutes.homeForRole(auth.user?.role ?? UserRole.client),
-    );
+
+    // Ask for display name on the destination route.
+    await Future<void>.delayed(Duration.zero);
+    final navContext = rootNavigatorKey.currentContext;
+    if (navContext != null && navContext.mounted) {
+      await maybeAskDisplayName(navContext, ref);
+    }
   }
 
   @override
@@ -92,6 +100,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _verify() async {
+    if (_leavingOtp) return;
     if (widget.phone.isEmpty) {
       if (mounted) context.go(AppRoutes.phone);
       return;
@@ -109,27 +118,32 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _verifyInFlight = true;
     setState(() => _isLoading = true);
     try {
-      await ref.read(authProvider.notifier).verifyOtp(phone: widget.phone, code: code);
+      await ref.read(authProvider.notifier).verifyOtp(
+            phone: widget.phone,
+            code: code,
+          );
       if (!mounted) return;
-      _leaveOtpIfAuthenticated();
+      await _leaveOtpIfAuthenticated();
     } on Exception catch (error) {
       if (mounted) {
         if (ref.read(authProvider).isAuthenticated) {
-          _leaveOtpIfAuthenticated();
+          await _leaveOtpIfAuthenticated();
           return;
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
         );
       }
     } finally {
       _verifyInFlight = false;
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && !_leavingOtp) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _resend() async {
-    if (_secondsLeft > 0) return;
+    if (_secondsLeft > 0 || _leavingOtp) return;
     try {
       final debugCode =
           await ref.read(authProvider.notifier).sendOtp(widget.phone);
@@ -144,6 +158,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         );
         await _verify();
       } else {
+        _controller.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Код отправлен в Telegram')),
         );
@@ -151,7 +166,9 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     } on Exception catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
         );
       }
     }
@@ -182,7 +199,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             children: [
               Text(
                 'Код из Telegram',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32),
+                style: Theme.of(context)
+                    .textTheme
+                    .displayLarge
+                    ?.copyWith(fontSize: 32),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
@@ -195,13 +215,20 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 hintText: '000000',
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 28, letterSpacing: 8, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 28,
+                  letterSpacing: 8,
+                  fontWeight: FontWeight.w600,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(_otpLength),
                 ],
                 onChanged: (value) {
-                  if (_suppressAutoVerify || _isLoading || _verifyInFlight) {
+                  if (_suppressAutoVerify ||
+                      _isLoading ||
+                      _verifyInFlight ||
+                      _leavingOtp) {
                     return;
                   }
                   if (value.length == _otpLength) _verify();
@@ -215,7 +242,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 onPressed: _secondsLeft > 0 ? null : _resend,
               ),
               const Spacer(),
-              PrimaryButton(label: 'Войти', isLoading: _isLoading, onPressed: _verify),
+              PrimaryButton(
+                label: 'Войти',
+                isLoading: _isLoading,
+                onPressed: _verify,
+              ),
             ],
           ),
         ),

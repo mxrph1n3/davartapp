@@ -77,7 +77,11 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 showChevron: false,
               ),
               const SizedBox(height: AppSpacing.md),
-              AppInput(controller: _nameController, labelText: 'Имя'),
+              AppInput(
+                controller: _nameController,
+                labelText: 'Имя',
+                textCapitalization: TextCapitalization.words,
+              ),
               const SizedBox(height: AppSpacing.sm),
               AppInput(
                 controller: _emailController,

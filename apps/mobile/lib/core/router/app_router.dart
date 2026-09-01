@@ -149,7 +149,7 @@ void popOrGo(BuildContext context, String fallback) {
   }
 }
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 bool _isStaffPath(String location) => location.startsWith('/staff');
 
@@ -167,7 +167,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = ref.read(routerRefreshProvider);
 
   final router = GoRouter(
-    navigatorKey: _rootNavigatorKey,
+    navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     refreshListenable: refreshNotifier,
     redirect: (context, state) {
@@ -240,7 +240,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // Fullscreen chat thread — bottom nav hidden.
       GoRoute(
         path: '/chat/:id',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         redirect: (context, state) {
           final id = state.pathParameters['id'];
           if (id == 'new') return AppRoutes.newChat;
@@ -261,7 +261,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/chat/:id/info',
-        parentNavigatorKey: _rootNavigatorKey,
+        parentNavigatorKey: rootNavigatorKey,
         builder: (context, state) {
           final chatId = state.pathParameters['id']!;
           return ChatInfoScreen(chatId: chatId);

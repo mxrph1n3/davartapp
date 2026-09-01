@@ -44,10 +44,14 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
       if (mounted) {
         final phone = _controller.text.trim();
         final embedded = isEmbeddedLogin(GoRouterState.of(context));
-        context.push(
-          otpPath(phone: phone, embedded: embedded),
-          extra: debugCode,
-        );
+        final path = otpPath(phone: phone, embedded: embedded);
+        if (embedded) {
+          // Keep phone under OTP so finishEmbeddedLogin can pop both.
+          context.push(path, extra: debugCode);
+        } else {
+          // Avoid stacking phone → otp → phone again after a failed attempt.
+          context.pushReplacement(path, extra: debugCode);
+        }
       }
     } on Exception catch (error) {
       if (mounted) {

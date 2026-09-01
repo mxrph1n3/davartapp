@@ -4,8 +4,9 @@ import { ConfigService } from '@nestjs/config';
 /**
  * OTP / invite delivery.
  * - SMS_PROVIDER=mock (default): dev-only, logs code
- * - SMS_PROVIDER=smsru: SMS.ru (`SMSRU_API_ID` required)
- * - SMS_PROVIDER=p1sms: P1SMS (`P1SMS_API_KEY` required), Telegram by default
+ * - SMS_PROVIDER=telegram: official Telegram Gateway (`TELEGRAM_GATEWAY_TOKEN`)
+ * - SMS_PROVIDER=p1sms: P1SMS Telegram/SMS (`P1SMS_API_KEY`)
+ * - SMS_PROVIDER=smsru: SMS.ru (`SMSRU_API_ID`)
  */
 @Injectable()
 export class SmsService {
@@ -14,6 +15,13 @@ export class SmsService {
   constructor(private readonly configService: ConfigService) {}
 
   async sendOtp(phone: string, code: string): Promise<void> {
+    const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
+
+    if (provider === 'telegram') {
+      await this.sendViaTelegramGateway(phone, code);
+      return;
+    }
+
     await this.sendText(phone, `DAVart: код ${code}`);
   }
 
@@ -28,6 +36,27 @@ export class SmsService {
         );
       }
       this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
+      return;
+    }
+
+    if (provider === 'telegram') {
+      // Plain text invites are not supported by Gateway — fall back to SMS.ru/p1sms if set,
+      // otherwise log in non-prod.
+      const fallback = this.configService.get<string>('SMS_FALLBACK_PROVIDER');
+      if (fallback === 'smsru') {
+        await this.sendViaSmsRu(phone, message);
+        return;
+      }
+      if (fallback === 'p1sms') {
+        await this.sendViaP1Sms(phone, message);
+        return;
+      }
+      if (nodeEnv === 'production') {
+        throw new ServiceUnavailableException(
+          'Plain SMS invites require SMS_FALLBACK_PROVIDER with telegram OTP',
+        );
+      }
+      this.logger.log(`[MOCK SMS] text for ${phone}: ${message}`);
       return;
     }
 
@@ -54,6 +83,66 @@ export class SmsService {
       `SMS provider "${provider}" is not configured, falling back to mock (non-production only)`,
     );
     this.logger.log(`[MOCK SMS] OTP for ${phone}: ${message}`);
+  }
+
+  /**
+   * Official Telegram Gateway — delivers OTP into Telegram for the phone number.
+   * Token: https://gateway.telegram.org → Access token
+   */
+  private async sendViaTelegramGateway(
+    phone: string,
+    code: string,
+  ): Promise<void> {
+    const token = this.configService.get<string>('TELEGRAM_GATEWAY_TOKEN');
+    if (!token) {
+      throw new ServiceUnavailableException(
+        'TELEGRAM_GATEWAY_TOKEN is not configured',
+      );
+    }
+
+    const e164 = phone.startsWith('+') ? phone : `+${phone}`;
+    const sender = this.configService.get<string>('TELEGRAM_GATEWAY_SENDER');
+
+    const body: Record<string, unknown> = {
+      phone_number: e164,
+      code,
+      ttl: 300,
+    };
+    if (sender) {
+      body.sender_username = sender;
+    }
+
+    const response = await fetch(
+      'https://gatewayapi.telegram.org/sendVerificationMessage',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          accept: 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      result?: { request_id?: string; delivery_status?: { status?: string } };
+    };
+
+    if (!response.ok || payload.ok !== true) {
+      this.logger.error(
+        `Telegram Gateway error: HTTP ${response.status} ${JSON.stringify(payload)}`,
+      );
+      throw new ServiceUnavailableException(
+        payload.error ?? 'Не удалось отправить код в Telegram',
+      );
+    }
+
+    this.logger.log(
+      `Telegram Gateway OTP sent to ${e164} request_id=${payload.result?.request_id ?? '?'} status=${payload.result?.delivery_status?.status ?? '?'}`,
+    );
   }
 
   private async sendViaP1Sms(phone: string, message: string): Promise<void> {

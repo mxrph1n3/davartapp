@@ -49,7 +49,16 @@ class _AskDisplayNameSheetState extends ConsumerState<_AskDisplayNameSheet> {
     }
     setState(() => _saving = true);
     try {
-      await ref.read(profileActionsProvider).updateProfile(name: name);
+      final trimmed = name.trim();
+      final capitalized = trimmed.isEmpty
+          ? trimmed
+          : trimmed
+              .split(RegExp(r'\s+'))
+              .map((part) => part.isEmpty
+                  ? part
+                  : '${part[0].toUpperCase()}${part.substring(1)}')
+              .join(' ');
+      await ref.read(profileActionsProvider).updateProfile(name: capitalized);
       if (mounted) Navigator.pop(context);
     } catch (_) {
       if (mounted) {
@@ -100,6 +109,8 @@ class _AskDisplayNameSheetState extends ConsumerState<_AskDisplayNameSheet> {
             labelText: 'Ваше имя',
             hintText: 'Например, Анна',
             textAlign: TextAlign.start,
+            textCapitalization: TextCapitalization.words,
+            autofocus: true,
           ),
           const SizedBox(height: AppSpacing.lg),
           PrimaryButton(
