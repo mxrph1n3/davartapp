@@ -8,6 +8,7 @@ import 'core/deep_link/deep_link.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/settings/settings_notifier.dart';
+import 'core/widgets/dismiss_keyboard.dart';
 import 'features/auth/presentation/auth_notifier.dart';
 
 class DavartApp extends ConsumerStatefulWidget {
@@ -66,6 +67,7 @@ class _DavartAppState extends ConsumerState<DavartApp> {
       darkTheme: AppTheme.dark,
       themeMode: themeModeAsync.value ?? ThemeMode.system,
       routerConfig: router,
+      builder: (context, child) => DismissKeyboard(child: child ?? const SizedBox()),
     );
   }
 }

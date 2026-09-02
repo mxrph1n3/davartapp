@@ -20,39 +20,55 @@ class ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
+    final fg = isMine ? colors.textOnAccent : colors.textPrimary;
+    final fgMuted = isMine
+        ? colors.textOnAccent.withValues(alpha: 0.72)
+        : colors.textSecondary;
+
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.78,
-        ),
-        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        decoration: BoxDecoration(
-          color: isMine ? colors.accent : colors.surfaceMuted,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(18),
-            topRight: const Radius.circular(18),
-            bottomLeft: Radius.circular(isMine ? 18 : 4),
-            bottomRight: Radius.circular(isMine ? 4 : 18),
+      child: DefaultTextStyle(
+        style: Theme.of(context).textTheme.bodyLarge!.copyWith(color: fg),
+        child: IconTheme(
+          data: IconThemeData(color: fg, size: 20),
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+            ),
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
+            decoration: BoxDecoration(
+              color: isMine ? colors.accent : colors.surfaceMuted,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(18),
+                topRight: const Radius.circular(18),
+                bottomLeft: Radius.circular(isMine ? 18 : 4),
+                bottomRight: Radius.circular(isMine ? 4 : 18),
+              ),
+              border: Border.all(
+                color: isMine ? colors.accent : colors.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                child,
+                if (time != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    time!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: fgMuted,
+                        ),
+                  ),
+                ],
+              ],
+            ),
           ),
-          border: Border.all(
-            color: isMine ? colors.accent : colors.border,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment:
-              isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            child,
-            if (time != null) ...[
-              const SizedBox(height: 4),
-              Text(time!, style: Theme.of(context).textTheme.bodySmall),
-            ],
-          ],
         ),
       ),
     );

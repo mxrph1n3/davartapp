@@ -119,10 +119,11 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final playFill = widget.isMine ? colors.textPrimary : colors.accent;
-    final playIcon = widget.isMine ? colors.background : colors.textPrimary;
-    final played = colors.textPrimary;
-    final unplayed = colors.textPrimary.withValues(alpha: widget.isMine ? 0.28 : 0.22);
+    final onBubble = widget.isMine ? colors.textOnAccent : colors.textPrimary;
+    final playFill = widget.isMine ? onBubble : colors.accent;
+    final playIcon = widget.isMine ? colors.accent : colors.textPrimary;
+    final played = onBubble;
+    final unplayed = onBubble.withValues(alpha: widget.isMine ? 0.35 : 0.22);
 
     return SizedBox(
       width: 214,
@@ -165,6 +166,7 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                     Text(
                       _label,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: onBubble.withValues(alpha: 0.85),
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                     ),
@@ -178,6 +180,7 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
                           _ => '1.5x',
                         },
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: onBubble,
                               fontWeight: FontWeight.w600,
                             ),
                       ),

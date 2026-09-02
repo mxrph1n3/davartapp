@@ -269,6 +269,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 final extra = thread.hasMore || thread.loadingOlder ? 1 : 0;
                 return ListView.builder(
                   controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length + extra,
                   itemBuilder: (context, index) {
