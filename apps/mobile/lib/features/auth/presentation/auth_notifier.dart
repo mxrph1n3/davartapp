@@ -110,8 +110,12 @@ class AuthNotifier extends Notifier<AuthState> {
     );
   }
 
-  Future<String?> sendOtp(String phone) {
-    return _repository.sendOtp(phone);
+  Future<String?> sendOtp(String phone, {String channel = 'telegram'}) async {
+    try {
+      return await _repository.sendOtp(phone, channel: channel);
+    } on DioException catch (error) {
+      throw Exception(_extractError(error));
+    }
   }
 
   Future<void> verifyOtp({

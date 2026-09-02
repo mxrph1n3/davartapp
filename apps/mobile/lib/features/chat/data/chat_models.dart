@@ -102,6 +102,9 @@ class ChatMessage {
     this.attachmentName,
     this.attachmentMime,
     this.product,
+    this.replyTo,
+    this.reactions = const [],
+    this.isPinned = false,
     required this.sender,
     required this.isMine,
     required this.createdAt,
@@ -117,6 +120,9 @@ class ChatMessage {
   final String? attachmentName;
   final String? attachmentMime;
   final ChatProductPreview? product;
+  final ChatReplyPreview? replyTo;
+  final List<ChatReaction> reactions;
+  final bool isPinned;
   final ChatSender sender;
   final bool isMine;
   final DateTime createdAt;
@@ -127,6 +133,9 @@ class ChatMessage {
     bool? isPending,
     bool? isFailed,
     bool? isMine,
+    bool? isPinned,
+    List<ChatReaction>? reactions,
+    ChatReplyPreview? replyTo,
   }) {
     return ChatMessage(
       id: id,
@@ -137,6 +146,9 @@ class ChatMessage {
       attachmentName: attachmentName,
       attachmentMime: attachmentMime,
       product: product,
+      replyTo: replyTo ?? this.replyTo,
+      reactions: reactions ?? this.reactions,
+      isPinned: isPinned ?? this.isPinned,
       sender: sender,
       isMine: isMine ?? this.isMine,
       createdAt: createdAt,
@@ -151,6 +163,7 @@ class ChatMessage {
     required ChatSender sender,
     String? content,
     String? attachmentName,
+    ChatReplyPreview? replyTo,
   }) {
     return ChatMessage(
       id: 'pending-${DateTime.now().microsecondsSinceEpoch}',
@@ -158,6 +171,7 @@ class ChatMessage {
       type: type,
       content: content,
       attachmentName: attachmentName,
+      replyTo: replyTo,
       sender: sender,
       isMine: true,
       createdAt: DateTime.now(),
@@ -177,9 +191,86 @@ class ChatMessage {
       product: json['product'] != null
           ? ChatProductPreview.fromJson(json['product'] as Map<String, dynamic>)
           : null,
+      replyTo: json['replyTo'] != null
+          ? ChatReplyPreview.fromJson(json['replyTo'] as Map<String, dynamic>)
+          : null,
+      reactions: (json['reactions'] as List<dynamic>? ?? [])
+          .map((item) => ChatReaction.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      isPinned: json['isPinned'] as bool? ?? false,
       sender: ChatSender.fromJson(json['sender'] as Map<String, dynamic>),
       isMine: json['isMine'] as bool? ?? false,
       createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+}
+
+class ChatReplyPreview {
+  const ChatReplyPreview({
+    required this.id,
+    required this.type,
+    this.content,
+    this.attachmentName,
+    required this.senderName,
+  });
+
+  final String id;
+  final String type;
+  final String? content;
+  final String? attachmentName;
+  final String senderName;
+
+  String get preview {
+    if (content != null && content!.trim().isNotEmpty) return content!.trim();
+    if (attachmentName != null && attachmentName!.isNotEmpty) {
+      return attachmentName!;
+    }
+    return switch (type) {
+      'image' => 'Фото',
+      'voice' => 'Голосовое сообщение',
+      'file' => 'Файл',
+      'product' => 'Товар',
+      _ => 'Сообщение',
+    };
+  }
+
+  factory ChatReplyPreview.fromJson(Map<String, dynamic> json) {
+    return ChatReplyPreview(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      content: json['content'] as String?,
+      attachmentName: json['attachmentName'] as String?,
+      senderName: json['senderName'] as String? ?? '',
+    );
+  }
+
+  factory ChatReplyPreview.fromMessage(ChatMessage message) {
+    return ChatReplyPreview(
+      id: message.id,
+      type: message.type,
+      content: message.content,
+      attachmentName: message.attachmentName,
+      senderName: message.sender.name,
+    );
+  }
+}
+
+class ChatReaction {
+  const ChatReaction({
+    required this.emoji,
+    required this.count,
+    required this.mine,
+  });
+
+  final String emoji;
+  final int count;
+  final bool mine;
+
+  factory ChatReaction.fromJson(Map<String, dynamic> json) {
+    return ChatReaction(
+      emoji: json['emoji'] as String,
+      count: json['count'] as int? ?? 1,
+      mine: json['mine'] as bool? ?? false,
     );
   }
 }

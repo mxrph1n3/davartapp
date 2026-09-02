@@ -13,7 +13,7 @@ import 'ask_display_name.dart';
 import 'auth_notifier.dart';
 import 'require_login.dart';
 
-const _otpLength = 6;
+const _otpLength = 4;
 
 class OtpScreen extends ConsumerStatefulWidget {
   const OtpScreen({super.key, required this.phone, this.initialCode});
@@ -31,6 +31,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   bool _verifyInFlight = false;
   bool _suppressAutoVerify = false;
   bool _leavingOtp = false;
+  bool _smsSending = false;
   int _secondsLeft = 60;
   Timer? _timer;
 
@@ -109,7 +110,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final code = _controller.text.trim();
     if (code.length != _otpLength) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Код должен содержать $_otpLength цифр')),
+        SnackBar(content: Text('Код должен содержать $_otpLength цифры')),
       );
       return;
     }
@@ -142,11 +143,20 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
   }
 
-  Future<void> _resend() async {
-    if (_secondsLeft > 0 || _leavingOtp) return;
+  Future<void> _resend({String channel = 'telegram'}) async {
+    if (_leavingOtp) return;
+    if (channel == 'telegram' && _secondsLeft > 0) return;
+    if (channel == 'sms' && _smsSending) return;
+
+    if (channel == 'sms') {
+      setState(() => _smsSending = true);
+    }
+
     try {
-      final debugCode =
-          await ref.read(authProvider.notifier).sendOtp(widget.phone);
+      final debugCode = await ref.read(authProvider.notifier).sendOtp(
+            widget.phone,
+            channel: channel,
+          );
       _startTimer();
       if (!mounted) return;
       if (debugCode != null && debugCode.isNotEmpty) {
@@ -160,7 +170,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       } else {
         _controller.clear();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Код отправлен в Telegram')),
+          SnackBar(
+            content: Text(
+              channel == 'sms'
+                  ? 'Код отправлен по SMS'
+                  : 'Код отправлен в Telegram',
+            ),
+          ),
         );
       }
     } on Exception catch (error) {
@@ -170,6 +186,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             content: Text(error.toString().replaceFirst('Exception: ', '')),
           ),
         );
+      }
+    } finally {
+      if (mounted && channel == 'sms') {
+        setState(() => _smsSending = false);
       }
     }
   }
@@ -212,7 +232,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
               const SizedBox(height: AppSpacing.xl),
               AppInput(
                 controller: _controller,
-                hintText: '000000',
+                hintText: '0000',
                 keyboardType: TextInputType.number,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
@@ -239,13 +259,18 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 label: _secondsLeft > 0
                     ? 'Отправить повторно через $_secondsLeft сек'
                     : 'Отправить код повторно',
-                onPressed: _secondsLeft > 0 ? null : _resend,
+                onPressed: _secondsLeft > 0 ? null : () => _resend(),
               ),
               const Spacer(),
               PrimaryButton(
                 label: 'Войти',
                 isLoading: _isLoading,
                 onPressed: _verify,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              SecondaryButton(
+                label: _smsSending ? 'Отправляем SMS…' : 'Отправить по SMS',
+                onPressed: _smsSending ? null : () => _resend(channel: 'sms'),
               ),
             ],
           ),

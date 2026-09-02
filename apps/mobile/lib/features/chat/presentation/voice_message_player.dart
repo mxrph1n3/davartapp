@@ -119,9 +119,11 @@ class _VoiceMessagePlayerState extends State<VoiceMessagePlayer> {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final onBubble = widget.isMine ? colors.textOnAccent : colors.textPrimary;
+    final onBubble =
+        widget.isMine ? colors.chatBubbleMineFg : colors.textPrimary;
     final playFill = widget.isMine ? onBubble : colors.accent;
-    final playIcon = widget.isMine ? colors.accent : colors.textPrimary;
+    final playIcon =
+        widget.isMine ? colors.chatBubbleMine : colors.textOnAccent;
     final played = onBubble;
     final unplayed = onBubble.withValues(alpha: widget.isMine ? 0.35 : 0.22);
 

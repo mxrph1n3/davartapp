@@ -303,11 +303,13 @@ class ProjectMember {
     required this.id,
     required this.role,
     required this.user,
+    this.relation,
   });
 
   final String id;
   final String role;
   final ProjectMemberUser user;
+  final String? relation;
 
   String get roleLabel {
     switch (role) {
@@ -322,6 +324,10 @@ class ProjectMember {
 
   /// Subtitle under the participant name in project detail.
   String? get participantSubtitle {
+    final relationLabel = relation?.trim();
+    if (relationLabel != null && relationLabel.isNotEmpty) {
+      return relationLabel;
+    }
     if (role == 'owner') {
       return user.name != null && user.name!.trim().isNotEmpty
           ? (user.phone.isNotEmpty ? user.phone : null)
@@ -335,6 +341,7 @@ class ProjectMember {
     return ProjectMember(
       id: json['id'] as String,
       role: json['role'] as String? ?? 'member',
+      relation: json['relation'] as String?,
       user: ProjectMemberUser.fromJson(
         json['user'] as Map<String, dynamic>,
       ),

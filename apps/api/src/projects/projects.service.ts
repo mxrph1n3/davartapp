@@ -15,7 +15,11 @@ import {
 import { canSeeContactPhone, isStudioRole } from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BriefPdfService, BRIEF_EDITABLE_STATUSES, PROJECT_STATUS_LABELS } from './brief-pdf.service';
+import {
+  BriefPdfService,
+  BRIEF_EDITABLE_STATUSES,
+  PROJECT_STATUS_LABELS,
+} from './brief-pdf.service';
 import {
   emptyBriefAnswers,
   BRIEF_VALUE_LABELS,
@@ -204,6 +208,7 @@ export class ProjectsService {
       items: members.map((m) => ({
         id: m.id,
         role: m.role,
+        relation: m.relation,
         user: {
           id: m.user.id,
           phone: hidePhones ? '' : m.user.phone,
@@ -230,8 +235,14 @@ export class ProjectsService {
 
     const invitee = await this.prisma.user.upsert({
       where: { phone },
-      update: {},
-      create: { phone, role: UserRole.client },
+      update: {
+        ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
+      },
+      create: {
+        phone,
+        name: dto.name?.trim() || null,
+        role: UserRole.client,
+      },
     });
 
     if (invitee.id === actorId) {
@@ -262,6 +273,7 @@ export class ProjectsService {
         projectId,
         userId: invitee.id,
         role: memberRole,
+        relation: dto.relation?.trim() || null,
       },
       include: {
         user: { select: { id: true, phone: true, name: true, role: true } },
@@ -273,6 +285,7 @@ export class ProjectsService {
     return {
       id: member.id,
       role: member.role,
+      relation: member.relation,
       user: {
         id: member.user.id,
         phone: member.user.phone,
@@ -357,10 +370,8 @@ export class ProjectsService {
       throw new ForbiddenException('Brief is locked');
     }
 
-    const derived = this.deriveLegacyFromAnswers(dto.answers as BriefAnswers | undefined);
-    const projectFields = this.deriveProjectFieldsFromAnswers(
-      dto.answers as BriefAnswers | undefined,
-    );
+    const derived = this.deriveLegacyFromAnswers(dto.answers);
+    const projectFields = this.deriveProjectFieldsFromAnswers(dto.answers);
 
     const brief = await this.prisma.$transaction(async (tx) => {
       await tx.project.update({
@@ -372,7 +383,9 @@ export class ProjectsService {
           ...(projectFields.address !== undefined
             ? { address: projectFields.address }
             : {}),
-          ...(projectFields.area !== undefined ? { area: projectFields.area } : {}),
+          ...(projectFields.area !== undefined
+            ? { area: projectFields.area }
+            : {}),
           ...(projectFields.style !== undefined
             ? { style: projectFields.style }
             : {}),
@@ -411,7 +424,9 @@ export class ProjectsService {
   async requestSurveyor(userId: string, projectId: string) {
     const project = await this.findUserProject(userId, projectId);
     if (project.isShowcase) {
-      throw new ForbiddenException('Showcase portfolio has no surveyor request');
+      throw new ForbiddenException(
+        'Showcase portfolio has no surveyor request',
+      );
     }
 
     if (
@@ -720,7 +735,7 @@ export class ProjectsService {
             create: {
               style: sample.style,
               wishes: 'Пример реализованного проекта студии Davart',
-              rooms: rooms as unknown as Prisma.InputJsonValue,
+              rooms: rooms,
               isLocked: true,
               lockedAt: new Date(),
             },

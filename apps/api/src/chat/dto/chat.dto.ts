@@ -107,6 +107,30 @@ export class SendMessageDto {
   @IsOptional()
   @IsUUID()
   productId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+}
+
+export class MessageIdParamDto {
+  @IsUUID()
+  id!: string;
+
+  @IsUUID()
+  messageId!: string;
+}
+
+export class ToggleReactionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(16)
+  emoji!: string;
+}
+
+export class ForwardMessageDto {
+  @IsUUID()
+  targetChatId!: string;
 }
 
 export class AttachmentUploadUrlDto {

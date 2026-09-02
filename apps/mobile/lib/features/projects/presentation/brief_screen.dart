@@ -83,12 +83,6 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
   void _prefillContacts(Brief brief) {
     if (_prefilled) return;
     final general = brief.answers.general;
-    if ((general['phone'] ?? '').trim().isNotEmpty &&
-        (general['email'] ?? '').trim().isNotEmpty &&
-        (general['address'] ?? '').trim().isNotEmpty) {
-      _prefilled = true;
-      return;
-    }
     final profile = ref.read(profileProvider).asData?.value;
     final project = ref.read(projectDetailProvider(widget.projectId)).asData?.value;
     if (profile == null) return;
@@ -108,6 +102,12 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
       notifier.setGeneral('address', address);
       _controller('g.address', address).text = address;
     }
+    final members = briefParseFamilyMembers(general['householdMembers']);
+    if (members.isEmpty) {
+      notifier.setFamilyMembers([
+        const BriefFamilyMember(role: 'self'),
+      ]);
+    }
   }
 
   bool _roomIncluded(BriefAnswers answers, String roomId) {
@@ -125,8 +125,6 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     return [
       const _BriefStep(id: 'object', title: 'Объект и адрес'),
       const _BriefStep(id: 'rooms', title: 'Какие комнаты есть?'),
-      if (!isCommercial)
-        const _BriefStep(id: 'kitchen', title: 'Кухня или кухня-гостиная?'),
       if (!isCommercial) const _BriefStep(id: 'family', title: 'Состав семьи'),
       if (!isCommercial)
         const _BriefStep(id: 'routine', title: 'Как проходит день?'),
@@ -148,15 +146,6 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
       ),
       const _BriefStep(id: 'finish', title: 'Ещё детали'),
     ];
-  }
-
-  void _applyKitchenLayout(BriefFormNotifier notifier, String layout) {
-    notifier.setRoomIncluded('kitchen', layout == 'kitchen');
-    notifier.setRoomIncluded('kitchen_living', layout == 'kitchen_living');
-    _syncZones(
-      notifier,
-      ref.read(briefFormProvider(widget.projectId)).answers,
-    );
   }
 
   void _syncZones(BriefFormNotifier notifier, BriefAnswers answers) {
@@ -181,20 +170,30 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     final isLast = _step >= steps.length - 1;
     if (!isLast) {
       setState(() => _step += 1);
-    }
-    if (!isLocked) {
-      final success = await notifier.save();
-      if (!mounted) return;
-      if (isLast && success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Анкета сохранена')),
-        );
+      if (!isLocked) {
+        await notifier.save();
       }
       return;
     }
-    if (isLast) {
-      popOrGo(context, fallback);
+
+    if (!isLocked) {
+      final success = await notifier.save();
+      if (!mounted) return;
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Анкета сохранена'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+        await Future<void>.delayed(const Duration(seconds: 1));
+        if (!mounted) return;
+        popOrGo(context, fallback);
+      }
+      return;
     }
+
+    popOrGo(context, fallback);
   }
 
   Future<void> _exitBrief(String fallback) async {
@@ -290,20 +289,26 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                   child: _LockedBanner(),
                 ),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.screenPadding,
-                    AppSpacing.xl,
-                    AppSpacing.screenPadding,
-                    AppSpacing.xl,
-                  ),
-                  child: _stepContent(
-                    step: step,
-                    stepIndex: stepIndex,
-                    total: steps.length,
-                    formState: formState,
-                    notifier: notifier,
-                    isLocked: isLocked,
+                child: GestureDetector(
+                  onTap: () => FocusScope.of(context).unfocus(),
+                  behavior: HitTestBehavior.translucent,
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.screenPadding,
+                      AppSpacing.xl,
+                      AppSpacing.screenPadding,
+                      AppSpacing.xl,
+                    ),
+                    child: _stepContent(
+                      step: step,
+                      stepIndex: stepIndex,
+                      total: steps.length,
+                      formState: formState,
+                      notifier: notifier,
+                      isLocked: isLocked,
+                    ),
                   ),
                 ),
               ),
@@ -411,12 +416,14 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                 member: members[i],
                 enabled: enabled,
                 onChanged: (member) => notifier.updateFamilyMember(i, member),
-                onRemove: enabled ? () => notifier.removeFamilyMember(i) : null,
+                onRemove: enabled && members.length > 1
+                    ? () => notifier.removeFamilyMember(i)
+                    : null,
               ),
               const SizedBox(height: AppSpacing.md),
             ],
             if (enabled)
-              _AddFamilyButton(onPressed: notifier.addFamilyMember),
+              _DashedAddFamilyButton(onPressed: notifier.addFamilyMember),
             const SizedBox(height: AppSpacing.xl),
             Text('Питомцы', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
@@ -615,27 +622,6 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                 lines: 1,
               ),
             ],
-          ],
-        );
-      case 'kitchen':
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BriefStepHeader(
-              eyebrow: eyebrow,
-              title: step.title,
-              subtitle: 'От этого зависят вопросы по зоне готовки.',
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            BriefChipWrap(
-              choices: briefKitchenLayoutChoices,
-              selectedIds: briefSelectedIds(general['kitchenLayout']),
-              enabled: enabled,
-              onToggle: (id) {
-                notifier.setGeneral('kitchenLayout', id);
-                _applyKitchenLayout(notifier, id);
-              },
-            ),
           ],
         );
       case 'rooms':
@@ -928,30 +914,82 @@ class _CountChip extends StatelessWidget {
   }
 }
 
-class _AddFamilyButton extends StatelessWidget {
-  const _AddFamilyButton({required this.onPressed});
+class _DashedAddFamilyButton extends StatelessWidget {
+  const _DashedAddFamilyButton({required this.onPressed});
 
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return Center(
-      child: Material(
-        color: colors.accent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onPressed,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: CustomPaint(
+          painter: _DashedRRectPainter(
+            color: colors.border,
+            radius: 16,
+          ),
           child: SizedBox(
-            width: 52,
-            height: 52,
-            child: Icon(Icons.add, size: 28, color: colors.textOnAccent),
+            height: 54,
+            width: double.infinity,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add, size: 22, color: colors.textPrimary),
+                const SizedBox(width: 8),
+                Text(
+                  'Добавить участника',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _DashedRRectPainter extends CustomPainter {
+  _DashedRRectPainter({required this.color, required this.radius});
+
+  final Color color;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      const dash = 6.0;
+      const gap = 4.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
 class _FamilyMemberCard extends StatelessWidget {

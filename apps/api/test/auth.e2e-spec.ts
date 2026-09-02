@@ -129,7 +129,7 @@ describe('Auth (e2e)', () => {
       .expect(200);
 
     expect(response.body.message).toBe('OTP sent');
-    expect(response.body.debugCode).toMatch(/^\d{6}$/);
+    expect(response.body.debugCode).toMatch(/^\d{4}$/);
     expect(redisStore.get('otp:+79001234567')).toBe(
       hashOtp(response.body.debugCode as string),
     );
@@ -147,16 +147,16 @@ describe('Auth (e2e)', () => {
   it('POST /api/auth/verify-otp with invalid code', async () => {
     await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
-      .send({ phone: '+79001234567', code: '123456' })
+      .send({ phone: '+79001234567', code: '1234' })
       .expect(401);
   });
 
   it('POST /api/auth/verify-otp with valid code', async () => {
-    redisStore.set('otp:+79001234567', hashOtp('123456'));
+    redisStore.set('otp:+79001234567', hashOtp('1234'));
 
     const response = await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
-      .send({ phone: '+79001234567', code: '123456' })
+      .send({ phone: '+79001234567', code: '1234' })
       .expect(200);
 
     expect(response.body.accessToken).toBeDefined();
@@ -166,32 +166,32 @@ describe('Auth (e2e)', () => {
   });
 
   it('POST /api/auth/verify-otp locks after too many attempts', async () => {
-    redisStore.set('otp:+79001234567', hashOtp('999999'));
+    redisStore.set('otp:+79001234567', hashOtp('9999'));
 
     for (let i = 0; i < 4; i += 1) {
       await request(app.getHttpServer())
         .post('/api/auth/verify-otp')
-        .send({ phone: '+79001234567', code: '000000' })
+        .send({ phone: '+79001234567', code: '0000' })
         .expect(401);
     }
 
     await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
-      .send({ phone: '+79001234567', code: '000000' })
+      .send({ phone: '+79001234567', code: '0000' })
       .expect(429);
 
     await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
-      .send({ phone: '+79001234567', code: '999999' })
+      .send({ phone: '+79001234567', code: '9999' })
       .expect(429);
   });
 
   it('POST /api/auth/refresh and logout', async () => {
-    redisStore.set('otp:+79001234567', hashOtp('123456'));
+    redisStore.set('otp:+79001234567', hashOtp('1234'));
 
     const verified = await request(app.getHttpServer())
       .post('/api/auth/verify-otp')
-      .send({ phone: '+79001234567', code: '123456' })
+      .send({ phone: '+79001234567', code: '1234' })
       .expect(200);
 
     const refreshToken = verified.body.refreshToken as string;

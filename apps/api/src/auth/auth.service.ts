@@ -18,7 +18,7 @@ import { RedisService } from '../redis/redis.service';
 import { allRolesOf, hasStudioRole } from './roles';
 import { SmsService } from './sms.service';
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 4;
 const OTP_TTL_SECONDS = 300;
 const OTP_RATE_LIMIT = 3;
 const OTP_RATE_WINDOW_SECONDS = 900;
@@ -51,19 +51,16 @@ export class AuthService {
 
   async sendOtp(
     phone: string,
-  ): Promise<{ message: string; debugCode?: string }> {
+    channel: 'telegram' | 'sms' = 'telegram',
+  ): Promise<{ message: string; channel: string; debugCode?: string }> {
     await this.ensureRedisAvailable();
     await this.enforceOtpRateLimit(phone);
 
     const code = randomInt(0, 10 ** OTP_LENGTH)
       .toString()
       .padStart(OTP_LENGTH, '0');
-    await this.redis.set(
-      `otp:${phone}`,
-      this.hashOtp(code),
-      OTP_TTL_SECONDS,
-    );
-    await this.smsService.sendOtp(phone, code);
+    await this.redis.set(`otp:${phone}`, this.hashOtp(code), OTP_TTL_SECONDS);
+    await this.smsService.sendOtp(phone, code, channel);
 
     const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
@@ -72,6 +69,7 @@ export class AuthService {
 
     return {
       message: 'OTP sent',
+      channel,
       ...(debugCode ? { debugCode } : {}),
     };
   }

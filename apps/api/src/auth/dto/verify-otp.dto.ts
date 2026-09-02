@@ -8,7 +8,7 @@ export class VerifyOtpDto {
   phone!: string;
 
   @IsString()
-  @Length(6, 6)
-  @Matches(/^\d{6}$/, { message: 'Code must be 6 digits' })
+  @Length(4, 4)
+  @Matches(/^\d{4}$/, { message: 'Code must be 4 digits' })
   code!: string;
 }

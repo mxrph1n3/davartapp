@@ -322,41 +322,110 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
     final projectId = chat.projectId;
     if (projectId == null) return;
 
-    final controller = TextEditingController();
-    final phone = await showDialog<String>(
+    final phoneController = TextEditingController();
+    final nameController = TextEditingController();
+    var relation = 'relative';
+    final result = await showDialog<({String phone, String name, String relation})>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          title: const Text('Добавить участника'),
-          content: TextField(
-            controller: controller,
-            keyboardType: TextInputType.phone,
-            decoration: const InputDecoration(
-              labelText: 'Телефон',
-              hintText: '+79001234567',
-            ),
-            autofocus: true,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Отмена'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Добавить'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            return AlertDialog(
+              title: const Text('Добавить участника'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Телефон',
+                        hintText: '+79001234567',
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Имя',
+                        hintText: 'Как зовут',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Кем приходится',
+                        style: Theme.of(ctx).textTheme.bodySmall,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final choice in const [
+                          ('partner', 'Супруг'),
+                          ('child', 'Ребёнок'),
+                          ('parent', 'Родитель'),
+                          ('relative', 'Родственник'),
+                          ('other', 'Другой'),
+                        ])
+                          ChoiceChip(
+                            label: Text(choice.$2),
+                            selected: relation == choice.$1,
+                            onSelected: (_) =>
+                                setLocal(() => relation = choice.$1),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Отмена'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final phone = phoneController.text.trim();
+                    final name = nameController.text.trim();
+                    if (phone.isEmpty || name.isEmpty) return;
+                    Navigator.of(ctx).pop((
+                      phone: phone,
+                      name: name,
+                      relation: relation,
+                    ));
+                  },
+                  child: const Text('Добавить'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    if (phone == null || phone.isEmpty) return;
+    if (result == null) return;
+
+    const relationLabels = {
+      'partner': 'Супруг',
+      'child': 'Ребёнок',
+      'parent': 'Родитель',
+      'relative': 'Родственник',
+      'other': 'Другой',
+    };
 
     try {
       await ref.read(projectsRepositoryProvider).inviteMember(
             projectId: projectId,
-            phone: phone,
+            phone: result.phone,
+            name: result.name,
+            relation: relationLabels[result.relation] ?? result.relation,
           );
       ref.invalidate(chatDetailsProvider(widget.chatId));
       if (mounted) {

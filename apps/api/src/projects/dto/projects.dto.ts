@@ -45,6 +45,15 @@ export class InviteProjectMemberDto {
   @MinLength(10)
   phone!: string;
 
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  relation?: string;
+
   @IsOptional()
   @IsIn(['member', 'viewer'])
   role?: 'member' | 'viewer';

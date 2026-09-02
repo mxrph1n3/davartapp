@@ -188,7 +188,7 @@ class ChatMessagesNotifier
     }
   }
 
-  Future<void> sendText(String text) async {
+  Future<void> sendText(String text, {String? replyToId}) async {
     final sending = ref.read(chatSendingProvider(arg));
     if (sending) return;
 
@@ -198,6 +198,7 @@ class ChatMessagesNotifier
             chatId: arg,
             type: 'text',
             content: text,
+            replyToId: replyToId,
           );
       _appendMessage(message);
     } catch (error) {
@@ -205,6 +206,46 @@ class ChatMessagesNotifier
     } finally {
       ref.read(chatSendingProvider(arg).notifier).setSending(false);
     }
+  }
+
+  Future<void> toggleReaction(String messageId, String emoji) async {
+    final message = await ref.read(chatRepositoryProvider).toggleReaction(
+          chatId: arg,
+          messageId: messageId,
+          emoji: emoji,
+        );
+    _replaceMessage(messageId, message);
+  }
+
+  Future<void> setPinned(String messageId, {required bool pinned}) async {
+    final message = await ref.read(chatRepositoryProvider).pinMessage(
+          chatId: arg,
+          messageId: messageId,
+          pinned: pinned,
+        );
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        messages: [
+          for (final item in current.messages)
+            item.id == message.id
+                ? _owned(message)
+                : (pinned ? item.copyWith(isPinned: false) : item),
+        ],
+      ),
+    );
+  }
+
+  Future<void> forwardMessage({
+    required String messageId,
+    required String targetChatId,
+  }) async {
+    await ref.read(chatRepositoryProvider).forwardMessage(
+          chatId: arg,
+          messageId: messageId,
+          targetChatId: targetChatId,
+        );
   }
 
   Future<void> sendAttachment({
@@ -231,17 +272,11 @@ class ChatMessagesNotifier
 
     try {
       final upload =
-          await ref.read(chatRepositoryProvider).createAttachmentUploadUrl(
+          await ref.read(chatRepositoryProvider).uploadAttachmentBytes(
                 fileName: fileName,
                 contentType: contentType,
-                size: bytes.length,
+                bytes: bytes,
               );
-
-      await ref.read(chatRepositoryProvider).uploadAttachment(
-            uploadUrl: upload['uploadUrl'] as String,
-            bytes: bytes,
-            contentType: contentType,
-          );
 
       final message = await ref.read(chatRepositoryProvider).sendMessage(
             chatId: arg,

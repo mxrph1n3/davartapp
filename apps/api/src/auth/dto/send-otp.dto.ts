@@ -1,4 +1,4 @@
-import { IsString, Matches } from 'class-validator';
+import { IsIn, IsOptional, IsString, Matches } from 'class-validator';
 
 export class SendOtpDto {
   @IsString()
@@ -6,4 +6,9 @@ export class SendOtpDto {
     message: 'Phone must be in format +7XXXXXXXXXX',
   })
   phone!: string;
+
+  /** telegram (default) or sms fallback */
+  @IsOptional()
+  @IsIn(['telegram', 'sms'])
+  channel?: 'telegram' | 'sms';
 }

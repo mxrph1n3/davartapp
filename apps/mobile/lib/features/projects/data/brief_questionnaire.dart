@@ -168,7 +168,7 @@ const briefCommercialTypeChoices = <BriefChoice>[
 
 const briefFamilyRoleChoices = <BriefChoice>[
   BriefChoice(id: 'self', label: 'Я'),
-  BriefChoice(id: 'partner', label: 'Партнёр / супруг(а)'),
+  BriefChoice(id: 'partner', label: 'Супруг'),
   BriefChoice(id: 'child', label: 'Ребёнок'),
   BriefChoice(id: 'parent', label: 'Родитель'),
   BriefChoice(id: 'relative', label: 'Родственник'),

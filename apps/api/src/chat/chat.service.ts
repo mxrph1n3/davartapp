@@ -27,7 +27,6 @@ import {
   SendMessageDto,
 } from './dto/chat.dto';
 
-
 const DAVART_CHAT_TITLE = 'DAVart';
 const SUPPORT_ROSTER_REDIS_PREFIX = 'chat:support-roster:v3:';
 
@@ -55,8 +54,45 @@ type MessageWithRelations = Prisma.MessageGetPayload<{
         slug: true;
       };
     };
+    replyTo: {
+      select: {
+        id: true;
+        type: true;
+        content: true;
+        attachmentName: true;
+        sender: { select: { id: true; name: true; phone: true; role: true } };
+      };
+    };
+    reactions: {
+      select: { emoji: true; userId: true };
+    };
   };
 }>;
+
+const messageInclude = {
+  sender: { select: { id: true, name: true, phone: true, role: true } },
+  product: {
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      imageUrl: true,
+      slug: true,
+    },
+  },
+  replyTo: {
+    select: {
+      id: true,
+      type: true,
+      content: true,
+      attachmentName: true,
+      sender: { select: { id: true, name: true, phone: true, role: true } },
+    },
+  },
+  reactions: {
+    select: { emoji: true, userId: true },
+  },
+} as const;
 
 @Injectable()
 export class ChatService {
@@ -74,9 +110,7 @@ export class ChatService {
       where: { id: userId },
       select: { role: true, extraRoles: true },
     });
-    const viewerRoles = viewer
-      ? [viewer.role, ...viewer.extraRoles]
-      : [];
+    const viewerRoles = viewer ? [viewer.role, ...viewer.extraRoles] : [];
     const viewerRole =
       viewerRoles.find((role) => isStudioRole(role)) ?? viewer?.role;
 
@@ -97,7 +131,9 @@ export class ChatService {
               orderBy: { createdAt: 'desc' },
               take: 1,
               include: {
-                sender: { select: { id: true, name: true, phone: true, role: true } },
+                sender: {
+                  select: { id: true, name: true, phone: true, role: true },
+                },
               },
             },
           },
@@ -106,8 +142,7 @@ export class ChatService {
       orderBy: { chat: { updatedAt: 'desc' } },
     });
 
-    const items = participants
-      .map((participant) => {
+    const items = participants.map((participant) => {
       const lastMessage = participant.chat.messages[0];
       return {
         id: participant.chat.id,
@@ -201,10 +236,7 @@ export class ChatService {
                     projectMemberships: {
                       some: {
                         project: {
-                          OR: [
-                            { designerId: userId },
-                            { surveyorId: userId },
-                          ],
+                          OR: [{ designerId: userId }, { surveyorId: userId }],
                         },
                       },
                     },
@@ -244,10 +276,7 @@ export class ChatService {
       const projectStaff = await this.prisma.project.findMany({
         where: {
           isShowcase: false,
-          OR: [
-            { userId },
-            { members: { some: { userId } } },
-          ],
+          OR: [{ userId }, { members: { some: { userId } } }],
         },
         select: {
           designerId: true,
@@ -301,9 +330,11 @@ export class ChatService {
         .map((user) => ({
           id: user.id,
           name: this.publicDisplayName(user, {
-            revealPhone: isStudio && canSeeContactPhone(
-              roles.find((role) => isStudioRole(role)) ?? viewer.role,
-            ),
+            revealPhone:
+              isStudio &&
+              canSeeContactPhone(
+                roles.find((role) => isStudioRole(role)) ?? viewer.role,
+              ),
           }),
           phone: isStudio ? user.phone : undefined,
           role: user.role,
@@ -422,10 +453,7 @@ export class ChatService {
     const appUrl =
       this.configService.get<string>('APP_DOWNLOAD_URL') ??
       'https://davart.ru/app';
-    const from =
-      actor.name?.trim() ||
-      actor.phone ||
-      'пользователь DAVart';
+    const from = actor.name?.trim() || actor.phone || 'пользователь DAVart';
     await this.smsService.sendText(
       phone,
       `${from} приглашает вас в чат DAVart. Скачать: ${appUrl}`,
@@ -473,30 +501,14 @@ export class ChatService {
     return participants.map((participant) => participant.userId);
   }
 
-  async getMessages(
-    userId: string,
-    chatId: string,
-    page = 1,
-    limit = 30,
-  ) {
+  async getMessages(userId: string, chatId: string, page = 1, limit = 30) {
     await this.ensureParticipant(userId, chatId);
 
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.prisma.message.findMany({
         where: { chatId },
-        include: {
-          sender: { select: { id: true, name: true, phone: true, role: true } },
-          product: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              imageUrl: true,
-              slug: true,
-            },
-          },
-        },
+        include: messageInclude,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -520,7 +532,10 @@ export class ChatService {
     await this.ensureParticipant(userId, chatId);
     this.validateMessagePayload(dto);
 
-    if (dto.attachmentKey && !dto.attachmentKey.startsWith(`chats/${userId}/attachments/`)) {
+    if (
+      dto.attachmentKey &&
+      !dto.attachmentKey.startsWith(`chats/${userId}/attachments/`)
+    ) {
       throw new BadRequestException('Attachment key does not belong to sender');
     }
 
@@ -530,6 +545,16 @@ export class ChatService {
       });
       if (!product) {
         throw new NotFoundException('Product not found');
+      }
+    }
+
+    if (dto.replyToId) {
+      const replyTarget = await this.prisma.message.findFirst({
+        where: { id: dto.replyToId, chatId },
+        select: { id: true },
+      });
+      if (!replyTarget) {
+        throw new BadRequestException('Reply target not found in this chat');
       }
     }
 
@@ -544,19 +569,9 @@ export class ChatService {
           attachmentName: dto.attachmentName,
           attachmentMime: dto.attachmentMime,
           productId: dto.productId,
+          replyToId: dto.replyToId,
         },
-        include: {
-          sender: { select: { id: true, name: true, phone: true, role: true } },
-          product: {
-            select: {
-              id: true,
-              name: true,
-              price: true,
-              imageUrl: true,
-              slug: true,
-            },
-          },
-        },
+        include: messageInclude,
       });
 
       await tx.chat.update({
@@ -597,7 +612,9 @@ export class ChatService {
     }
 
     if (chat.type === ChatType.support) {
-      const client = chat.participants.find((p) => p.user.role === UserRole.client);
+      const client = chat.participants.find(
+        (p) => p.user.role === UserRole.client,
+      );
       if (client) {
         await this.syncStaffIntoSupportChat(
           chat.id,
@@ -696,7 +713,9 @@ export class ChatService {
 
       let attachmentUrl: string | null = null;
       if (message.attachmentKey && this.storage.isAvailable()) {
-        attachmentUrl = await this.storage.getDownloadUrl(message.attachmentKey);
+        attachmentUrl = await this.storage.getDownloadUrl(
+          message.attachmentKey,
+        );
       }
 
       items.push({
@@ -730,10 +749,7 @@ export class ChatService {
     return { chatId, readAt: new Date() };
   }
 
-  async createAttachmentUploadUrl(
-    userId: string,
-    dto: AttachmentUploadUrlDto,
-  ) {
+  async createAttachmentUploadUrl(userId: string, dto: AttachmentUploadUrlDto) {
     if (!this.storage.isAvailable()) {
       throw new BadRequestException('File storage is not available');
     }
@@ -783,6 +799,194 @@ export class ChatService {
       attachmentKey: storageKey,
       expiresIn: 900,
     };
+  }
+
+  async uploadAttachment(
+    userId: string,
+    file: {
+      originalname: string;
+      mimetype: string;
+      size: number;
+      buffer: Buffer;
+    },
+  ) {
+    if (!this.storage.isAvailable()) {
+      throw new BadRequestException('File storage is not available');
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      throw new BadRequestException('File is too large (max 50 MB)');
+    }
+
+    const contentType = (file.mimetype || 'application/octet-stream').toLowerCase();
+    this.assertAllowedAttachmentType(contentType);
+
+    const attachmentId = randomUUID();
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storageKey = `chats/${userId}/attachments/${attachmentId}/${safeName}`;
+    await this.storage.uploadObject(storageKey, file.buffer, contentType);
+
+    return {
+      attachmentKey: storageKey,
+      attachmentName: file.originalname,
+      attachmentMime: contentType,
+    };
+  }
+
+  async toggleReaction(
+    userId: string,
+    chatId: string,
+    messageId: string,
+    emoji: string,
+  ) {
+    await this.ensureParticipant(userId, chatId);
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      select: { id: true },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+
+    const existing = await this.prisma.messageReaction.findUnique({
+      where: {
+        messageId_userId_emoji: { messageId, userId, emoji },
+      },
+    });
+    if (existing) {
+      await this.prisma.messageReaction.delete({ where: { id: existing.id } });
+    } else {
+      await this.prisma.messageReaction.create({
+        data: { messageId, userId, emoji },
+      });
+    }
+
+    const refreshed = await this.prisma.message.findUniqueOrThrow({
+      where: { id: messageId },
+      include: messageInclude,
+    });
+    return this.formatMessage(refreshed, userId);
+  }
+
+  async setPinned(
+    userId: string,
+    chatId: string,
+    messageId: string,
+    pinned: boolean,
+  ) {
+    await this.ensureParticipant(userId, chatId);
+    const message = await this.prisma.message.findFirst({
+      where: { id: messageId, chatId },
+      select: { id: true },
+    });
+    if (!message) throw new NotFoundException('Message not found');
+
+    if (pinned) {
+      await this.prisma.$transaction([
+        this.prisma.message.updateMany({
+          where: { chatId, isPinned: true },
+          data: { isPinned: false, pinnedAt: null },
+        }),
+        this.prisma.message.update({
+          where: { id: messageId },
+          data: { isPinned: true, pinnedAt: new Date() },
+        }),
+      ]);
+    } else {
+      await this.prisma.message.update({
+        where: { id: messageId },
+        data: { isPinned: false, pinnedAt: null },
+      });
+    }
+
+    const refreshed = await this.prisma.message.findUniqueOrThrow({
+      where: { id: messageId },
+      include: messageInclude,
+    });
+    return this.formatMessage(refreshed, userId);
+  }
+
+  async forwardMessage(
+    userId: string,
+    chatId: string,
+    messageId: string,
+    targetChatId: string,
+  ) {
+    await this.ensureParticipant(userId, chatId);
+    await this.ensureParticipant(userId, targetChatId);
+
+    const source = await this.prisma.message.findFirst({
+      where: { id: messageId, chatId },
+    });
+    if (!source) throw new NotFoundException('Message not found');
+
+    const message = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.message.create({
+        data: {
+          chatId: targetChatId,
+          senderId: userId,
+          type: source.type,
+          content: source.content,
+          attachmentKey: source.attachmentKey,
+          attachmentName: source.attachmentName,
+          attachmentMime: source.attachmentMime,
+          productId: source.productId,
+        },
+        include: messageInclude,
+      });
+
+      await tx.chat.update({
+        where: { id: targetChatId },
+        data: { updatedAt: new Date() },
+      });
+
+      await tx.chatParticipant.updateMany({
+        where: { chatId: targetChatId, userId: { not: userId } },
+        data: { unreadCount: { increment: 1 } },
+      });
+
+      return created;
+    });
+
+    return this.formatMessage(message, userId);
+  }
+
+  async getPinnedMessage(userId: string, chatId: string) {
+    await this.ensureParticipant(userId, chatId);
+    const pinned = await this.prisma.message.findFirst({
+      where: { chatId, isPinned: true },
+      include: messageInclude,
+      orderBy: { pinnedAt: 'desc' },
+    });
+    if (!pinned) return null;
+    return this.formatMessage(pinned, userId);
+  }
+
+  private assertAllowedAttachmentType(contentType: string) {
+    const allowed = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+      'application/pdf',
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/acad',
+      'application/x-dwg',
+      'image/vnd.dwg',
+      'application/dwg',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'audio/mp4',
+      'audio/m4a',
+      'audio/aac',
+      'audio/mpeg',
+      'video/mp4',
+    ];
+    if (!allowed.includes(contentType)) {
+      throw new BadRequestException('This file type is not allowed');
+    }
   }
 
   /** Remove a demoted user from all Davart support chats (keep their own client chat via ensureDavartChat). */
@@ -864,7 +1068,13 @@ export class ChatService {
   ) {
     const actor = await this.prisma.user.findUnique({
       where: { id: actorId },
-      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        extraRoles: true,
+      },
     });
     if (!actor || !hasSupportDutyRole(allRolesOf(actor))) {
       throw new ForbiddenException('Only managers can add staff to support');
@@ -886,7 +1096,13 @@ export class ChatService {
 
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
-      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        extraRoles: true,
+      },
     });
     if (!target) {
       throw new NotFoundException('User not found');
@@ -946,7 +1162,13 @@ export class ChatService {
   }) {
     const actor = await this.prisma.user.findUnique({
       where: { id: params.actorId },
-      select: { id: true, name: true, phone: true, role: true, extraRoles: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        extraRoles: true,
+      },
     });
     if (!actor || !hasSupportDutyRole(allRolesOf(actor))) {
       throw new ForbiddenException('Only managers can assign project staff');
@@ -1138,10 +1360,7 @@ export class ChatService {
 
     const duty = await this.listDutyStaffIds();
     const senderId =
-      project.managerId ??
-      duty[0] ??
-      project.designerId ??
-      project.userId;
+      project.managerId ?? duty[0] ?? project.designerId ?? project.userId;
 
     await this.createSeedMessage({
       chatId,
@@ -1230,10 +1449,7 @@ export class ChatService {
 
     const duty = await this.listDutyStaffIds();
     const senderId =
-      project.managerId ??
-      duty[0] ??
-      project.designerId ??
-      project.userId;
+      project.managerId ?? duty[0] ?? project.designerId ?? project.userId;
 
     await this.createSeedMessage({
       chatId: chat.id,
@@ -1279,7 +1495,9 @@ export class ChatService {
               orderBy: { createdAt: 'desc' },
               take: 1,
               include: {
-                sender: { select: { id: true, name: true, phone: true, role: true } },
+                sender: {
+                  select: { id: true, name: true, phone: true, role: true },
+                },
               },
             },
           },
@@ -1524,18 +1742,7 @@ export class ChatService {
         type: params.type,
         content: params.content,
       },
-      include: {
-        sender: { select: { id: true, name: true, phone: true, role: true } },
-        product: {
-          select: {
-            id: true,
-            name: true,
-            price: true,
-            imageUrl: true,
-            slug: true,
-          },
-        },
-      },
+      include: messageInclude,
     });
 
     await this.prisma.$transaction([
@@ -1725,6 +1932,18 @@ export class ChatService {
       attachmentUrl = await this.storage.getDownloadUrl(message.attachmentKey);
     }
 
+    const reactionMap = new Map<string, { emoji: string; count: number; mine: boolean }>();
+    for (const reaction of message.reactions ?? []) {
+      const current = reactionMap.get(reaction.emoji) ?? {
+        emoji: reaction.emoji,
+        count: 0,
+        mine: false,
+      };
+      current.count += 1;
+      if (reaction.userId === viewerId) current.mine = true;
+      reactionMap.set(reaction.emoji, current);
+    }
+
     return {
       id: message.id,
       chatId: message.chatId,
@@ -1742,6 +1961,17 @@ export class ChatService {
             slug: message.product.slug,
           }
         : null,
+      replyTo: message.replyTo
+        ? {
+            id: message.replyTo.id,
+            type: message.replyTo.type,
+            content: message.replyTo.content,
+            attachmentName: message.replyTo.attachmentName,
+            senderName: this.publicDisplayName(message.replyTo.sender),
+          }
+        : null,
+      reactions: [...reactionMap.values()],
+      isPinned: message.isPinned,
       sender: {
         id: message.sender.id,
         name: this.publicDisplayName(message.sender),

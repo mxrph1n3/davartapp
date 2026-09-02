@@ -100,10 +100,17 @@ class ProjectsRepository {
   Future<ProjectMember> inviteMember({
     required String projectId,
     required String phone,
+    required String name,
+    String? relation,
   }) async {
     final response = await _dio.post(
       '/projects/$projectId/members',
-      data: {'phone': phone},
+      data: {
+        'phone': phone,
+        'name': name,
+        if (relation != null && relation.trim().isNotEmpty)
+          'relation': relation.trim(),
+      },
     );
     return ProjectMember.fromJson(response.data as Map<String, dynamic>);
   }

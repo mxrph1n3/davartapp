@@ -42,6 +42,7 @@ class ChatRepository {
     String? attachmentName,
     String? attachmentMime,
     String? productId,
+    String? replyToId,
   }) async {
     final response = await _dio.post(
       '/chats/$chatId/messages',
@@ -52,6 +53,7 @@ class ChatRepository {
         if (attachmentName != null) 'attachmentName': attachmentName,
         if (attachmentMime != null) 'attachmentMime': attachmentMime,
         if (productId != null) 'productId': productId,
+        if (replyToId != null) 'replyToId': replyToId,
       },
     );
     return ChatMessage.fromJson(response.data as Map<String, dynamic>);
@@ -77,6 +79,31 @@ class ChatRepository {
     return response.data as Map<String, dynamic>;
   }
 
+  /// Upload via API proxy — phone never talks to MinIO directly.
+  Future<Map<String, dynamic>> uploadAttachmentBytes({
+    required String fileName,
+    required String contentType,
+    required List<int> bytes,
+  }) async {
+    final formData = FormData.fromMap({
+      'file': MultipartFile.fromBytes(
+        bytes,
+        filename: fileName,
+        contentType: DioMediaType.parse(contentType),
+      ),
+    });
+    final response = await _dio.post(
+      '/chats/attachments/upload',
+      data: formData,
+      options: Options(
+        sendTimeout: const Duration(minutes: 2),
+        receiveTimeout: const Duration(minutes: 2),
+      ),
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  @Deprecated('Use uploadAttachmentBytes — direct S3 PUT fails on device')
   Future<void> uploadAttachment({
     required String uploadUrl,
     required List<int> bytes,
@@ -105,6 +132,47 @@ class ChatRepository {
       }
     }
     throw lastError ?? ChatSendException('Не удалось загрузить файл');
+  }
+
+  Future<ChatMessage> toggleReaction({
+    required String chatId,
+    required String messageId,
+    required String emoji,
+  }) async {
+    final response = await _dio.post(
+      '/chats/$chatId/messages/$messageId/reactions',
+      data: {'emoji': emoji},
+    );
+    return ChatMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> pinMessage({
+    required String chatId,
+    required String messageId,
+    required bool pinned,
+  }) async {
+    final response = await _dio.post(
+      '/chats/$chatId/messages/$messageId/${pinned ? 'pin' : 'unpin'}',
+    );
+    return ChatMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage> forwardMessage({
+    required String chatId,
+    required String messageId,
+    required String targetChatId,
+  }) async {
+    final response = await _dio.post(
+      '/chats/$chatId/messages/$messageId/forward',
+      data: {'targetChatId': targetChatId},
+    );
+    return ChatMessage.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<ChatMessage?> getPinnedMessage(String chatId) async {
+    final response = await _dio.get('/chats/$chatId/pinned');
+    if (response.data == null) return null;
+    return ChatMessage.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<void> seedDemo() async {

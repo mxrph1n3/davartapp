@@ -20,9 +20,10 @@ class ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final fg = isMine ? colors.textOnAccent : colors.textPrimary;
+    final bg = isMine ? colors.chatBubbleMine : colors.chatBubbleTheirs;
+    final fg = isMine ? colors.chatBubbleMineFg : colors.textPrimary;
     final fgMuted = isMine
-        ? colors.textOnAccent.withValues(alpha: 0.72)
+        ? colors.chatBubbleMineFg.withValues(alpha: 0.72)
         : colors.textSecondary;
 
     return Align(
@@ -41,15 +42,12 @@ class ChatBubble extends StatelessWidget {
               vertical: AppSpacing.sm,
             ),
             decoration: BoxDecoration(
-              color: isMine ? colors.accent : colors.surfaceMuted,
+              color: bg,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(18),
                 topRight: const Radius.circular(18),
                 bottomLeft: Radius.circular(isMine ? 18 : 4),
                 bottomRight: Radius.circular(isMine ? 4 : 18),
-              ),
-              border: Border.all(
-                color: isMine ? colors.accent : colors.border,
               ),
             ),
             child: Column(

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -6,8 +7,12 @@ import {
   Param,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { UserRole } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -25,12 +30,14 @@ import {
   ChatContactsQueryDto,
   ChatIdParamDto,
   CreatePersonalChatDto,
+  ForwardMessageDto,
   InviteChatByPhoneDto,
+  MessageIdParamDto,
   MessagesQueryDto,
   ProjectChatParamDto,
   SendMessageDto,
+  ToggleReactionDto,
 } from './dto/chat.dto';
-
 
 @Controller('chats')
 @UseGuards(JwtAuthGuard)
@@ -102,6 +109,112 @@ export class ChatController {
     @Body() dto: AttachmentUploadUrlDto,
   ) {
     return this.chatService.createAttachmentUploadUrl(user.sub, dto);
+  }
+
+  @Post('attachments/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
+  uploadAttachment(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile()
+    file:
+      | {
+          originalname: string;
+          mimetype: string;
+          size: number;
+          buffer: Buffer;
+        }
+      | undefined,
+  ) {
+    if (!file) {
+      throw new BadRequestException('File is required');
+    }
+    return this.chatService.uploadAttachment(user.sub, file);
+  }
+
+  @Get(':id/pinned')
+  getPinned(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+  ) {
+    return this.chatService.getPinnedMessage(user.sub, params.id);
+  }
+
+  @Post(':id/messages/:messageId/reactions')
+  @HttpCode(200)
+  async toggleReaction(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: MessageIdParamDto,
+    @Body() dto: ToggleReactionDto,
+  ) {
+    const message = await this.chatService.toggleReaction(
+      user.sub,
+      params.id,
+      params.messageId,
+      dto.emoji,
+    );
+    this.chatGateway.emitNewMessage(params.id, message);
+    return message;
+  }
+
+  @Post(':id/messages/:messageId/pin')
+  @HttpCode(200)
+  async pinMessage(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: MessageIdParamDto,
+  ) {
+    const message = await this.chatService.setPinned(
+      user.sub,
+      params.id,
+      params.messageId,
+      true,
+    );
+    this.chatGateway.emitNewMessage(params.id, message);
+    return message;
+  }
+
+  @Post(':id/messages/:messageId/unpin')
+  @HttpCode(200)
+  async unpinMessage(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: MessageIdParamDto,
+  ) {
+    const message = await this.chatService.setPinned(
+      user.sub,
+      params.id,
+      params.messageId,
+      false,
+    );
+    this.chatGateway.emitNewMessage(params.id, message);
+    return message;
+  }
+
+  @Post(':id/messages/:messageId/forward')
+  async forwardMessage(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: MessageIdParamDto,
+    @Body() dto: ForwardMessageDto,
+  ) {
+    const message = await this.chatService.forwardMessage(
+      user.sub,
+      params.id,
+      params.messageId,
+      dto.targetChatId,
+    );
+    this.chatGateway.emitNewMessage(dto.targetChatId, message);
+    const otherUserIds = await this.chatService.getOtherParticipantIds(
+      dto.targetChatId,
+      user.sub,
+    );
+    for (const userId of otherUserIds) {
+      const total = (await this.chatService.getUnreadTotal(userId)).total;
+      this.chatGateway.emitUnreadUpdate(userId, total);
+    }
+    return message;
   }
 
   @Get(':id/archive')

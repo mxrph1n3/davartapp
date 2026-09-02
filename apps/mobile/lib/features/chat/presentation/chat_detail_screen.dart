@@ -61,6 +61,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   TypingHandler? _typingHandler;
   ChatSocketService? _socket;
   double? _scrollExtentBeforeOlder;
+  ChatMessage? _replyTo;
 
   @override
   void initState() {
@@ -266,8 +267,50 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   return const Center(child: Text('Напишите первое сообщение'));
                 }
 
+                ChatMessage? pinned;
+                for (final item in messages) {
+                  if (item.isPinned) {
+                    pinned = item;
+                    break;
+                  }
+                }
                 final extra = thread.hasMore || thread.loadingOlder ? 1 : 0;
-                return ListView.builder(
+                return Column(
+                  children: [
+                    if (pinned != null)
+                      Material(
+                        color: AppColors.of(context).surfaceMuted,
+                        child: ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.push_pin, size: 18),
+                          title: Text(
+                            pinned.sender.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            pinned.content?.trim().isNotEmpty == true
+                                ? pinned.content!
+                                : (pinned.attachmentName ?? 'Сообщение'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              ref
+                                  .read(
+                                    chatMessagesProvider(widget.chatId)
+                                        .notifier,
+                                  )
+                                  .setPinned(pinned!.id, pinned: false);
+                            },
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      child: ListView.builder(
                   controller: _scrollController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
@@ -307,12 +350,39 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                     return _MessageBubble(
                       message: message,
                       chatId: widget.chatId,
+                      onLongPress: () => _showMessageActions(message),
                     );
                   },
+                ),
+                    ),
+                  ],
                 );
               },
             ),
           ),
+          if (_replyTo != null)
+            Material(
+              color: AppColors.of(context).surfaceMuted,
+              child: ListTile(
+                dense: true,
+                leading: const Icon(Icons.reply, size: 18),
+                title: Text(
+                  _replyTo!.sender.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  ChatReplyPreview.fromMessage(_replyTo!).preview,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () => setState(() => _replyTo = null),
+                ),
+              ),
+            ),
           if (_isPeerTyping)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -358,11 +428,151 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     if (ref.read(chatSendingProvider(widget.chatId))) return;
+    final replyToId = _replyTo?.id;
     _controller.clear();
+    setState(() => _replyTo = null);
     try {
-      await ref.read(chatMessagesProvider(widget.chatId).notifier).sendText(text);
+      await ref.read(chatMessagesProvider(widget.chatId).notifier).sendText(
+            text,
+            replyToId: replyToId,
+          );
     } catch (error) {
       _controller.text = text;
+      _showSendError(error);
+    }
+  }
+
+  Future<void> _showMessageActions(ChatMessage message) async {
+    if (message.isPending || message.isFailed) return;
+    const reactions = ['👍', '❤️', '😂', '🔥', '👀', '👏', '😮'];
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    for (final emoji in reactions)
+                      InkWell(
+                        onTap: () => Navigator.pop(context, 'react:$emoji'),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('Ответить'),
+                onTap: () => Navigator.pop(context, 'reply'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.copy),
+                title: const Text('Скопировать'),
+                onTap: () => Navigator.pop(context, 'copy'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.shortcut),
+                title: const Text('Переслать'),
+                onTap: () => Navigator.pop(context, 'forward'),
+              ),
+              ListTile(
+                leading: Icon(
+                  message.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                ),
+                title: Text(message.isPinned ? 'Открепить' : 'Закрепить'),
+                onTap: () => Navigator.pop(
+                  context,
+                  message.isPinned ? 'unpin' : 'pin',
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (!mounted || action == null) return;
+    final notifier = ref.read(chatMessagesProvider(widget.chatId).notifier);
+
+    if (action.startsWith('react:')) {
+      final emoji = action.substring('react:'.length);
+      try {
+        await notifier.toggleReaction(message.id, emoji);
+      } catch (error) {
+        _showSendError(error);
+      }
+      return;
+    }
+
+    switch (action) {
+      case 'reply':
+        setState(() => _replyTo = message);
+        return;
+      case 'copy':
+        final text = message.content?.trim() ?? '';
+        if (text.isEmpty) return;
+        await Clipboard.setData(ClipboardData(text: text));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Скопировано')),
+        );
+        return;
+      case 'pin':
+      case 'unpin':
+        try {
+          await notifier.setPinned(message.id, pinned: action == 'pin');
+        } catch (error) {
+          _showSendError(error);
+        }
+        return;
+      case 'forward':
+        await _forwardMessage(message);
+        return;
+    }
+  }
+
+  Future<void> _forwardMessage(ChatMessage message) async {
+    final chats = await ref.read(chatsListProvider.future);
+    if (!mounted) return;
+    final targetId = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: ListView(
+            children: [
+              const ListTile(title: Text('Переслать в чат')),
+              for (final chat in chats.where((item) => item.id != widget.chatId))
+                ListTile(
+                  title: Text(chat.title),
+                  subtitle: Text(chat.typeLabel),
+                  onTap: () => Navigator.pop(context, chat.id),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (targetId == null || !mounted) return;
+    try {
+      await ref.read(chatMessagesProvider(widget.chatId).notifier).forwardMessage(
+            messageId: message.id,
+            targetChatId: targetId,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сообщение переслано')),
+      );
+    } catch (error) {
       _showSendError(error);
     }
   }
@@ -566,79 +776,166 @@ class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({
     required this.message,
     required this.chatId,
+    this.onLongPress,
   });
 
   final ChatMessage message;
   final String chatId;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppColors.of(context);
     return Opacity(
       opacity: message.isPending ? 0.55 : 1,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ChatBubble(
-            isMine: message.isMine,
-            time: message.isPending || message.isFailed
-                ? null
-                : _timeFormat.format(message.createdAt),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (!message.isMine)
-                  Text(
-                    message.sender.name,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: colors.textPrimary,
+      child: GestureDetector(
+        onLongPress: onLongPress,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            ChatBubble(
+              isMine: message.isMine,
+              time: message.isPending || message.isFailed
+                  ? null
+                  : _timeFormat.format(message.createdAt),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (!message.isMine)
+                    Text(
+                      message.sender.name,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                  if (message.replyTo != null) ...[
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.textPrimary.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border(
+                          left: BorderSide(color: colors.accent, width: 2),
                         ),
-                  ),
-                _MessageContent(message: message),
-                if (message.isFailed)
-                  TextButton(
-                    onPressed: () async {
-                      try {
-                        await ref
-                            .read(chatMessagesProvider(chatId).notifier)
-                            .retryFailedUpload(message.id);
-                      } catch (error) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(chatErrorMessage(error))),
-                          );
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            message.replyTo!.senderName,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          Text(
+                            message.replyTo!.preview,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  _MessageContent(message: message),
+                  if (message.reactions.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final reaction in message.reactions)
+                          InkWell(
+                            onTap: () {
+                              ref
+                                  .read(chatMessagesProvider(chatId).notifier)
+                                  .toggleReaction(message.id, reaction.emoji);
+                            },
+                            borderRadius: BorderRadius.circular(12),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: reaction.mine
+                                    ? colors.accent.withValues(alpha: 0.25)
+                                    : colors.textPrimary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '${reaction.emoji} ${reaction.count}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                  if (message.isFailed)
+                    TextButton(
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(chatMessagesProvider(chatId).notifier)
+                              .retryFailedUpload(message.id);
+                        } catch (error) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(chatErrorMessage(error))),
+                            );
+                          }
                         }
-                      }
-                    },
-                    child: const Text('Повторить отправку'),
+                      },
+                      child: const Text('Повторить отправку'),
+                    ),
+                ],
+              ),
+            ),
+            if (message.isPending)
+              Positioned(
+                right: message.isMine ? 12 : null,
+                left: message.isMine ? null : 12,
+                bottom: 8,
+                child: const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            if (message.isFailed)
+              Positioned(
+                right: message.isMine ? -2 : null,
+                left: message.isMine ? null : -2,
+                top: 10,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: colors.error,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.background, width: 2),
                   ),
-              ],
-            ),
-          ),
-          if (message.isPending)
-            Positioned(
-              right: message.isMine ? 12 : null,
-              left: message.isMine ? null : 12,
-              bottom: 8,
-              child: const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                  child: const Center(
+                    child: Text(
+                      '!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          if (message.isFailed)
-            Positioned(
-              right: message.isMine ? 8 : null,
-              left: message.isMine ? null : 8,
-              top: -4,
-              child: Icon(
-                Icons.error_outline,
-                size: 18,
-                color: colors.error,
-              ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -83,6 +83,7 @@ model User {
   projectMemberships   ProjectMember[]
   chatParticipants     ChatParticipant[]
   sentMessages         Message[]         @relation("SentMessages")
+  messageReactions     MessageReaction[]
   addresses            Address[]
   fcmTokens            FcmToken[]
   staffAuditsAsActor   StaffAuditLog[]   @relation("StaffAuditActor")
@@ -300,6 +301,7 @@ model ProjectMember {
   projectId String            @map("project_id")
   userId    String            @map("user_id")
   role      ProjectMemberRole @default(member)
+  relation  String?
   project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime          @default(now()) @map("created_at")
@@ -371,22 +373,43 @@ model ChatParticipant {
 }
 
 model Message {
-  id             String      @id @default(uuid())
-  chatId         String      @map("chat_id")
-  senderId       String      @map("sender_id")
+  id             String            @id @default(uuid())
+  chatId         String            @map("chat_id")
+  senderId       String            @map("sender_id")
   type           MessageType
   content        String?
-  attachmentKey  String?     @map("attachment_key")
-  attachmentName String?     @map("attachment_name")
-  attachmentMime String?     @map("attachment_mime")
-  productId      String?     @map("product_id")
-  chat           Chat        @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender         User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  product        Product?    @relation(fields: [productId], references: [id], onDelete: SetNull)
-  createdAt      DateTime    @default(now()) @map("created_at")
+  attachmentKey  String?           @map("attachment_key")
+  attachmentName String?           @map("attachment_name")
+  attachmentMime String?           @map("attachment_mime")
+  productId      String?           @map("product_id")
+  replyToId      String?           @map("reply_to_id")
+  isPinned       Boolean           @default(false) @map("is_pinned")
+  pinnedAt       DateTime?         @map("pinned_at")
+  chat           Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender         User              @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  product        Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  replyTo        Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]         @relation("MessageReplies")
+  reactions      MessageReaction[]
+  createdAt      DateTime          @default(now()) @map("created_at")
 
   @@index([chatId, createdAt])
+  @@index([chatId, isPinned])
   @@map("messages")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+  @@map("message_reactions")
 }
 
 model Address {

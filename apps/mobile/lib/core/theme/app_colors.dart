@@ -23,6 +23,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
     required this.brandDark,
     required this.statusGold,
     required this.statusGreen,
+    required this.chatBubbleMine,
+    required this.chatBubbleMineFg,
+    required this.chatBubbleTheirs,
   });
 
   final Color accent;
@@ -41,6 +44,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
   final Color brandDark;
   final Color statusGold;
   final Color statusGreen;
+  final Color chatBubbleMine;
+  final Color chatBubbleMineFg;
+  final Color chatBubbleTheirs;
 
   static const light = DavartColors(
     accent: Color(0xFFFFDD2D),
@@ -59,6 +65,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
     brandDark: Color(0xFF111111),
     statusGold: Color(0xFFD4A800),
     statusGreen: Color(0xFF5BB89A),
+    chatBubbleMine: Color(0xFFEFFDDE),
+    chatBubbleMineFg: Color(0xFF111111),
+    chatBubbleTheirs: Color(0xFFF7F7F7),
   );
 
   static const dark = DavartColors(
@@ -78,6 +87,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
     brandDark: Color(0xFF111111),
     statusGold: Color(0xFFE0B84A),
     statusGreen: Color(0xFF6BC9A8),
+    chatBubbleMine: Color(0xFF2B5278),
+    chatBubbleMineFg: Color(0xFFFFFFFF),
+    chatBubbleTheirs: Color(0xFF182533),
   );
 
   static DavartColors of(BuildContext context) {
@@ -102,6 +114,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
     Color? brandDark,
     Color? statusGold,
     Color? statusGreen,
+    Color? chatBubbleMine,
+    Color? chatBubbleMineFg,
+    Color? chatBubbleTheirs,
   }) {
     return DavartColors(
       accent: accent ?? this.accent,
@@ -120,6 +135,9 @@ class DavartColors extends ThemeExtension<DavartColors> {
       brandDark: brandDark ?? this.brandDark,
       statusGold: statusGold ?? this.statusGold,
       statusGreen: statusGreen ?? this.statusGreen,
+      chatBubbleMine: chatBubbleMine ?? this.chatBubbleMine,
+      chatBubbleMineFg: chatBubbleMineFg ?? this.chatBubbleMineFg,
+      chatBubbleTheirs: chatBubbleTheirs ?? this.chatBubbleTheirs,
     );
   }
 
@@ -144,6 +162,11 @@ class DavartColors extends ThemeExtension<DavartColors> {
       brandDark: Color.lerp(brandDark, other.brandDark, t)!,
       statusGold: Color.lerp(statusGold, other.statusGold, t)!,
       statusGreen: Color.lerp(statusGreen, other.statusGreen, t)!,
+      chatBubbleMine: Color.lerp(chatBubbleMine, other.chatBubbleMine, t)!,
+      chatBubbleMineFg:
+          Color.lerp(chatBubbleMineFg, other.chatBubbleMineFg, t)!,
+      chatBubbleTheirs:
+          Color.lerp(chatBubbleTheirs, other.chatBubbleTheirs, t)!,
     );
   }
 }

@@ -52,7 +52,9 @@ export function hasStudioRole(roles: UserRole[]): boolean {
   return roles.some((role) => isStudioRole(role));
 }
 
-export function isAdminRole(role: UserRole | string | null | undefined): boolean {
+export function isAdminRole(
+  role: UserRole | string | null | undefined,
+): boolean {
   return role === UserRole.admin;
 }
 
@@ -78,9 +80,7 @@ export const SUPPORT_DUTY_ROLES: UserRole[] = [
 export function isSupportDutyRole(
   role: UserRole | string | null | undefined,
 ): boolean {
-  return (
-    role === UserRole.complectator || role === UserRole.admin
-  );
+  return role === UserRole.complectator || role === UserRole.admin;
 }
 
 export function hasSupportDutyRole(roles: UserRole[]): boolean {
