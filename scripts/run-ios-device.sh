@@ -1,26 +1,28 @@
 #!/usr/bin/env bash
-# One command: pull + clean deps + install DAVart on a physical iPhone (VPS API).
+# Install DAVart on a physical iPhone against the staging VPS API.
 #
-#   bash scripts/run-ios-device.sh              # deps + open Xcode (⌘R)
-#   bash scripts/run-ios-device.sh --run        # deps + flutter run on phone
+#   bash scripts/run-ios-device.sh              # RELEASE install (opens from Home OK)
+#   bash scripts/run-ios-device.sh --run        # debug via flutter run (needs cable + session)
+#   bash scripts/run-ios-device.sh --xcode      # open workspace only (manual ⌘R)
 #   bash scripts/run-ios-device.sh 217.198.6.88
-#   DEVICE_ID=00008110-… bash scripts/run-ios-device.sh --run
+#   DEVICE_ID=00008110-… bash scripts/run-ios-device.sh
 #
-# No local .env needed: app defaults to staging VPS API.
+# Important: Debug builds crash if opened from the Home Screen without Flutter/Xcode
+# attached. Prefer the default release install for teammates.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="217.198.6.88"
-# Default: open Xcode (teammates hit Run). Use --run for flutter run.
-OPEN_XCODE=1
+MODE="release" # release | run | xcode
 
 for arg in "$@"; do
   case "$arg" in
-    --xcode) OPEN_XCODE=1 ;;
-    --run) OPEN_XCODE=0 ;;
+    --xcode) MODE="xcode" ;;
+    --run) MODE="run" ;;
+    --release) MODE="release" ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *) HOST="$arg" ;;
@@ -38,62 +40,25 @@ command -v xcodebuild >/dev/null || die "Xcode не найден. Установ
 command -v pod >/dev/null || die "CocoaPods не найден. Установи: sudo gem install cocoapods"
 
 echo "==> repo: ${ROOT}"
+echo "==> mode: ${MODE}"
 echo "==> API_BASE_URL=${API_BASE}"
 printf '%s\n' "{\"API_BASE_URL\":\"${API_BASE}\"}" > "$DEFINES_FILE"
 
 cd "$MOBILE"
 
-# SPM off — всё через CocoaPods (как в рабочей установке)
 echo "==> flutter config --no-enable-swift-package-manager"
 flutter config --no-enable-swift-package-manager
-
-echo "==> flutter clean"
-flutter clean
 
 echo "==> flutter pub get"
 flutter pub get
 
-echo "==> plugins:"
-ls ios/.symlinks/plugins 2>/dev/null || true
-
-echo "==> reset Pods / .symlinks"
-rm -rf ios/Pods ios/.symlinks ios/Podfile.lock
-
-echo "==> flutter pub get (после сброса pods)"
-flutter pub get
-
-echo "==> pod install --repo-update"
-(
-  cd ios
-  pod install --repo-update
-)
-
-echo
-echo "Xcode signing (один раз на Mac):"
-echo "  open ios/Runner.xcworkspace"
-echo "  Runner → Signing & Capabilities → Team = твой Apple ID"
-echo "  iPhone по кабелю → Trust → Developer Mode ON"
-echo
-
-if [[ "$OPEN_XCODE" -eq 1 ]]; then
-  echo "==> flutter build ios (debug) + открыть Xcode → Product → Run (⌘R)"
-  flutter build ios --debug --no-codesign \
-    --dart-define-from-file="$DEFINES_FILE"
-  open "$MOBILE/ios/Runner.xcworkspace"
-  echo
-  echo "В Xcode: выбери свой iPhone сверху → Product → Run (⌘R)."
-  exit 0
+if [[ ! -d ios/Pods ]]; then
+  echo "==> pod install"
+  (
+    cd ios
+    pod install --repo-update
+  )
 fi
-
-if [[ -n "${DEVICE_ID:-}" ]]; then
-  exec flutter run \
-    --dart-define-from-file="$DEFINES_FILE" \
-    -d "${DEVICE_ID}"
-fi
-
-echo "==> устройства:"
-flutter devices
-echo
 
 pick_device() {
   flutter devices --machine 2>/dev/null | python3 -c '
@@ -112,13 +77,46 @@ for d in data:
 ' || true
 }
 
-DEVICE="$(pick_device || true)"
-if [[ -n "${DEVICE}" ]]; then
-  echo "==> flutter run на ${DEVICE}"
-  exec flutter run \
-    --dart-define-from-file="$DEFINES_FILE" \
-    -d "${DEVICE}"
-fi
+DEVICE="${DEVICE_ID:-$(pick_device || true)}"
 
-echo "==> физический iPhone не найден — запускаю flutter run (выбери устройство)"
-exec flutter run --dart-define-from-file="$DEFINES_FILE"
+case "$MODE" in
+  xcode)
+    echo "==> open Xcode workspace"
+    echo "  Signing: Runner → Signing & Capabilities → Team = твой Apple ID"
+    echo "  Схема: Runner → Release (не Debug), если хочешь открывать с Home Screen"
+    open "$MOBILE/ios/Runner.xcworkspace"
+    exit 0
+    ;;
+  run)
+    echo
+    echo "Xcode signing (один раз): Team = твой Apple ID, Developer Mode ON, Trust"
+    echo
+    if [[ -n "${DEVICE}" ]]; then
+      echo "==> flutter run (debug) на ${DEVICE}"
+      exec flutter run \
+        --dart-define-from-file="$DEFINES_FILE" \
+        -d "${DEVICE}"
+    fi
+    echo "==> устройства:"
+    flutter devices
+    exec flutter run --dart-define-from-file="$DEFINES_FILE"
+    ;;
+  release)
+    echo
+    echo "Xcode signing (один раз): Team = твой Apple ID, Developer Mode ON, Trust"
+    echo
+    if [[ -z "${DEVICE}" ]]; then
+      echo "==> устройства:"
+      flutter devices
+      die "Физический iPhone не найден. Подключи кабель / включи Developer Mode и повтори."
+    fi
+    echo "==> flutter build ios --release → ${DEVICE}"
+    flutter build ios --release --dart-define-from-file="$DEFINES_FILE"
+    echo "==> flutter install"
+    flutter install -d "${DEVICE}"
+    echo
+    echo "Готово. Открой DAVart с Home Screen (release не падает без Xcode)."
+    echo "Если iOS пишет Untrusted Developer: Настройки → Основные → VPN и управление устройством → Доверять."
+    exit 0
+    ;;
+esac
