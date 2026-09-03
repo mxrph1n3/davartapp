@@ -218,9 +218,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'О чате',
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => context.push(AppRoutes.chatInfo(widget.chatId)),
+            tooltip: 'Написать или пригласить',
+            icon: const Icon(Icons.person_add_outlined),
+            onPressed: () => context.push(
+              newChatPathForRole(ref.read(authProvider).user?.role),
+            ),
           ),
           if (isStaff && (clientId != null || widget.projectId != null)) ...[
             IconButton(

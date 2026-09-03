@@ -195,6 +195,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       final home = AppRoutes.homeForRole(role);
 
       if (isAuthRoute || isSplash) {
+        // Embedded login pops itself back to the underlying screen; do not
+        // remount /otp. Non-embedded goes straight to role home.
         if (isAuthRoute && embeddedLogin) return null;
         final pending = ref.read(pendingDeepLinkProvider);
         if (pending != null) {
@@ -237,6 +239,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           return OtpScreen(phone: phone, initialCode: initialCode);
         },
       ),
+      // Compose / invite — before `/chat/:id` so `new` is not captured as an id.
+      GoRoute(
+        path: AppRoutes.newChat,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const NewChatScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.staffNewChat,
+        parentNavigatorKey: rootNavigatorKey,
+        builder: (context, state) => const NewChatScreen(),
+      ),
       // Fullscreen chat thread — bottom nav hidden.
       GoRoute(
         path: '/chat/:id',
@@ -258,14 +271,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             projectId: projectId,
           );
         },
-      ),
-      GoRoute(
-        path: '/chat/:id/info',
-        parentNavigatorKey: rootNavigatorKey,
-        builder: (context, state) {
-          final chatId = state.pathParameters['id']!;
-          return ChatInfoScreen(chatId: chatId);
-        },
+        routes: [
+          GoRoute(
+            path: 'info',
+            parentNavigatorKey: rootNavigatorKey,
+            builder: (context, state) {
+              final chatId = state.pathParameters['id']!;
+              return ChatInfoScreen(chatId: chatId);
+            },
+          ),
+        ],
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, state, navigationShell) {
@@ -340,19 +355,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.chat,
                 builder: (context, state) => const ChatScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'new',
-                    builder: (context, state) => const NewChatScreen(),
-                  ),
-                  GoRoute(
-                    path: ':id/info',
-                    builder: (context, state) {
-                      final chatId = state.pathParameters['id']!;
-                      return ChatInfoScreen(chatId: chatId);
-                    },
-                  ),
-                ],
               ),
             ],
           ),
@@ -440,19 +442,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: AppRoutes.staffChats,
                 builder: (context, state) => const ChatScreen(),
-                routes: [
-                  GoRoute(
-                    path: 'new',
-                    builder: (context, state) => const NewChatScreen(),
-                  ),
-                  GoRoute(
-                    path: ':id/info',
-                    builder: (context, state) {
-                      final chatId = state.pathParameters['id']!;
-                      return ChatInfoScreen(chatId: chatId);
-                    },
-                  ),
-                ],
               ),
             ],
           ),

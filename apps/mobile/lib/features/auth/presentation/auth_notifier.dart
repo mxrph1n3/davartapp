@@ -129,19 +129,22 @@ class AuthNotifier extends Notifier<AuthState> {
         refreshToken: tokens.refreshToken,
       );
 
-      // Prefer user from verify response so UI can leave OTP even if /me is slow.
-      var user = tokens.user;
-      try {
-        user = await _repository.getMe().timeout(const Duration(seconds: 12));
-      } catch (_) {
-        user ??= UserProfile(id: 'session', phone: phone);
-      }
-
-      state = AuthState.authenticated(user);
+      // Authenticate immediately so OTP can dismiss before /me finishes.
+      final fallback = tokens.user ?? UserProfile(id: 'session', phone: phone);
+      state = AuthState.authenticated(fallback);
       unawaited(
         ref.read(chatSocketServiceProvider).connect(force: true),
       );
       unawaited(ref.read(pushServiceProvider).initialize());
+
+      try {
+        final me = await _repository.getMe().timeout(const Duration(seconds: 12));
+        if (state.isAuthenticated) {
+          state = AuthState.authenticated(me);
+        }
+      } catch (_) {
+        // Keep tokens.user / fallback — session is already usable.
+      }
     } on DioException catch (error) {
       final message = _extractError(error);
       // A duplicate verify (auto-submit + button) must not wipe a just-issued session.

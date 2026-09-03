@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
+import '../data/auth_repository.dart';
 import 'auth_notifier.dart';
 import 'require_login.dart';
 
@@ -67,6 +68,24 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
   @override
   Widget build(BuildContext context) {
     final embedded = isEmbeddedLogin(GoRouterState.of(context));
+
+    ref.listen(authProvider, (previous, next) {
+      if (next.isAuthenticated && previous?.isAuthenticated != true) {
+        if (embedded) {
+          finishEmbeddedLogin(context);
+        } else {
+          context.go(
+            AppRoutes.homeForRole(next.user?.role ?? UserRole.client),
+          );
+        }
+      }
+    });
+
+    if (ref.watch(authProvider).isAuthenticated) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(

@@ -42,21 +42,27 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     _suppressAutoVerify = true;
     _controller = TextEditingController(text: initial);
     _startTimer();
-    if (initial.length == _otpLength) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Route may remount after auth refresh — leave immediately if already in.
+      if (ref.read(authProvider).isAuthenticated) {
+        _leaveOtpIfAuthenticated();
+        return;
+      }
+      if (initial.length == _otpLength) {
         _suppressAutoVerify = false;
         _verify();
-      });
-    } else {
-      _suppressAutoVerify = false;
-    }
+      } else {
+        _suppressAutoVerify = false;
+      }
+    });
   }
 
   Future<void> _leaveOtpIfAuthenticated() async {
     final auth = ref.read(authProvider);
     if (!auth.isAuthenticated || !mounted || _leavingOtp) return;
     _leavingOtp = true;
+    if (mounted) setState(() {});
 
     final embedded = isEmbeddedLogin(GoRouterState.of(context));
     final home = AppRoutes.homeForRole(auth.user?.role ?? UserRole.client);
@@ -144,7 +150,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _resend({String channel = 'telegram'}) async {
-    if (_leavingOtp) return;
+    if (_leavingOtp || ref.read(authProvider).isAuthenticated) return;
     if (channel == 'telegram' && _secondsLeft > 0) return;
     if (channel == 'sms' && _smsSending) return;
 
@@ -157,8 +163,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             widget.phone,
             channel: channel,
           );
+      if (!mounted || _leavingOtp || ref.read(authProvider).isAuthenticated) {
+        return;
+      }
       _startTimer();
-      if (!mounted) return;
       if (debugCode != null && debugCode.isNotEmpty) {
         _suppressAutoVerify = true;
         _controller.text = debugCode;
@@ -180,7 +188,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         );
       }
     } on Exception catch (error) {
-      if (mounted) {
+      if (mounted && !_leavingOtp && !ref.read(authProvider).isAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(error.toString().replaceFirst('Exception: ', '')),
@@ -201,6 +209,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         _leaveOtpIfAuthenticated();
       }
     });
+
+    final authenticated = ref.watch(authProvider).isAuthenticated;
+    if (_leavingOtp || authenticated) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
