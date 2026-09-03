@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Install DAVart on a physical iPhone against the staging VPS API.
 #
-#   bash scripts/run-ios-device.sh              # RELEASE install (opens from Home OK)
-#   bash scripts/run-ios-device.sh --run        # debug via flutter run (needs cable + session)
-#   bash scripts/run-ios-device.sh --xcode      # open workspace only (manual ⌘R)
+#   bash scripts/run-ios-device.sh
+#   BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh   # чужой Apple ID / Personal Team
+#   bash scripts/run-ios-device.sh --run
+#   bash scripts/run-ios-device.sh --xcode
 #   bash scripts/run-ios-device.sh 217.198.6.88
 #   DEVICE_ID=00008110-… bash scripts/run-ios-device.sh
 #
@@ -15,6 +16,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="217.198.6.88"
 MODE="release" # release | run | xcode
+BUNDLE_ID="${BUNDLE_ID:-}"
 
 for arg in "$@"; do
   case "$arg" in
@@ -32,6 +34,7 @@ done
 API_BASE="http://${HOST}:3000/api"
 MOBILE="$ROOT/apps/mobile"
 DEFINES_FILE="$MOBILE/dart_defines.device.json"
+DEFAULT_BUNDLE_ID="com.davart.davartMobiledsawa"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -45,6 +48,32 @@ echo "==> API_BASE_URL=${API_BASE}"
 printf '%s\n' "{\"API_BASE_URL\":\"${API_BASE}\"}" > "$DEFINES_FILE"
 
 cd "$MOBILE"
+
+# Personal Team / другой Apple ID не может подписать чужой Bundle ID + elees team.
+if [[ -n "${BUNDLE_ID}" ]]; then
+  echo "==> Bundle ID → ${BUNDLE_ID} (локально, не коммить)"
+  python3 - <<PY
+from pathlib import Path
+import re
+root = Path("ios")
+old = "${DEFAULT_BUNDLE_ID}"
+new = "${BUNDLE_ID}"
+pbx = root / "Runner.xcodeproj" / "project.pbxproj"
+text = pbx.read_text()
+text = text.replace(old, new)
+text = re.sub(r"\t+DEVELOPMENT_TEAM = [A-Z0-9]+;\n", "", text)
+pbx.write_text(text)
+for name in ("Debug.xcconfig", "Release.xcconfig"):
+    cfg = root / "Flutter" / name
+    lines = [
+        line
+        for line in cfg.read_text().splitlines(True)
+        if not line.startswith("DEVELOPMENT_TEAM=")
+    ]
+    cfg.write_text("".join(lines))
+print("patched", pbx)
+PY
+fi
 
 echo "==> flutter config --no-enable-swift-package-manager"
 flutter config --no-enable-swift-package-manager
@@ -83,13 +112,15 @@ case "$MODE" in
   xcode)
     echo "==> open Xcode workspace"
     echo "  Signing: Runner → Signing & Capabilities → Team = твой Apple ID"
-    echo "  Схема: Runner → Release (не Debug), если хочешь открывать с Home Screen"
+    if [[ -z "${BUNDLE_ID}" ]]; then
+      echo "  Если Bundle ID занят: BUNDLE_ID=com.твоёимя.davart bash scripts/run-ios-device.sh --xcode"
+    fi
     open "$MOBILE/ios/Runner.xcworkspace"
     exit 0
     ;;
   run)
     echo
-    echo "Xcode signing (один раз): Team = твой Apple ID, Developer Mode ON, Trust"
+    echo "Xcode signing: Team = твой Apple ID, Developer Mode ON, Trust"
     echo
     if [[ -n "${DEVICE}" ]]; then
       echo "==> flutter run (debug) на ${DEVICE}"
@@ -103,7 +134,11 @@ case "$MODE" in
     ;;
   release)
     echo
-    echo "Xcode signing (один раз): Team = твой Apple ID, Developer Mode ON, Trust"
+    echo "Xcode signing: Team = твой Apple ID, Developer Mode ON, Trust"
+    if [[ -z "${BUNDLE_ID}" ]]; then
+      echo "Если ошибка Bundle Identifier / elees.ru — запускай так:"
+      echo "  BUNDLE_ID=com.твоёимя.davart bash scripts/run-ios-device.sh"
+    fi
     echo
     if [[ -z "${DEVICE}" ]]; then
       echo "==> устройства:"
@@ -116,6 +151,7 @@ case "$MODE" in
     flutter install -d "${DEVICE}"
     echo
     echo "Готово. Открой DAVart с Home Screen (release не падает без Xcode)."
+    echo "API: ${API_BASE}"
     echo "Если iOS пишет Untrusted Developer: Настройки → Основные → VPN и управление устройством → Доверять."
     exit 0
     ;;

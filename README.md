@@ -13,24 +13,26 @@ Docker **не нужен**. Бэкенд уже на staging VPS — прило�
 ```bash
 git clone https://github.com/mxrph1n3/davartapp.git ~/davartapp
 cd ~/davartapp
-bash scripts/run-ios-device.sh
+BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh
 ```
 
 Если репо уже есть:
 
 ```bash
-cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
+cd ~/davartapp && git pull origin main
+BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh
 ```
+
+`BUNDLE_ID=...` обязателен на Personal Team — общий `com.davart.davartMobiledsawa` занят командой elees.
 
 - Скрипт ставит **release** (с Home Screen не падает)
 - API: `http://217.198.6.88:3000/api`
 - OTP: **4 цифры**
 
-Один раз в Xcode: Runner → Signing → Team = твой Apple ID.  
-Если Bundle ID занят — смени на свой, например `com.твоёимя.davart`.  
+Один раз: в Xcode при запросе Signing выбери свой Apple ID (Team).  
 На iPhone: Настройки → Основные → VPN и управление устройством → Доверять.
 
-Debug (кабель + сессия Flutter): `bash scripts/run-ios-device.sh --run`
+Debug (кабель + сессия Flutter): `BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh --run`
 
 ## Документация
 
