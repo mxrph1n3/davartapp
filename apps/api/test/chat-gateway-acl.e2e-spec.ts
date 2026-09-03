@@ -48,7 +48,9 @@ describe('ChatGateway join ACL (e2e)', () => {
   });
 
   it('rejects join for non-participants', async () => {
-    assertParticipant.mockRejectedValue(new ForbiddenException('Access denied'));
+    assertParticipant.mockRejectedValue(
+      new ForbiddenException('Access denied'),
+    );
     const client = makeClient();
 
     await gateway.handleJoin(client as never, 'chat-foreign');

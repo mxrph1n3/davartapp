@@ -108,7 +108,10 @@ export function classifyRuListing(loc: string): ListingClass | null {
   }
   if (!url.hostname.endsWith('italonceramica.ru')) return null;
 
-  const path = url.pathname.replace(/\/+/g, '/').replace(/\/$/, '').toLowerCase();
+  const path = url.pathname
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '')
+    .toLowerCase();
   if (!path.startsWith('/ru/')) return null;
   if (
     /\/(dealer|showrooms|home|meeting|realizovannye-proekty|novosti|o-kompanii)\b/.test(
@@ -144,10 +147,7 @@ export function classifyRuListing(loc: string): ListingClass | null {
       priority: 80,
     };
   }
-  if (
-    path.includes('strukturirovannaya') ||
-    path.includes('/poverhnost/')
-  ) {
+  if (path.includes('strukturirovannaya') || path.includes('/poverhnost/')) {
     return {
       category: ITALON_CATEGORIES['strukturirovannaya-plitka'],
       sourceUrl,
@@ -273,7 +273,5 @@ export async function fetchItalonKeramogranit(options?: {
   fetch?: FetchLike;
 }): Promise<ItalonProductDraft[]> {
   const products = await fetchItalonCatalog(options);
-  return products.filter(
-    (product) => product.category.slug === 'keramogranit',
-  );
+  return products.filter((product) => product.category.slug === 'keramogranit');
 }

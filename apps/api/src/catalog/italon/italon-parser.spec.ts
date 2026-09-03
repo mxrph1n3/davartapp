@@ -1,17 +1,14 @@
-import {
-  matchItalonCollection,
-} from './italon-collections';
-import {
-  classifyRuListing,
-  parseItalonImageSitemap,
-} from './italon-parser';
+import { matchItalonCollection } from './italon-collections';
+import { classifyRuListing, parseItalonImageSitemap } from './italon-parser';
 
 describe('Italon parser', () => {
   it('matches longest collection alias', () => {
     expect(matchItalonCollection('Шарм Экстра Силвер 60x120 CM')?.slug).toBe(
       'charme-extra',
     );
-    expect(matchItalonCollection('Шарм Эво Уайт 30x60')?.slug).toBe('sharm-evo');
+    expect(matchItalonCollection('Шарм Эво Уайт 30x60')?.slug).toBe(
+      'sharm-evo',
+    );
     expect(matchItalonCollection('Шампейн 30x120 CM')).toBeNull();
   });
 
@@ -27,9 +24,7 @@ describe('Italon parser', () => {
       )?.category.slug,
     ).toBe('nastennaya-plitka');
     expect(
-      classifyRuListing(
-        'https://www.italonceramica.ru/it/prodotti/pavimenti/',
-      ),
+      classifyRuListing('https://www.italonceramica.ru/it/prodotti/pavimenti/'),
     ).toBeNull();
     expect(
       classifyRuListing('https://www.italonceramica.ru/ru/dealer/rossiya/'),

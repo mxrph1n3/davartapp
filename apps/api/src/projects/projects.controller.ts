@@ -43,10 +43,7 @@ export class ProjectsController {
 
   @Delete(':id')
   @HttpCode(200)
-  delete(
-    @CurrentUser() user: JwtPayload,
-    @Param() params: ProjectIdParamDto,
-  ) {
+  delete(@CurrentUser() user: JwtPayload, @Param() params: ProjectIdParamDto) {
     return this.projectsService.delete(user.sub, params.id);
   }
 
@@ -103,7 +100,10 @@ export class ProjectsController {
   }
 
   @Get(':id/brief')
-  getBrief(@CurrentUser() user: JwtPayload, @Param() params: ProjectIdParamDto) {
+  getBrief(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ProjectIdParamDto,
+  ) {
     return this.projectsService.getBrief(user.sub, params.id);
   }
 

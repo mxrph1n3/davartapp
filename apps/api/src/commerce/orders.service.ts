@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { OrderStatus, UserRole } from '@prisma/client';
 import { isStudioRole } from '../auth/roles';
 import { PushService } from '../push/push.service';
@@ -200,32 +204,30 @@ export class OrdersService {
     return formatted;
   }
 
-  private formatOrder(
-    order: {
+  private formatOrder(order: {
+    id: string;
+    userId: string;
+    projectId?: string | null;
+    status: OrderStatus;
+    address: string;
+    comment: string | null;
+    totalAmount: { toString(): string } | number;
+    createdAt: Date;
+    updatedAt: Date;
+    items: Array<{
       id: string;
-      userId: string;
-      projectId?: string | null;
+      productId: string;
+      quantity: number;
+      price: { toString(): string } | number;
+      name: string;
+      sku: string;
+    }>;
+    statusHistory: Array<{
+      id: string;
       status: OrderStatus;
-      address: string;
-      comment: string | null;
-      totalAmount: { toString(): string } | number;
       createdAt: Date;
-      updatedAt: Date;
-      items: Array<{
-        id: string;
-        productId: string;
-        quantity: number;
-        price: { toString(): string } | number;
-        name: string;
-        sku: string;
-      }>;
-      statusHistory: Array<{
-        id: string;
-        status: OrderStatus;
-        createdAt: Date;
-      }>;
-    },
-  ) {
+    }>;
+  }) {
     return {
       id: order.id,
       userId: order.userId,

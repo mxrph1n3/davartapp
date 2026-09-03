@@ -141,7 +141,9 @@ describe('Chat (e2e)', () => {
         getDownloadUrl: jest
           .fn()
           .mockResolvedValue('http://localhost:9000/file'),
-        getUploadUrl: jest.fn().mockResolvedValue('http://localhost:9000/upload'),
+        getUploadUrl: jest
+          .fn()
+          .mockResolvedValue('http://localhost:9000/upload'),
       })
       .overrideProvider(ChatGateway)
       .useValue(mockChatGateway)

@@ -44,7 +44,9 @@ export class StorageService implements OnModuleInit {
       this.logger.log(`S3 bucket "${this.bucket}" ready`);
     } catch {
       try {
-        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+        await this.client.send(
+          new CreateBucketCommand({ Bucket: this.bucket }),
+        );
         this.enabled = true;
         this.logger.log(`S3 bucket "${this.bucket}" created`);
       } catch (error) {

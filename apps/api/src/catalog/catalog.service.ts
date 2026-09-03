@@ -61,37 +61,38 @@ export class CatalogService {
   }
 
   async getFilterOptions() {
-    const [brands, materials, colors, collections, priceAgg] = await Promise.all([
-      this.prisma.brand.findMany({
-        orderBy: { name: 'asc' },
-        select: { id: true, name: true, slug: true },
-      }),
-      this.prisma.productAttribute.findMany({
-        where: { key: 'Материал' },
-        distinct: ['value'],
-        select: { value: true },
-        orderBy: { value: 'asc' },
-      }),
-      this.prisma.productAttribute.findMany({
-        where: { key: 'Цвет' },
-        distinct: ['value'],
-        select: { value: true },
-        orderBy: { value: 'asc' },
-      }),
-      this.prisma.productAttribute.findMany({
-        where: { key: 'Коллекция' },
-        distinct: ['value'],
-        select: {
-          value: true,
-          product: { select: { collectionSlug: true } },
-        },
-        orderBy: { value: 'asc' },
-      }),
-      this.prisma.product.aggregate({
-        _min: { price: true },
-        _max: { price: true },
-      }),
-    ]);
+    const [brands, materials, colors, collections, priceAgg] =
+      await Promise.all([
+        this.prisma.brand.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, slug: true },
+        }),
+        this.prisma.productAttribute.findMany({
+          where: { key: 'Материал' },
+          distinct: ['value'],
+          select: { value: true },
+          orderBy: { value: 'asc' },
+        }),
+        this.prisma.productAttribute.findMany({
+          where: { key: 'Цвет' },
+          distinct: ['value'],
+          select: { value: true },
+          orderBy: { value: 'asc' },
+        }),
+        this.prisma.productAttribute.findMany({
+          where: { key: 'Коллекция' },
+          distinct: ['value'],
+          select: {
+            value: true,
+            product: { select: { collectionSlug: true } },
+          },
+          orderBy: { value: 'asc' },
+        }),
+        this.prisma.product.aggregate({
+          _min: { price: true },
+          _max: { price: true },
+        }),
+      ]);
 
     const collectionMap = new Map<string, { slug: string; name: string }>();
     for (const item of collections) {

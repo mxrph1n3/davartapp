@@ -34,11 +34,7 @@ export class AdminService {
     private readonly chatService: ChatService,
   ) {}
 
-  async createUser(input: {
-    phone: string;
-    role: UserRole;
-    name?: string;
-  }) {
+  async createUser(input: { phone: string; role: UserRole; name?: string }) {
     if (!ASSIGNABLE_ROLES.includes(input.role)) {
       throw new BadRequestException('Invalid role');
     }
@@ -109,10 +105,7 @@ export class AdminService {
       if (actorId === userId && nextPrimary !== UserRole.admin) {
         throw new BadRequestException('Cannot demote yourself');
       }
-      if (
-        user.role === UserRole.admin &&
-        nextPrimary !== UserRole.admin
-      ) {
+      if (user.role === UserRole.admin && nextPrimary !== UserRole.admin) {
         await this.ensureNotLastAdmin(userId);
       }
     }
@@ -137,9 +130,7 @@ export class AdminService {
         ...(input.name !== undefined
           ? { name: input.name.trim() || null }
           : {}),
-        ...(nextRoles
-          ? { role: nextPrimary, extraRoles: nextExtra }
-          : {}),
+        ...(nextRoles ? { role: nextPrimary, extraRoles: nextExtra } : {}),
       },
       select: userSelect,
     });
@@ -171,7 +162,9 @@ export class AdminService {
     const where = params.q?.trim()
       ? {
           OR: [
-            { name: { contains: params.q.trim(), mode: 'insensitive' as const } },
+            {
+              name: { contains: params.q.trim(), mode: 'insensitive' as const },
+            },
             { phone: { contains: params.q.trim() } },
           ],
         }

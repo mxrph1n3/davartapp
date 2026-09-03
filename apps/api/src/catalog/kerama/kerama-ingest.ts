@@ -225,7 +225,10 @@ export async function ingestKeramaProducts(
       price:
         product.price > 0
           ? product.price
-          : demoCatalogPrice(skuCode(product.supplierSku), product.category.slug),
+          : demoCatalogPrice(
+              skuCode(product.supplierSku),
+              product.category.slug,
+            ),
       imageUrl: product.imageUrl || null,
       inStock: product.inStock,
       categoryId,
@@ -239,7 +242,9 @@ export async function ingestKeramaProducts(
     if (existing) updated += 1;
     else created += 1;
 
-    await prisma.productAttribute.deleteMany({ where: { productId: saved.id } });
+    await prisma.productAttribute.deleteMany({
+      where: { productId: saved.id },
+    });
     await prisma.productAttribute.createMany({
       data: attributesOf(product).map((item) => ({
         ...item,

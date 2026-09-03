@@ -196,9 +196,7 @@ export class DocumentsService {
       where: { id: userId },
       select: { role: true, extraRoles: true },
     });
-    const roles = viewer
-      ? [viewer.role, ...(viewer.extraRoles ?? [])]
-      : [];
+    const roles = viewer ? [viewer.role, ...(viewer.extraRoles ?? [])] : [];
 
     const asOwner = await this.prisma.project.findFirst({
       where: userCanAccessProjectWhere(userId, projectId),

@@ -127,9 +127,7 @@ describe('Staff ACL (e2e)', () => {
         sku: 'DAV-00001',
       },
     ],
-    statusHistory: [
-      { id: 'sh-1', status: 'created', createdAt: new Date() },
-    ],
+    statusHistory: [{ id: 'sh-1', status: 'created', createdAt: new Date() }],
   };
 
   const mockPrismaService: any = {
@@ -460,9 +458,7 @@ describe('Staff ACL (e2e)', () => {
 
     it('GET /api/staff/clients/:id/projects/:projectId/brief forces isLocked', async () => {
       const response = await request(app.getHttpServer())
-        .get(
-          `/api/staff/clients/${clientId}/projects/${projectId}/brief`,
-        )
+        .get(`/api/staff/clients/${clientId}/projects/${projectId}/brief`)
         .expect(200);
 
       expect(response.body.isLocked).toBe(true);

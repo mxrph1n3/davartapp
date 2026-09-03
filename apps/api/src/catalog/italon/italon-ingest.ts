@@ -228,7 +228,9 @@ export async function ingestItalonProducts(
     if (existing) updated += 1;
     else created += 1;
 
-    await prisma.productAttribute.deleteMany({ where: { productId: saved.id } });
+    await prisma.productAttribute.deleteMany({
+      where: { productId: saved.id },
+    });
     await prisma.productAttribute.createMany({
       data: attributesOf(product).map((item) => ({
         ...item,

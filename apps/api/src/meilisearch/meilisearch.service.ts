@@ -107,7 +107,9 @@ export class MeilisearchService implements OnModuleInit {
     await this.productsIndex.addDocuments(documents, { primaryKey: 'id' });
   }
 
-  async searchProductIds(params: SearchParams): Promise<SearchIdsResult | null> {
+  async searchProductIds(
+    params: SearchParams,
+  ): Promise<SearchIdsResult | null> {
     if (!this.productsIndex) return null;
 
     const page = params.page ?? 1;

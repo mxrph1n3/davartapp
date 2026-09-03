@@ -46,13 +46,19 @@ export class BriefPdfService {
         const value = formatBriefValue(field.id, general[field.id]);
         if (!value && field.id.endsWith('Note')) continue;
         doc.fontSize(10).fillColor('#444444').text(field.label);
-        doc.fontSize(11).fillColor('#000000').text(value || '—');
+        doc
+          .fontSize(11)
+          .fillColor('#000000')
+          .text(value || '—');
         doc.moveDown(0.4);
       }
 
       const lifestyle = general.lifestyle?.trim();
       if (lifestyle && !general.routine?.trim() && !general.hobbies?.trim()) {
-        doc.fontSize(10).fillColor('#444444').text('Личность, распорядок, хобби');
+        doc
+          .fontSize(10)
+          .fillColor('#444444')
+          .text('Личность, распорядок, хобби');
         doc.fontSize(11).fillColor('#000000').text(lifestyle);
         doc.moveDown(0.4);
       }
@@ -63,12 +69,17 @@ export class BriefPdfService {
       for (const section of BRIEF_ROOM_SECTIONS) {
         const room = data.answers?.rooms?.[section.id];
         const included = room?.included !== false;
-        doc.fontSize(12).text(`${section.title}${included ? '' : ' (нет в проекте)'}`);
+        doc
+          .fontSize(12)
+          .text(`${section.title}${included ? '' : ' (нет в проекте)'}`);
         if (included) {
           for (const field of section.fields) {
             const value = room?.[field.id]?.trim();
             doc.fontSize(10).fillColor('#444444').text(field.label);
-            doc.fontSize(11).fillColor('#000000').text(value || '—');
+            doc
+              .fontSize(11)
+              .fillColor('#000000')
+              .text(value || '—');
             doc.moveDown(0.3);
           }
         }

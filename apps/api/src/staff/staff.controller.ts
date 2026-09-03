@@ -34,10 +34,7 @@ import { STUDIO_ROLES } from '../auth/roles';
 import { ChatGateway } from '../chat/chat.gateway';
 import { ChatService } from '../chat/chat.service';
 import { PushService } from '../push/push.service';
-import {
-  AddCartItemDto,
-  UpdateCartItemDto,
-} from '../commerce/dto/cart.dto';
+import { AddCartItemDto, UpdateCartItemDto } from '../commerce/dto/cart.dto';
 import { CreateOrderDto } from '../commerce/dto/orders.dto';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
 import { CreateAddressDto } from '../users/dto/users.dto';
@@ -144,11 +141,7 @@ export class StaffController {
     @CurrentUser() user: JwtPayload,
     @Body() body: { phone?: string; name?: string },
   ) {
-    return this.staffService.inviteByPhone(
-      user,
-      body.phone ?? '',
-      body.name,
-    );
+    return this.staffService.inviteByPhone(user, body.phone ?? '', body.name);
   }
 
   @Get('clients/:clientId')
@@ -359,10 +352,7 @@ export class StaffController {
 
   @Get('audit')
   @Roles(UserRole.admin)
-  listAudit(
-    @CurrentUser() user: JwtPayload,
-    @Query() query: ClientsQueryDto,
-  ) {
+  listAudit(@CurrentUser() user: JwtPayload, @Query() query: ClientsQueryDto) {
     return this.staffService.listAudit(user, {
       page: query.page ?? 1,
       limit: query.limit ?? 30,

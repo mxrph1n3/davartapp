@@ -72,8 +72,9 @@ describe('Partial checkout + lock (e2e)', () => {
     $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
     $transaction: jest.fn((callback: any) => callback(mockPrismaService)),
     product: {
-      findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
-        products[where.id as keyof typeof products] ?? null,
+      findUnique: jest.fn(
+        async ({ where }: { where: { id: string } }) =>
+          products[where.id as keyof typeof products] ?? null,
       ),
     },
     project: {
@@ -141,7 +142,9 @@ describe('Partial checkout + lock (e2e)', () => {
             id: `oi-${index}`,
             ...item,
           })),
-          statusHistory: [{ id: 'sh-1', status: 'created', createdAt: new Date() }],
+          statusHistory: [
+            { id: 'sh-1', status: 'created', createdAt: new Date() },
+          ],
         };
         void include;
         return created;

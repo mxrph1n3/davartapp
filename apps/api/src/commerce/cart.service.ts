@@ -103,7 +103,9 @@ export class CartService {
     }
 
     if (item.lockedAt) {
-      throw new BadRequestException('Cart item is locked and cannot be changed');
+      throw new BadRequestException(
+        'Cart item is locked and cannot be changed',
+      );
     }
 
     await this.prisma.cartItem.update({
@@ -135,7 +137,9 @@ export class CartService {
     }
 
     if (item.lockedAt) {
-      throw new BadRequestException('Cart item is locked and cannot be removed');
+      throw new BadRequestException(
+        'Cart item is locked and cannot be removed',
+      );
     }
 
     await this.prisma.cartItem.delete({ where: { id: itemId } });

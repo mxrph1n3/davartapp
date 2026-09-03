@@ -83,7 +83,11 @@ describe('Profile (e2e)', () => {
       .overrideProvider(StorageService)
       .useValue({ isAvailable: jest.fn().mockReturnValue(false) })
       .overrideProvider(ChatGateway)
-      .useValue({ emitNewMessage: jest.fn(), emitUnreadUpdate: jest.fn(), server: { to: jest.fn().mockReturnValue({ emit: jest.fn() }) } })
+      .useValue({
+        emitNewMessage: jest.fn(),
+        emitUnreadUpdate: jest.fn(),
+        server: { to: jest.fn().mockReturnValue({ emit: jest.fn() }) },
+      })
       .overrideProvider(RedisService)
       .useValue({
         get: jest.fn(),

@@ -229,10 +229,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const isGroup =
         membership.chat.type === 'group' ||
         membership.chat.type === 'supergroup';
-      if (
-        isGroup &&
-        (status === 'member' || status === 'administrator')
-      ) {
+      if (isGroup && (status === 'member' || status === 'administrator')) {
         await this.bindChat(membership.chat.id);
       }
       return;

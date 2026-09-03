@@ -32,9 +32,7 @@ export function validateEnvironment(
       throw new Error('REDIS_URL is required in production');
     }
     if (env.ALLOW_DEV_ENDPOINTS === 'true') {
-      throw new Error(
-        'ALLOW_DEV_ENDPOINTS must not be enabled in production',
-      );
+      throw new Error('ALLOW_DEV_ENDPOINTS must not be enabled in production');
     }
   }
 }
@@ -44,7 +42,10 @@ export function resolveCorsOrigins(
 ): string[] | boolean {
   const raw = env.CORS_ORIGIN?.trim();
   if (raw) {
-    return raw.split(',').map((origin) => origin.trim()).filter(Boolean);
+    return raw
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
   }
   // Browser CORS is irrelevant for Flutter; keep permissive only outside prod.
   return env.NODE_ENV === 'production' ? false : true;

@@ -127,9 +127,7 @@ describe('Catalog (e2e)', () => {
     const previous = process.env.ALLOW_DEV_ENDPOINTS;
     process.env.ALLOW_DEV_ENDPOINTS = 'false';
 
-    await request(app.getHttpServer())
-      .post('/api/catalog/reindex')
-      .expect(403);
+    await request(app.getHttpServer()).post('/api/catalog/reindex').expect(403);
 
     process.env.ALLOW_DEV_ENDPOINTS = previous;
   });

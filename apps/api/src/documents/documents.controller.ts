@@ -38,10 +38,7 @@ export class ProjectDocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
   @Get()
-  list(
-    @CurrentUser() user: JwtPayload,
-    @Param() params: ProjectIdParamDto,
-  ) {
+  list(@CurrentUser() user: JwtPayload, @Param() params: ProjectIdParamDto) {
     return this.documentsService.listForProject(user.sub, params.id);
   }
 

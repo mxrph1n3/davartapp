@@ -57,7 +57,11 @@ describe('Project cart isolation (e2e)', () => {
       id: string;
       projectId: string;
       project: { id: string; name: string; userId: string };
-      items: Array<{ id: string; quantity: number; product: (typeof products)[string] }>;
+      items: Array<{
+        id: string;
+        quantity: number;
+        product: (typeof products)[string];
+      }>;
     }
   > = {
     [projectA]: {
@@ -80,8 +84,9 @@ describe('Project cart isolation (e2e)', () => {
     $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
     $transaction: jest.fn((callback: any) => callback(mockPrismaService)),
     product: {
-      findUnique: jest.fn(async ({ where }: { where: { id: string } }) =>
-        products[where.id] ?? null,
+      findUnique: jest.fn(
+        async ({ where }: { where: { id: string } }) =>
+          products[where.id] ?? null,
       ),
     },
     project: {
@@ -96,11 +101,13 @@ describe('Project cart isolation (e2e)', () => {
         id: carts[where.projectId].id,
         projectId: where.projectId,
       })),
-      findUnique: jest.fn(async ({ where }: { where: { id?: string; projectId?: string } }) => {
-        if (where.projectId) return carts[where.projectId];
-        const byId = Object.values(carts).find((c) => c.id === where.id);
-        return byId ?? null;
-      }),
+      findUnique: jest.fn(
+        async ({ where }: { where: { id?: string; projectId?: string } }) => {
+          if (where.projectId) return carts[where.projectId];
+          const byId = Object.values(carts).find((c) => c.id === where.id);
+          return byId ?? null;
+        },
+      ),
     },
     cartItem: {
       findUnique: jest.fn(async ({ where }: any) => {

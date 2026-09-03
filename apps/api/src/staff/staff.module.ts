@@ -8,7 +8,13 @@ import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
 
 @Module({
-  imports: [UsersModule, ProjectsModule, CommerceModule, ChatModule, AuthModule],
+  imports: [
+    UsersModule,
+    ProjectsModule,
+    CommerceModule,
+    ChatModule,
+    AuthModule,
+  ],
   controllers: [StaffController],
   providers: [StaffService],
   exports: [StaffService],

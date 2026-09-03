@@ -95,7 +95,11 @@ export class UsersService {
     return this.formatAddress(address);
   }
 
-  async updateAddress(userId: string, addressId: string, dto: UpdateAddressDto) {
+  async updateAddress(
+    userId: string,
+    addressId: string,
+    dto: UpdateAddressDto,
+  ) {
     await this.ensureAddress(userId, addressId);
 
     if (dto.isDefault) {

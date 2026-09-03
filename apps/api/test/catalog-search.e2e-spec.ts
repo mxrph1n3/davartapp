@@ -40,9 +40,11 @@ describe('Catalog Search (e2e)', () => {
     $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
     category: { findMany: jest.fn().mockResolvedValue([]) },
     brand: {
-      findMany: jest.fn().mockResolvedValue([
-        { id: brandId, name: 'Kerama Marazzi', slug: 'kerama-marazzi' },
-      ]),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([
+          { id: brandId, name: 'Kerama Marazzi', slug: 'kerama-marazzi' },
+        ]),
     },
     productAttribute: {
       findMany: jest.fn(async ({ where }: { where?: { key?: string } }) => {

@@ -8,7 +8,8 @@ const USER_AGENT =
 const RU_GEO_COOKIE =
   'geo=%7B%22city_id%22%3Anull%2C%22region_id%22%3Anull%2C%22country_id%22%3A%221%22%2C%22country_code%22%3A%22RU%22%2C%22COUNTRY_LANG%22%3A%22ru%22%2C%22LANG%22%3A%22ru%22%7D';
 
-const SIZE_RE = /(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)(?:\s*[xх×]\s*(\d+(?:[.,]\d+)?))?/i;
+const SIZE_RE =
+  /(\d+(?:[.,]\d+)?)\s*[xх×]\s*(\d+(?:[.,]\d+)?)(?:\s*[xх×]\s*(\d+(?:[.,]\d+)?))?/i;
 
 export type KeramaCategory = {
   slug: string;
@@ -151,7 +152,7 @@ function parseSize(name: string): string | null {
   if (!match) return null;
   const parts = [match[1], match[2], match[3]]
     .filter(Boolean)
-    .map((part) => part!.replace(',', '.'));
+    .map((part) => part.replace(',', '.'));
   return `${parts.join('×')} см`;
 }
 
@@ -169,9 +170,8 @@ type JsonLd = Record<string, unknown>;
 
 function parseJsonLdBlocks(html: string): JsonLd[] {
   const blocks =
-    html.match(
-      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
-    ) ?? [];
+    html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi) ??
+    [];
   const result: JsonLd[] = [];
   for (const block of blocks) {
     const inner = block
