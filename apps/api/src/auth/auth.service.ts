@@ -20,7 +20,7 @@ import { SmsService } from './sms.service';
 
 const OTP_LENGTH = 4;
 const OTP_TTL_SECONDS = 300;
-const OTP_RATE_LIMIT = 3;
+const OTP_RATE_LIMIT = 10;
 const OTP_RATE_WINDOW_SECONDS = 900;
 const OTP_VERIFY_MAX_ATTEMPTS = 5;
 const OTP_VERIFY_LOCK_SECONDS = 900;
@@ -237,7 +237,7 @@ export class AuthService {
 
     if (attempts > OTP_RATE_LIMIT) {
       throw new HttpException(
-        'Too many OTP requests. Try again later.',
+        'Слишком много запросов кода. Подождите 15 минут или попробуйте другой номер.',
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }

@@ -183,12 +183,31 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   String _extractError(DioException error) {
-    final data = error.response?.data;
+    final status = error.response?.statusCode;
+    if (status == 429) {
+      return 'Слишком много запросов кода. Подождите несколько минут.';
+    }
+    if (status == 503) {
+      return 'Сервис временно недоступен. Попробуйте позже.';
+    }
 
-    if (data is Map<String, dynamic>) {
+    final data = error.response?.data;
+    if (data is Map) {
       final message = data['message'];
-      if (message is String) return message;
-      if (message is List) return message.join(', ');
+      if (message is String && message.trim().isNotEmpty) return message;
+      if (message is List && message.isNotEmpty) {
+        return message.map((e) => e.toString()).join(', ');
+      }
+    }
+    if (data is String && data.trim().isNotEmpty) return data;
+
+    if (error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.sendTimeout) {
+      return 'Сервер не отвечает. Проверьте интернет.';
+    }
+    if (error.type == DioExceptionType.connectionError) {
+      return 'Нет связи с сервером.';
     }
 
     return 'Не удалось выполнить запрос';

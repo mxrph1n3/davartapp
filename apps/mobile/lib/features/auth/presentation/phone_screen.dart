@@ -57,12 +57,23 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     } on Exception catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))),
+          SnackBar(content: Text(_humanError(error))),
         );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String _humanError(Object error) {
+    final raw = error.toString().replaceFirst('Exception: ', '');
+    if (raw.contains('429') || raw.contains('Too Many Requests')) {
+      return 'Слишком много запросов кода. Подождите несколько минут.';
+    }
+    if (raw.contains('DioException')) {
+      return 'Не удалось отправить код. Проверьте интернет и попробуйте снова.';
+    }
+    return raw;
   }
 
   @override
