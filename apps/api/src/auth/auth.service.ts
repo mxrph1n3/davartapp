@@ -56,9 +56,9 @@ export class AuthService {
     await this.ensureRedisAvailable();
     await this.enforceOtpRateLimit(phone);
 
-    const code = randomInt(0, 10 ** OTP_LENGTH)
-      .toString()
-      .padStart(OTP_LENGTH, '0');
+    // Always 4 digits, no leading zeros — Telegram Gateway may ignore "0042"-style
+    // codes and send its own default 6-digit code instead.
+    const code = randomInt(1000, 10000).toString();
     await this.redis.set(`otp:${phone}`, this.hashOtp(code), OTP_TTL_SECONDS);
     await this.smsService.sendOtp(phone, code, channel);
 

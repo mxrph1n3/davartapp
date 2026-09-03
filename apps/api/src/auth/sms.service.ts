@@ -178,16 +178,23 @@ export class SmsService {
 
     const body: Record<string, unknown> = {
       phone_number: e164,
-      code,
-      code_length: code.length,
+      // Custom code only — do not send code_length (Telegram may ignore `code`
+      // and fall back to a default 6-digit generated code when both are set).
+      code: String(code),
       ttl: 300,
     };
     if (sender) {
       body.sender_username = sender;
     }
 
-    await this.telegramGatewayRequest(token, 'sendVerificationMessage', body);
-    this.logger.log(`Telegram Gateway OTP sent to ${e164}`);
+    const result = await this.telegramGatewayRequest(
+      token,
+      'sendVerificationMessage',
+      body,
+    );
+    this.logger.log(
+      `Telegram Gateway OTP sent to ${e164} (custom code length=${String(code).length}) result=${JSON.stringify(result)}`,
+    );
   }
 
   private async telegramGatewayRequest(
