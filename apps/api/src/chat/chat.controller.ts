@@ -157,7 +157,11 @@ export class ChatController {
       params.messageId,
       dto.emoji,
     );
-    this.chatGateway.emitNewMessage(params.id, message);
+    const otherUserIds = await this.chatService.getOtherParticipantIds(
+      params.id,
+      user.sub,
+    );
+    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
     return message;
   }
 
@@ -173,7 +177,11 @@ export class ChatController {
       params.messageId,
       true,
     );
-    this.chatGateway.emitNewMessage(params.id, message);
+    const otherUserIds = await this.chatService.getOtherParticipantIds(
+      params.id,
+      user.sub,
+    );
+    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
     return message;
   }
 
@@ -189,7 +197,11 @@ export class ChatController {
       params.messageId,
       false,
     );
-    this.chatGateway.emitNewMessage(params.id, message);
+    const otherUserIds = await this.chatService.getOtherParticipantIds(
+      params.id,
+      user.sub,
+    );
+    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
     return message;
   }
 
@@ -205,11 +217,11 @@ export class ChatController {
       params.messageId,
       dto.targetChatId,
     );
-    this.chatGateway.emitNewMessage(dto.targetChatId, message);
     const otherUserIds = await this.chatService.getOtherParticipantIds(
       dto.targetChatId,
       user.sub,
     );
+    this.chatGateway.emitNewMessage(dto.targetChatId, message, otherUserIds);
     for (const userId of otherUserIds) {
       const total = (await this.chatService.getUnreadTotal(userId)).total;
       this.chatGateway.emitUnreadUpdate(userId, total);
@@ -260,12 +272,12 @@ export class ChatController {
     );
 
     if (message) {
-      this.chatGateway.emitNewMessage(params.id, message);
-
       const otherUserIds = await this.chatService.getOtherParticipantIds(
         params.id,
         user.sub,
       );
+      this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+
       for (const userId of otherUserIds) {
         const total = (await this.chatService.getUnreadTotal(userId)).total;
         this.chatGateway.emitUnreadUpdate(userId, total);
@@ -293,12 +305,12 @@ export class ChatController {
       dto,
     );
 
-    this.chatGateway.emitNewMessage(params.id, message);
-
     const otherUserIds = await this.chatService.getOtherParticipantIds(
       params.id,
       user.sub,
     );
+
+    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
 
     for (const userId of otherUserIds) {
       const total = (await this.chatService.getUnreadTotal(userId)).total;

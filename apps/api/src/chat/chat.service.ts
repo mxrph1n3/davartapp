@@ -285,11 +285,11 @@ export class ChatService {
         },
         take: 50,
       });
-      const staffIds = new Set<string>();
+      const knownIds = new Set<string>();
       for (const project of projectStaff) {
-        if (project.designerId) staffIds.add(project.designerId);
-        if (project.surveyorId) staffIds.add(project.surveyorId);
-        for (const member of project.members) staffIds.add(member.userId);
+        if (project.designerId) knownIds.add(project.designerId);
+        if (project.surveyorId) knownIds.add(project.surveyorId);
+        for (const member of project.members) knownIds.add(member.userId);
       }
 
       const support = await this.prisma.chat.findFirst({
@@ -305,18 +305,56 @@ export class ChatService {
         },
       });
       for (const p of support?.participants ?? []) {
-        staffIds.add(p.userId);
+        knownIds.add(p.userId);
       }
 
-      users = await this.prisma.user.findMany({
+      // People already in personal chats with this client.
+      const personalPeers = await this.prisma.chatParticipant.findMany({
         where: {
-          id: { in: [...staffIds] },
-          ...(namePhoneFilter ?? {}),
+          userId: { not: userId },
+          chat: {
+            type: ChatType.personal,
+            participants: { some: { userId } },
+          },
         },
-        select: { id: true, name: true, phone: true, role: true },
-        orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+        select: { userId: true },
         take: 100,
       });
+      for (const peer of personalPeers) {
+        knownIds.add(peer.userId);
+      }
+
+      const knownUsers = knownIds.size
+        ? await this.prisma.user.findMany({
+            where: {
+              id: { in: [...knownIds] },
+              ...(namePhoneFilter ?? {}),
+            },
+            select: { id: true, name: true, phone: true, role: true },
+            orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+            take: 100,
+          })
+        : [];
+
+      // Search by name/phone across all users so clients can find each other.
+      let searchHits: typeof knownUsers = [];
+      if (query && query.length >= 2) {
+        searchHits = await this.prisma.user.findMany({
+          where: {
+            id: { not: userId },
+            ...(namePhoneFilter ?? {}),
+          },
+          select: { id: true, name: true, phone: true, role: true },
+          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+          take: 50,
+        });
+      }
+
+      const byId = new Map<string, (typeof knownUsers)[number]>();
+      for (const user of [...knownUsers, ...searchHits]) {
+        byId.set(user.id, user);
+      }
+      users = [...byId.values()];
     }
 
     const seen = new Set<string>();
@@ -330,13 +368,11 @@ export class ChatService {
         .map((user) => ({
           id: user.id,
           name: this.publicDisplayName(user, {
-            revealPhone:
-              isStudio &&
-              canSeeContactPhone(
-                roles.find((role) => isStudioRole(role)) ?? viewer.role,
-              ),
+            // Clients need phone/name to recognize people they message.
+            revealPhone: true,
           }),
-          phone: isStudio ? user.phone : undefined,
+          // Phone is required for invite/search UX for everyone in contacts.
+          phone: user.phone,
           role: user.role,
           roleLabel: this.contactRoleLabel(user.role),
         })),

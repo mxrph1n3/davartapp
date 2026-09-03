@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_notifier.dart';
@@ -9,6 +11,25 @@ import '../data/chat_socket_service.dart';
 
 final chatsListProvider = FutureProvider.autoDispose<List<ChatSummary>>((ref) {
   if (!ref.watch(authProvider).isAuthenticated) return [];
+
+  final socket = ref.watch(chatSocketServiceProvider);
+  void onInvalidate() {
+    ref.invalidateSelf();
+  }
+
+  socket.addChatsInvalidateListener(onInvalidate);
+  // Also refresh list when unread changes (covers older servers).
+  void onUnread(int _) {
+    ref.invalidateSelf();
+  }
+
+  socket.addUnreadListener(onUnread);
+  ref.onDispose(() {
+    socket.removeChatsInvalidateListener(onInvalidate);
+    socket.removeUnreadListener(onUnread);
+  });
+
+  unawaited(socket.connect());
   return ref.watch(chatRepositoryProvider).getChats();
 });
 

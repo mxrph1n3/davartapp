@@ -29,6 +29,7 @@ class ChatSocketService {
 
   final _messageListeners = <MessageHandler>[];
   final _unreadListeners = <UnreadHandler>[];
+  final _chatsInvalidateListeners = <void Function()>[];
   final _typingListeners = <TypingHandler>[];
 
   void addMessageListener(MessageHandler handler) {
@@ -45,6 +46,14 @@ class ChatSocketService {
 
   void removeUnreadListener(UnreadHandler handler) {
     _unreadListeners.remove(handler);
+  }
+
+  void addChatsInvalidateListener(void Function() handler) {
+    _chatsInvalidateListeners.add(handler);
+  }
+
+  void removeChatsInvalidateListener(void Function() handler) {
+    _chatsInvalidateListeners.remove(handler);
   }
 
   void addTypingListener(TypingHandler handler) {
@@ -91,6 +100,12 @@ class ChatSocketService {
           listener(total);
         }
       })
+      ..on('chats:invalidate', (_) {
+        for (final listener
+            in List<void Function()>.from(_chatsInvalidateListeners)) {
+          listener();
+        }
+      })
       ..on('typing', (data) {
         if (data is! Map ||
             data['chatId'] is! String ||
@@ -130,6 +145,7 @@ class ChatSocketService {
   void dispose() {
     _messageListeners.clear();
     _unreadListeners.clear();
+    _chatsInvalidateListeners.clear();
     _typingListeners.clear();
     disconnect();
   }

@@ -152,8 +152,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  emitNewMessage(chatId: string, message: unknown) {
+  emitNewMessage(chatId: string, message: unknown, recipientUserIds: string[] = []) {
     this.server.to(`chat:${chatId}`).emit('message:new', message);
+    // Recipients who have not joined the chat room still get the event + list refresh.
+    for (const userId of recipientUserIds) {
+      this.server.to(`user:${userId}`).emit('message:new', message);
+      this.server.to(`user:${userId}`).emit('chats:invalidate', { chatId });
+    }
   }
 
   emitUnreadUpdate(userId: string, total: number) {

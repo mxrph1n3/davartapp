@@ -247,10 +247,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                       EmptyState(
                         icon: Icons.person_outline,
                         title: _query.isEmpty
-                            ? 'Начните чат с контактом'
+                            ? 'Напишите человеку или пригласите'
                             : 'Контакт не найден',
                         subtitle: _query.isEmpty
-                            ? 'Выберите человека из списка или пригласите по SMS'
+                            ? 'Введите имя или телефон сверху — или пригласите по SMS'
                             : 'Пригласите по SMS — откроем чат и отправим ссылку',
                         actionLabel: 'Пригласить по SMS',
                         onAction: _inviting
