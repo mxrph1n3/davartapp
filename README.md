@@ -4,6 +4,34 @@
 
 **Стек:** Flutter · NestJS · Next.js CRM · PostgreSQL · Redis · Meilisearch · MinIO
 
+## Поставить на свой iPhone (без Docker)
+
+Docker **не нужен**. Бэкенд уже на staging VPS — приложение само к нему подключается.
+
+Нужны: Mac · Xcode · Flutter · CocoaPods · iPhone по кабелю · Developer Mode.
+
+```bash
+git clone https://github.com/mxrph1n3/davartapp.git ~/davartapp
+cd ~/davartapp
+bash scripts/run-ios-device.sh
+```
+
+Если репо уже есть:
+
+```bash
+cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
+```
+
+- Скрипт ставит **release** (с Home Screen не падает)
+- API: `http://217.198.6.88:3000/api`
+- OTP: **4 цифры**
+
+Один раз в Xcode: Runner → Signing → Team = твой Apple ID.  
+Если Bundle ID занят — смени на свой, например `com.твоёимя.davart`.  
+На iPhone: Настройки → Основные → VPN и управление устройством → Доверять.
+
+Debug (кабель + сессия Flutter): `bash scripts/run-ios-device.sh --run`
+
 ## Документация
 
 - [PLAN.md](./PLAN.md) — план v2.0: экосистема Mobile + CRM, спринты 0–13 ✅, roadmap 14–21 (§18)
@@ -14,31 +42,29 @@
 - [docs/release/beta-guide.md](./docs/release/beta-guide.md) — TestFlight / Play Internal
 - [docs/legal/](./docs/legal/) — Privacy Policy, Terms of Service
 
-## Требования
+## Требования (локальная разработка API)
 
 - Node.js 22+
 - Flutter 3.x
-- Docker CLI + **Colima** (macOS) или Docker Desktop
-
-На macOS одного `brew install docker` недостаточно — нужен runtime:
+- Docker + Colima / Desktop — **только если поднимаешь бэкенд у себя**, не для установки приложения
 
 ```bash
 brew install colima docker docker-compose
 colima start
 ```
 
-## Быстрый старт (локально)
+## Быстрый старт (локально, с Docker)
 
-Открывайте **три терминала**. Команды — из корня репозитория или с абсолютными путями.
+Открывайте **три терминала**. Команды — из корня репозитория.
 
 ### 1. Инфраструктура
 
 ```bash
-colima start                          # если ещё не запущен
-cd /Users/sadism/Documents/davartapp/infra
+colima start
+cd infra
 cp -n .env.example .env
-docker-compose up -d                  # или: docker compose up -d
-docker ps                             # postgres/redis/meili/minio = healthy
+docker compose up -d
+docker ps
 ```
 
 | Сервис | Порт |
@@ -51,20 +77,17 @@ docker ps                             # postgres/redis/meili/minio = healthy
 ### 2. Backend (API)
 
 ```bash
-cd /Users/sadism/Documents/davartapp/apps/api
+cd apps/api
 cp -n .env.example .env
 npm install
 npx prisma migrate deploy
 npx prisma db seed
-# or refresh images only (keeps carts/orders): npm run prisma:refresh-images
 npm run start:dev
 ```
 
-Каталог: тематические фото в MinIO (`http://localhost:9000/davart/catalog/…`). Публичная база: `S3_PUBLIC_BASE_URL` в `.env`.
-
 API: http://localhost:3000/api  
 
-OTP в режиме mock пишется в этот терминал:
+OTP в mock:
 
 ```text
 [MOCK SMS] OTP for +79001234567: 1234
@@ -73,7 +96,7 @@ OTP в режиме mock пишется в этот терминал:
 ### 3. Mobile (iOS Simulator)
 
 ```bash
-cd /Users/sadism/Documents/davartapp/apps/mobile
+cd apps/mobile
 flutter pub get
 flutter run -d "iPhone 17 Pro"
 ```
@@ -87,39 +110,19 @@ flutter run -d "iPhone 17 Pro"
 | Комплектатор | `+79009999998` / `997` |
 | Admin (бог) | `+79009999990` |
 
-### 4. CRM Web (комплектатор)
+### 4. CRM Web
 
 ```bash
-cd /Users/sadism/Documents/davartapp/apps/admin
+cd apps/admin
 cp -n .env.local.example .env.local
 npm install
 npm run dev
 ```
 
 http://localhost:3001 — OTP комплектатора `+79009999998`, код в логе API.  
-Деплой-заготовка: [apps/admin/DEPLOY.md](./apps/admin/DEPLOY.md).
+Деплой: [apps/admin/DEPLOY.md](./apps/admin/DEPLOY.md).
 
-### 5. Физический iPhone (одна команда → VPS API)
-
-Локальный `.env` **не нужен** — приложение по умолчанию ходит на VPS `http://217.198.6.88:3000/api`.
-
-```bash
-cd ~/davartapp && git pull origin main && bash scripts/run-ios-device.sh
-```
-
-Скрипт: SPM off → clean → pub get → сброс Pods → `pod install` → открывает Xcode. Дальше ⌘R на iPhone.
-
-Сразу `flutter run` без Xcode: `bash scripts/run-ios-device.sh --run`
-
-Первый раз (если репо ещё нет):
-
-```bash
-git clone https://github.com/mxrph1n3/davartapp.git ~/davartapp && cd ~/davartapp && bash scripts/run-ios-device.sh
-```
-
-Нужны: Flutter, Xcode, CocoaPods, iPhone по USB, Developer Mode, Team в Signing.
-
-Release / TestFlight: см. [docs/release/beta-guide.md](./docs/release/beta-guide.md).
+Release / TestFlight: [docs/release/beta-guide.md](./docs/release/beta-guide.md).
 
 ## Структура
 
@@ -140,8 +143,6 @@ packages/      # Shared types
 ## Текущий спринт
 
 **Sprint 0–20** ✅ · далее [PLAN §18](./PLAN.md) Sprint 21 (интеграции)
-
-Осталось к релизу store: accounts + SMS/FCM/staging ([beta-guide](./docs/release/beta-guide.md)).
 
 ### E2E / load / legal
 
