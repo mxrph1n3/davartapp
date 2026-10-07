@@ -10,6 +10,9 @@ import 'core/theme/app_theme.dart';
 import 'core/settings/settings_notifier.dart';
 import 'core/widgets/dismiss_keyboard.dart';
 import 'features/auth/presentation/auth_notifier.dart';
+import 'features/chat/data/chat_socket_service.dart';
+import 'features/chat/presentation/chat_notifier.dart';
+import 'features/chat/presentation/in_app_message_notice.dart';
 
 class DavartApp extends ConsumerStatefulWidget {
   const DavartApp({super.key});
@@ -18,13 +21,23 @@ class DavartApp extends ConsumerStatefulWidget {
   ConsumerState<DavartApp> createState() => _DavartAppState();
 }
 
-class _DavartAppState extends ConsumerState<DavartApp> {
+class _DavartAppState extends ConsumerState<DavartApp>
+    with WidgetsBindingObserver {
   StreamSubscription<Uri>? _linkSub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future<void>.delayed(Duration.zero, _listenDeepLinks);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    if (!ref.read(authProvider).isAuthenticated) return;
+    unawaited(ref.read(chatSocketServiceProvider).connect(force: true));
+    unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
   }
 
   Future<void> _listenDeepLinks() async {
@@ -51,6 +64,7 @@ class _DavartAppState extends ConsumerState<DavartApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _linkSub?.cancel();
     super.dispose();
   }
@@ -67,7 +81,14 @@ class _DavartAppState extends ConsumerState<DavartApp> {
       darkTheme: AppTheme.dark,
       themeMode: themeModeAsync.value ?? ThemeMode.system,
       routerConfig: router,
-      builder: (context, child) => DismissKeyboard(child: child ?? const SizedBox()),
+      builder: (context, child) => DismissKeyboard(
+        child: Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const InAppMessageNotice(),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -13,8 +13,9 @@ export type OtpChannel = 'telegram' | 'sms';
  * - SMS_PROVIDER=telegram: official Telegram Gateway (`TELEGRAM_GATEWAY_TOKEN`)
  * - SMS_PROVIDER=p1sms: P1SMS Telegram/SMS (`P1SMS_API_KEY`)
  * - SMS_PROVIDER=smsru: SMS.ru (`SMSRU_API_ID`)
+ * - SMS_PROVIDER=targetsms: TargetSMS JSON API (`TARGETSMS_LOGIN`, `TARGETSMS_PASSWORD`, `TARGETSMS_SENDER`)
  *
- * SMS fallback (when channel=sms or Telegram fails): SMS_FALLBACK_PROVIDER=smsru|p1sms
+ * SMS fallback (when channel=sms or Telegram fails): SMS_FALLBACK_PROVIDER=smsru|p1sms|targetsms
  */
 @Injectable()
 export class SmsService {
@@ -25,27 +26,15 @@ export class SmsService {
   async sendOtp(
     phone: string,
     code: string,
-    channel: OtpChannel = 'telegram',
+    channel: OtpChannel = 'sms',
   ): Promise<void> {
     const message = `DAVart: код ${code}`;
-
+    // App always requests SMS for login — force SMS path, do not depend on
+    // SMS_PROVIDER=telegram (which previously required Gateway token).
     if (channel === 'sms') {
       await this.sendViaSmsFallback(phone, message);
       return;
     }
-
-    const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
-
-    if (provider === 'telegram') {
-      await this.sendViaTelegramGateway(phone, code);
-      return;
-    }
-
-    if (provider === 'p1sms') {
-      await this.sendViaP1Sms(phone, message, 'telegram');
-      return;
-    }
-
     await this.sendText(phone, message);
   }
 
@@ -67,7 +56,11 @@ export class SmsService {
       // Plain text invites are not supported by Gateway — fall back to SMS.ru/p1sms if set,
       // otherwise log in non-prod.
       const fallback = this.configService.get<string>('SMS_FALLBACK_PROVIDER');
-      if (fallback === 'smsru' || fallback === 'p1sms') {
+      if (
+        fallback === 'smsru' ||
+        fallback === 'p1sms' ||
+        fallback === 'targetsms'
+      ) {
         await this.sendViaSmsFallback(phone, message);
         return;
       }
@@ -87,6 +80,11 @@ export class SmsService {
 
     if (provider === 'p1sms') {
       await this.sendViaP1Sms(phone, message);
+      return;
+    }
+
+    if (provider === 'targetsms') {
+      await this.sendViaTargetSms(phone, message);
       return;
     }
 
@@ -110,10 +108,15 @@ export class SmsService {
     phone: string,
     message: string,
   ): Promise<void> {
-    const fallback =
-      this.configService.get<string>('SMS_FALLBACK_PROVIDER') ??
-      this.configService.get<string>('SMS_PROVIDER', 'mock');
+    const rawFallback = this.configService.get<string>('SMS_FALLBACK_PROVIDER');
+    const fallback = (
+      (rawFallback && rawFallback.trim()) ||
+      this.configService.get<string>('SMS_PROVIDER', 'mock') ||
+      'mock'
+    ).trim();
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
+
+    this.logger.log(`SMS fallback provider: ${fallback}`);
 
     if (fallback === 'smsru') {
       await this.sendViaSmsRu(phone, message);
@@ -125,10 +128,15 @@ export class SmsService {
       return;
     }
 
+    if (fallback === 'targetsms') {
+      await this.sendViaTargetSms(phone, message);
+      return;
+    }
+
     if (fallback === 'mock' || !fallback) {
       if (nodeEnv === 'production') {
         throw new ServiceUnavailableException(
-          'SMS не настроен. Укажите SMS_FALLBACK_PROVIDER=smsru или p1sms',
+          'SMS не настроен. Укажите SMS_FALLBACK_PROVIDER=smsru, p1sms или targetsms',
         );
       }
       this.logger.log(`[MOCK SMS] fallback OTP for ${phone}: ${message}`);
@@ -331,5 +339,91 @@ export class SmsService {
     }
 
     this.logger.log(`SMS.ru sent to ${phone}`);
+  }
+
+  /** TargetSMS JSON API — https://targetsms.ru/images/JSON.pdf */
+  private async sendViaTargetSms(
+    phone: string,
+    message: string,
+  ): Promise<void> {
+    const login = this.configService.get<string>('TARGETSMS_LOGIN');
+    const password = this.configService.get<string>('TARGETSMS_PASSWORD');
+    const sender = this.configService.get<string>('TARGETSMS_SENDER');
+    if (!login || !password || !sender) {
+      throw new ServiceUnavailableException(
+        'TARGETSMS_LOGIN, TARGETSMS_PASSWORD and TARGETSMS_SENDER are required',
+      );
+    }
+
+    const normalizedPhone = phone.replace(/^\+/, '');
+    const body = {
+      security: { login, password },
+      type: 'sms',
+      message: [
+        {
+          type: 'sms',
+          sender,
+          text: message,
+          name_delivery: 'DAVart OTP',
+          abonent: [{ phone: normalizedPhone, number_sms: '1' }],
+        },
+      ],
+    };
+
+    let response: Response;
+    try {
+      response = await fetch('https://sms.targetsms.ru/sendsmsjson.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      this.logger.error(
+        `TargetSMS network error: ${error instanceof Error ? error.message : error}`,
+      );
+      throw new ServiceUnavailableException(
+        'Не удалось связаться с SMS-провайдером',
+      );
+    }
+
+    const raw = await response.text();
+    if (!response.ok) {
+      this.logger.error(`TargetSMS HTTP ${response.status}: ${raw.slice(0, 300)}`);
+      throw new ServiceUnavailableException('Failed to send SMS via TargetSMS');
+    }
+
+    let payload: {
+      error?: string;
+      sms?: Array<{ action?: string; id_sms?: string | number }>;
+    };
+    try {
+      payload = JSON.parse(raw) as typeof payload;
+    } catch {
+      this.logger.error(`TargetSMS non-JSON: ${raw.slice(0, 300)}`);
+      throw new ServiceUnavailableException('TargetSMS returned invalid response');
+    }
+
+    if (payload.error) {
+      this.logger.error(`TargetSMS error: ${payload.error}`);
+      throw new ServiceUnavailableException(payload.error);
+    }
+
+    const first = payload.sms?.[0] as
+      | { action?: string; id_sms?: string | number; error?: string }
+      | undefined;
+    if (first?.error) {
+      this.logger.error(`TargetSMS reject: ${first.error}`);
+      throw new ServiceUnavailableException(first.error);
+    }
+    if (!first?.id_sms || first.action !== 'send') {
+      this.logger.error(`TargetSMS reject: ${JSON.stringify(payload)}`);
+      throw new ServiceUnavailableException(
+        first?.action ?? 'Failed to send SMS via TargetSMS',
+      );
+    }
+
+    this.logger.log(`TargetSMS sent to ${phone} (id=${first.id_sms})`);
   }
 }

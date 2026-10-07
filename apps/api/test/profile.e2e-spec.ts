@@ -58,7 +58,14 @@ describe('Profile (e2e)', () => {
         ...user,
         name: 'Новое имя',
       }),
+      delete: jest.fn().mockResolvedValue(user),
     },
+    order: {
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
+    $transaction: jest.fn(async (action: (tx: unknown) => Promise<unknown>) =>
+      action(mockPrismaService),
+    ),
     address: {
       findMany: jest.fn().mockResolvedValue([address]),
       findFirst: jest.fn().mockResolvedValue(address),
@@ -69,6 +76,7 @@ describe('Profile (e2e)', () => {
     },
     fcmToken: {
       upsert: jest.fn().mockResolvedValue({}),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     },
   };
 
@@ -148,6 +156,20 @@ describe('Profile (e2e)', () => {
       .expect(201);
 
     expect(mockPrismaService.fcmToken.upsert).toHaveBeenCalled();
+  });
+
+  it('DELETE /api/users/me', async () => {
+    const response = await request(app.getHttpServer())
+      .delete('/api/users/me')
+      .expect(200);
+
+    expect(response.body.deleted).toBe(true);
+    expect(mockPrismaService.order.deleteMany).toHaveBeenCalledWith({
+      where: { userId },
+    });
+    expect(mockPrismaService.user.delete).toHaveBeenCalledWith({
+      where: { id: userId },
+    });
   });
 
   it('GET /api/faq', async () => {

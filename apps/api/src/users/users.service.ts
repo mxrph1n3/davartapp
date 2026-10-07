@@ -56,12 +56,36 @@ export class UsersService {
     return user;
   }
 
+  async deleteAccount(userId: string) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.order.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return { deleted: true };
+  }
+
   async registerFcmToken(userId: string, dto: RegisterFcmTokenDto) {
     await this.prisma.fcmToken.upsert({
       where: { token: dto.token },
       update: { userId, platform: dto.platform },
       create: { userId, token: dto.token, platform: dto.platform },
     });
+
+    if (dto.platform === 'ios' || dto.platform === 'ios-sandbox') {
+      await this.prisma.fcmToken.deleteMany({
+        where: { userId, token: { startsWith: 'davart-' } },
+      });
+    }
 
     return { message: 'Token registered' };
   }

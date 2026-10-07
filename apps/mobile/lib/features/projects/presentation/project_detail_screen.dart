@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -6,6 +7,7 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/ru_phone_input_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
@@ -373,9 +375,10 @@ class _GeneralInfoTab extends ConsumerWidget {
   }
 
   Future<void> _inviteMember(BuildContext context, WidgetRef ref) async {
-    final phoneController = TextEditingController();
+    final phoneController = TextEditingController(text: '+7');
     final nameController = TextEditingController();
     var relation = 'relative';
+    var errorText = '';
     final result = await showDialog<({String phone, String name, String relation})>(
       context: context,
       builder: (ctx) {
@@ -390,9 +393,13 @@ class _GeneralInfoTab extends ConsumerWidget {
                     TextField(
                       controller: phoneController,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        const RuPhoneInputFormatter(),
+                        LengthLimitingTextInputFormatter(12),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Телефон',
-                        hintText: '+79001234567',
+                        hintText: '+7XXXXXXXXXX',
                       ),
                       autofocus: true,
                     ),
@@ -426,13 +433,27 @@ class _GeneralInfoTab extends ConsumerWidget {
                           ('other', 'Другой'),
                         ])
                           ChoiceChip(
-                            label: Text(choice.$2),
+                            label: Text(
+                              choice.$2,
+                              style: TextStyle(
+                                color: relation == choice.$1
+                                    ? const Color(0xFF111111)
+                                    : null,
+                              ),
+                            ),
                             selected: relation == choice.$1,
                             onSelected: (_) =>
                                 setLocal(() => relation = choice.$1),
                           ),
                       ],
                     ),
+                    if (errorText.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorText,
+                        style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -445,7 +466,14 @@ class _GeneralInfoTab extends ConsumerWidget {
                   onPressed: () {
                     final phone = phoneController.text.trim();
                     final name = nameController.text.trim();
-                    if (phone.isEmpty || name.isEmpty) return;
+                    if (phone.length < 12) {
+                      setLocal(() => errorText = 'Введите телефон');
+                      return;
+                    }
+                    if (name.isEmpty) {
+                      setLocal(() => errorText = 'Введите имя');
+                      return;
+                    }
                     Navigator.of(ctx).pop((
                       phone: phone,
                       name: name,

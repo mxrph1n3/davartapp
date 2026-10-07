@@ -7,7 +7,8 @@ void dismissKeyboard([BuildContext? context]) {
   focus.unfocus();
 }
 
-/// Wraps the app shell so taps on empty space hide the keyboard.
+/// Taps outside the focused field hide the keyboard, including on empty
+/// space inside a scroll view.
 class DismissKeyboard extends StatelessWidget {
   const DismissKeyboard({super.key, required this.child});
 
@@ -15,9 +16,19 @@ class DismissKeyboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => dismissKeyboard(context),
+    return Listener(
       behavior: HitTestBehavior.translucent,
+      onPointerDown: (event) {
+        final focus = FocusManager.instance.primaryFocus;
+        if (focus == null || !focus.hasFocus) return;
+        final render = focus.context?.findRenderObject();
+        if (render is RenderBox && render.attached && render.hasSize) {
+          final topLeft = render.localToGlobal(Offset.zero);
+          final rect = topLeft & render.size;
+          if (rect.inflate(12).contains(event.position)) return;
+        }
+        focus.unfocus();
+      },
       child: child,
     );
   }

@@ -322,7 +322,6 @@ const briefGeneralFields = <BriefField>[
   BriefField(id: 'floors', label: 'Количество этажей', lines: 1),
   BriefField(id: 'area', label: 'Площадь, м²', lines: 1),
   BriefField(id: 'commercialType', label: 'Тип коммерческого объекта', lines: 1),
-  BriefField(id: 'kitchenLayout', label: 'Кухня или кухня-гостиная', lines: 1),
   BriefField(id: 'householdKind', label: 'Кто будет жить', lines: 1),
   BriefField(id: 'householdMembers', label: 'Состав семьи'),
   BriefField(id: 'household', label: 'Состав проживающих (имена и возраст)'),
@@ -695,11 +694,17 @@ String briefDisplayValue(String fieldId, String? raw) {
 }
 
 class BriefFamilyMember {
-  const BriefFamilyMember({this.role = '', this.age = '', this.customRole = ''});
+  const BriefFamilyMember({
+    this.role = '',
+    this.age = '',
+    this.customRole = '',
+    this.name = '',
+  });
 
   final String role;
   final String age;
   final String customRole;
+  final String name;
 
   String get roleLabel {
     if (role == 'other' && customRole.trim().isNotEmpty) {
@@ -712,6 +717,7 @@ class BriefFamilyMember {
   Map<String, String> toJson() => {
         'role': role,
         'age': age,
+        if (name.isNotEmpty) 'name': name,
         if (customRole.isNotEmpty) 'customRole': customRole,
       };
 
@@ -719,6 +725,7 @@ class BriefFamilyMember {
     return BriefFamilyMember(
       role: (json['role'] as String?) ?? '',
       age: (json['age'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
       customRole: (json['customRole'] as String?) ?? '',
     );
   }
@@ -727,11 +734,13 @@ class BriefFamilyMember {
     String? role,
     String? age,
     String? customRole,
+    String? name,
   }) {
     return BriefFamilyMember(
       role: role ?? this.role,
       age: age ?? this.age,
       customRole: customRole ?? this.customRole,
+      name: name ?? this.name,
     );
   }
 }
@@ -765,7 +774,9 @@ String briefFamilyMembersSummary(List<BriefFamilyMember> members) {
             m.role.isNotEmpty || m.customRole.isNotEmpty || m.age.isNotEmpty,
       )
       .map((m) {
-        final who = m.roleLabel.isEmpty ? 'Участник' : m.roleLabel;
+        final who = m.name.trim().isNotEmpty
+            ? m.name.trim()
+            : (m.roleLabel.isEmpty ? 'Участник' : m.roleLabel);
         final age = m.age.trim();
         return age.isEmpty ? who : '$who, $age';
       })

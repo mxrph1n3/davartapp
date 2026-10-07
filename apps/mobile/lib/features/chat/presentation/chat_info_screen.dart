@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/ru_phone_input_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../admin/data/admin_repository.dart';
@@ -21,6 +22,7 @@ import '../../staff/presentation/working_client_provider.dart';
 import '../data/chat_models.dart';
 import '../data/chat_repository.dart';
 import '../data/open_remote_attachment.dart';
+import 'chat_image_viewer.dart';
 import 'voice_message_player.dart';
 
 final chatDetailsProvider =
@@ -322,7 +324,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
     final projectId = chat.projectId;
     if (projectId == null) return;
 
-    final phoneController = TextEditingController();
+    final phoneController = TextEditingController(text: '+7');
     final nameController = TextEditingController();
     var relation = 'relative';
     final result = await showDialog<({String phone, String name, String relation})>(
@@ -339,9 +341,13 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                     TextField(
                       controller: phoneController,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: [
+                        const RuPhoneInputFormatter(),
+                        LengthLimitingTextInputFormatter(12),
+                      ],
                       decoration: const InputDecoration(
                         labelText: 'Телефон',
-                        hintText: '+79001234567',
+                        hintText: '+7XXXXXXXXXX',
                       ),
                       autofocus: true,
                     ),
@@ -585,13 +591,19 @@ class _ArchiveList extends ConsumerWidget {
             if (kind == 'media' && item.attachmentUrl != null) {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    item.attachmentUrl!,
-                    height: 140,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
+                child: GestureDetector(
+                  onTap: () => ChatImageViewer.open(
+                    context,
+                    url: item.attachmentUrl!,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      item.attachmentUrl!,
+                      height: 140,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
               );

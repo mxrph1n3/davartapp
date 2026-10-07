@@ -51,35 +51,66 @@ export class AuthService {
 
   async sendOtp(
     phone: string,
-    channel: 'telegram' | 'sms' = 'telegram',
+    channel: 'telegram' | 'sms' = 'sms',
   ): Promise<{ message: string; channel: string; debugCode?: string }> {
     await this.ensureRedisAvailable();
-    await this.enforceOtpRateLimit(phone);
+    const normalizedPhone = this.normalizePhone(phone);
+    await this.enforceOtpRateLimit(normalizedPhone);
 
-    // Always 4 digits, no leading zeros — Telegram Gateway may ignore "0042"-style
-    // codes and send its own default 6-digit code instead.
-    const code = randomInt(1000, 10000).toString();
-    await this.redis.set(`otp:${phone}`, this.hashOtp(code), OTP_TTL_SECONDS);
-    await this.smsService.sendOtp(phone, code, channel);
+    const testCode = this.testLoginCodeFor(normalizedPhone);
+    // Always 4 digits for real SMS. Test login may use a fixed code like 0000.
+    const code = testCode ?? randomInt(1000, 10000).toString();
+    const otpKey = `otp:${normalizedPhone}`;
+    const hash = this.hashOtp(code);
+
+    // Keep previous hashes valid briefly so a late SMS from an earlier resend
+    // still works (common when delivery is slow).
+    const prev = await this.redis.get(otpKey);
+    const hashes = new Set<string>([hash]);
+    if (prev) {
+      try {
+        const parsed = JSON.parse(prev) as { hashes?: string[] } | string;
+        if (typeof parsed === 'string') {
+          hashes.add(parsed);
+        } else if (Array.isArray(parsed.hashes)) {
+          for (const h of parsed.hashes.slice(-2)) hashes.add(h);
+        }
+      } catch {
+        hashes.add(prev);
+      }
+    }
+    await this.redis.set(
+      otpKey,
+      JSON.stringify({ hashes: [...hashes] }),
+      OTP_TTL_SECONDS,
+    );
+
+    // App Review / demo numbers: no SMS, fixed code returned as debugCode.
+    if (!testCode) {
+      await this.smsService.sendOtp(normalizedPhone, code, channel);
+    }
 
     const provider = this.configService.get<string>('SMS_PROVIDER', 'mock');
     const nodeEnv = this.configService.get<string>('NODE_ENV', 'development');
     const debugCode =
-      provider === 'mock' && nodeEnv !== 'production' ? code : undefined;
+      testCode ??
+      (provider === 'mock' && nodeEnv !== 'production' ? code : undefined);
 
     return {
-      message: 'OTP sent',
-      channel,
+      message: testCode ? 'OTP ready (test login)' : 'OTP sent',
+      channel: testCode ? 'test' : channel,
       ...(debugCode ? { debugCode } : {}),
     };
   }
 
   async verifyOtp(phone: string, code: string): Promise<AuthTokens> {
     await this.ensureRedisAvailable();
+    const normalizedPhone = this.normalizePhone(phone);
+    const trimmedCode = code.trim();
 
-    const lockKey = `otp:verify:lock:${phone}`;
-    const attemptsKey = `otp:verify:attempts:${phone}`;
-    const otpKey = `otp:${phone}`;
+    const lockKey = `otp:verify:lock:${normalizedPhone}`;
+    const attemptsKey = `otp:verify:attempts:${normalizedPhone}`;
+    const otpKey = `otp:${normalizedPhone}`;
 
     const locked = await this.redis.get(lockKey);
     if (locked) {
@@ -89,8 +120,22 @@ export class AuthService {
       );
     }
 
+    const testCode = this.testLoginCodeFor(normalizedPhone);
     const stored = await this.redis.get(otpKey);
-    const matched = stored != null && stored === this.hashOtp(code);
+    const codeHash = this.hashOtp(trimmedCode);
+    let matched = testCode != null && trimmedCode === testCode;
+    if (!matched && stored != null) {
+      try {
+        const parsed = JSON.parse(stored) as { hashes?: string[] } | string;
+        if (typeof parsed === 'string') {
+          matched = parsed === codeHash;
+        } else if (Array.isArray(parsed.hashes)) {
+          matched = parsed.hashes.includes(codeHash);
+        }
+      } catch {
+        matched = stored === codeHash;
+      }
+    }
 
     if (!matched) {
       const attempts = await this.redis.incr(attemptsKey);
@@ -112,9 +157,9 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.upsert({
-      where: { phone },
+      where: { phone: normalizedPhone },
       update: {},
-      create: { phone, role: 'client' },
+      create: { phone: normalizedPhone, role: 'client' },
       select: {
         id: true,
         phone: true,
@@ -241,6 +286,35 @@ export class AuthService {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+  }
+
+  private normalizePhone(phone: string): string {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('8')) {
+      return `+7${digits.slice(1)}`;
+    }
+    if (digits.length === 11 && digits.startsWith('7')) {
+      return `+${digits}`;
+    }
+    if (digits.length === 10) {
+      return `+7${digits}`;
+    }
+    return phone.startsWith('+') ? `+${digits}` : phone.trim();
+  }
+
+  /** Fixed OTP for demo / App Review numbers. No SMS is sent. */
+  private testLoginCodeFor(phone: string): string | null {
+    const phonesRaw = this.configService.get<string>('AUTH_TEST_PHONES', '');
+    const code = this.configService.get<string>('AUTH_TEST_CODE', '0000').trim();
+    if (!phonesRaw.trim() || !code) return null;
+
+    const allowed = phonesRaw
+      .split(/[,;\s]+/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => this.normalizePhone(p));
+
+    return allowed.includes(phone) ? code : null;
   }
 
   private hashOtp(code: string): string {

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -40,6 +41,11 @@ export class FavoritesService {
         compareAtPrice: favorite.product.compareAtPrice
           ? Number(favorite.product.compareAtPrice)
           : null,
+        imageUrl: resolveProductImageUrl({
+          productId: favorite.product.id,
+          categorySlug: favorite.product.category?.slug,
+          imageUrl: favorite.product.imageUrl,
+        }),
       },
     }));
   }

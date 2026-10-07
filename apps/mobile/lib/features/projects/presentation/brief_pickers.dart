@@ -57,7 +57,7 @@ class _BriefChip extends StatelessWidget {
         elevation: 0,
         shadowColor: Colors.transparent,
         backgroundColor: selected ? colors.accent : colors.surfaceMuted,
-        foregroundColor: selected ? colors.textOnAccent : colors.textPrimary,
+        foregroundColor: selected ? const Color(0xFF111111) : colors.textPrimary,
         disabledBackgroundColor: colors.surfaceMuted,
         disabledForegroundColor: colors.textDisabled,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -68,10 +68,16 @@ class _BriefChip extends StatelessWidget {
           fontSize: 14,
           height: 1.2,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-          color: selected ? colors.textOnAccent : colors.textPrimary,
+          color: selected ? const Color(0xFF111111) : colors.textPrimary,
         ),
       ),
-      child: Text(label),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF111111) : colors.textPrimary,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          ),
+        ),
     );
   }
 }
@@ -258,7 +264,7 @@ class _ImageChoiceCard extends StatelessWidget {
           fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           fontSize: 14,
           height: 1.25,
-          color: selected ? colors.textOnAccent : colors.textPrimary,
+          color: selected ? const Color(0xFF111111) : colors.textPrimary,
         );
     final labelHeight = (labelStyle?.fontSize ?? 14) * (labelStyle?.height ?? 1.25) * 2;
 

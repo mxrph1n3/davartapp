@@ -9,29 +9,70 @@ import '../data/chat_pending_upload.dart';
 import '../data/chat_repository.dart';
 import '../data/chat_socket_service.dart';
 
-final chatsListProvider = FutureProvider.autoDispose<List<ChatSummary>>((ref) {
-  if (!ref.watch(authProvider).isAuthenticated) return [];
+/// Stays alive while the user is logged in and refreshes without a spinner,
+/// so a new DM shows up even if a socket frame was missed.
+final chatsListProvider =
+    AsyncNotifierProvider<ChatsListNotifier, List<ChatSummary>>(
+  ChatsListNotifier.new,
+);
 
-  final socket = ref.watch(chatSocketServiceProvider);
-  void onInvalidate() {
-    ref.invalidateSelf();
+class ChatsListNotifier extends AsyncNotifier<List<ChatSummary>> {
+  Timer? _poll;
+  var _reloadInFlight = false;
+
+  @override
+  Future<List<ChatSummary>> build() async {
+    _poll?.cancel();
+    if (!ref.watch(authProvider).isAuthenticated) return [];
+
+    final socket = ref.watch(chatSocketServiceProvider);
+
+    void onLiveEvent() {
+      unawaited(refreshSilently());
+    }
+
+    void onUnread(int _) => onLiveEvent();
+
+    void onMessage(ChatMessage _) => onLiveEvent();
+
+    socket.addChatsInvalidateListener(onLiveEvent);
+    socket.addUnreadListener(onUnread);
+    socket.addMessageListener(onMessage);
+
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(refreshSilently());
+    });
+
+    ref.onDispose(() {
+      _poll?.cancel();
+      socket.removeChatsInvalidateListener(onLiveEvent);
+      socket.removeUnreadListener(onUnread);
+      socket.removeMessageListener(onMessage);
+    });
+
+    unawaited(socket.connect());
+    return ref.read(chatRepositoryProvider).getChats();
   }
 
-  socket.addChatsInvalidateListener(onInvalidate);
-  // Also refresh list when unread changes (covers older servers).
-  void onUnread(int _) {
-    ref.invalidateSelf();
+  /// Pull the list from the API without replacing the current rows with a loader.
+  Future<void> refreshSilently() async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    if (_reloadInFlight) return;
+    _reloadInFlight = true;
+    try {
+      final socket = ref.read(chatSocketServiceProvider);
+      if (!socket.isConnected) {
+        unawaited(socket.connect(force: true));
+      }
+      final chats = await ref.read(chatRepositoryProvider).getChats();
+      state = AsyncData(chats);
+    } catch (_) {
+      // Keep the list already on screen.
+    } finally {
+      _reloadInFlight = false;
+    }
   }
-
-  socket.addUnreadListener(onUnread);
-  ref.onDispose(() {
-    socket.removeChatsInvalidateListener(onInvalidate);
-    socket.removeUnreadListener(onUnread);
-  });
-
-  unawaited(socket.connect());
-  return ref.watch(chatRepositoryProvider).getChats();
-});
+}
 
 final unreadTotalProvider =
     AsyncNotifierProvider<UnreadTotalNotifier, int>(UnreadTotalNotifier.new);
@@ -45,6 +86,7 @@ class UnreadTotalNotifier extends AsyncNotifier<int> {
 
     void onUnread(int total) {
       state = AsyncData(total);
+      unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
     }
 
     socket.addUnreadListener(onUnread);
@@ -153,11 +195,29 @@ class ChatMessagesNotifier
         ref.read(chatRepositoryProvider).markRead(chatId);
         ref.read(unreadTotalProvider.notifier).refresh();
       }
+      unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
+    }
+
+    void onReconnect() {
+      unawaited(refreshLatest());
     }
 
     socket.addMessageListener(onMessage);
+    socket.addReconnectListener(onReconnect);
+
+    // Keep the open thread live even when a socket frame is missed.
+    final poll = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!socket.isConnected) {
+        unawaited(socket.connect(force: true));
+      }
+      socket.joinChat(chatId);
+      unawaited(refreshLatest());
+    });
+
     ref.onDispose(() {
+      poll.cancel();
       socket.removeMessageListener(onMessage);
+      socket.removeReconnectListener(onReconnect);
       socket.leaveChat(chatId);
     });
 
@@ -171,6 +231,31 @@ class ChatMessagesNotifier
       messages: page.items.map(_owned).toList(),
       hasMore: page.items.length < page.total,
     );
+  }
+
+  /// Pull newest page and merge — used after reconnect / background resume.
+  Future<void> refreshLatest() async {
+    try {
+      final page = await ref.read(chatRepositoryProvider).getMessages(arg);
+      _total = page.total;
+      final current = state.value?.messages ?? [];
+      final byId = <String, ChatMessage>{
+        for (final m in current) m.id: m,
+      };
+      for (final m in page.items.map(_owned)) {
+        byId[m.id] = m;
+      }
+      final merged = byId.values.toList()
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      state = AsyncData(
+        (state.value ?? const ChatMessagesState(messages: [])).copyWith(
+          messages: merged,
+          hasMore: merged.length < _total,
+        ),
+      );
+    } catch (_) {
+      // Keep current state on transient network errors.
+    }
   }
 
   ChatMessage _owned(ChatMessage message) {

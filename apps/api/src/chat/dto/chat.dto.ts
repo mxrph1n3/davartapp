@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
   IsIn,
   IsInt,
@@ -43,6 +45,14 @@ export class InviteChatByPhoneDto {
   @IsString()
   @MaxLength(100)
   name?: string;
+}
+
+/** Match device address-book phones to registered DAVart users. */
+export class MatchPhonesDto {
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  phones!: string[];
 }
 
 export class ChatContactsQueryDto {

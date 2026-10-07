@@ -142,7 +142,7 @@ class BriefFormNotifier extends AutoDisposeFamilyNotifier<BriefFormState, String
   void addFamilyMember() {
     final members = [
       ...briefParseFamilyMembers(state.answers.general['householdMembers']),
-      const BriefFamilyMember(role: 'self'),
+      const BriefFamilyMember(role: 'relative'),
     ];
     setFamilyMembers(members);
   }

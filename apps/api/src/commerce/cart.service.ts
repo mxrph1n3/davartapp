@@ -10,6 +10,7 @@ import {
   staffAssignedToProjectWhere,
   userCanAccessProjectWhere,
 } from '../projects/project-access';
+import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -228,6 +229,7 @@ export class CartService {
                 compareAtPrice: true,
                 imageUrl: true,
                 inStock: true,
+                category: { select: { slug: true } },
               },
             },
           },
@@ -256,7 +258,11 @@ export class CartService {
         compareAtPrice: item.product.compareAtPrice
           ? Number(item.product.compareAtPrice)
           : null,
-        imageUrl: item.product.imageUrl,
+        imageUrl: resolveProductImageUrl({
+          productId: item.product.id,
+          categorySlug: item.product.category?.slug,
+          imageUrl: item.product.imageUrl,
+        }),
         inStock: item.product.inStock,
       },
     }));

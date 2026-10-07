@@ -180,6 +180,27 @@ class ChatMessage {
   }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? asMap(Object? value) {
+      if (value is Map<String, dynamic>) return value;
+      if (value is Map) {
+        return value.map((key, item) => MapEntry(key.toString(), item));
+      }
+      return null;
+    }
+
+    DateTime parseDate(Object? value) {
+      if (value is DateTime) return value;
+      if (value is int) {
+        return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true).toLocal();
+      }
+      if (value is String && value.isNotEmpty) return DateTime.parse(value);
+      return DateTime.now();
+    }
+
+    final senderMap = asMap(json['sender']) ?? const {'id': '', 'name': ''};
+    final productMap = asMap(json['product']);
+    final replyMap = asMap(json['replyTo']);
+
     return ChatMessage(
       id: json['id'] as String,
       chatId: json['chatId'] as String,
@@ -188,19 +209,22 @@ class ChatMessage {
       attachmentUrl: json['attachmentUrl'] as String?,
       attachmentName: json['attachmentName'] as String?,
       attachmentMime: json['attachmentMime'] as String?,
-      product: json['product'] != null
-          ? ChatProductPreview.fromJson(json['product'] as Map<String, dynamic>)
+      product: productMap != null
+          ? ChatProductPreview.fromJson(productMap)
           : null,
-      replyTo: json['replyTo'] != null
-          ? ChatReplyPreview.fromJson(json['replyTo'] as Map<String, dynamic>)
-          : null,
+      replyTo: replyMap != null ? ChatReplyPreview.fromJson(replyMap) : null,
       reactions: (json['reactions'] as List<dynamic>? ?? [])
-          .map((item) => ChatReaction.fromJson(item as Map<String, dynamic>))
+          .map((item) {
+            final map = asMap(item);
+            if (map == null) return null;
+            return ChatReaction.fromJson(map);
+          })
+          .whereType<ChatReaction>()
           .toList(),
       isPinned: json['isPinned'] as bool? ?? false,
-      sender: ChatSender.fromJson(json['sender'] as Map<String, dynamic>),
+      sender: ChatSender.fromJson(senderMap),
       isMine: json['isMine'] as bool? ?? false,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: parseDate(json['createdAt']),
     );
   }
 }

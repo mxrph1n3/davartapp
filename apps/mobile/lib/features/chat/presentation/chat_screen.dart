@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/layout/tab_page.dart';
 import '../../../core/router/app_router.dart';
@@ -14,9 +13,6 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/chat_models.dart';
 import 'chat_notifier.dart';
-
-final _timeFormat = DateFormat('HH:mm');
-final _dayFormat = DateFormat('dd.MM.yy');
 
 const _weekdaysRu = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
 
@@ -64,7 +60,7 @@ class ChatScreen extends ConsumerWidget {
 
                       return RefreshIndicator(
                         onRefresh: () async {
-                          ref.invalidate(chatsListProvider);
+                          await ref.read(chatsListProvider.notifier).refreshSilently();
                           await ref.read(unreadTotalProvider.notifier).refresh();
                         },
                         child: sorted.isEmpty
@@ -181,10 +177,8 @@ class _TelegramChatTile extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          chat.type == 'project' && chat.lastMessage == null
-                              ? 'Проект'
-                              : preview,
-                          maxLines: 1,
+                          preview,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style:
                               Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -240,8 +234,15 @@ String _formatChatTime(DateTime raw) {
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(local.year, local.month, local.day);
   final diff = today.difference(day).inDays;
-  if (diff == 0) return _timeFormat.format(local);
+  if (diff == 0) {
+    final hour = local.hour.toString().padLeft(2, '0');
+    final minute = local.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
   if (diff == 1) return 'вчера';
   if (diff < 7) return _weekdaysRu[local.weekday - 1];
-  return _dayFormat.format(local);
+  final dd = local.day.toString().padLeft(2, '0');
+  final mm = local.month.toString().padLeft(2, '0');
+  final yy = (local.year % 100).toString().padLeft(2, '0');
+  return '$dd.$mm.$yy';
 }

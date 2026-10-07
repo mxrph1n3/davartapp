@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../../core/utils/ru_phone_input_formatter.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../data/auth_repository.dart';
@@ -41,7 +42,7 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     try {
       final debugCode = await ref
           .read(authProvider.notifier)
-          .sendOtp(_controller.text.trim());
+          .sendOtp(_controller.text.trim(), channel: 'sms');
       if (mounted) {
         final phone = _controller.text.trim();
         final embedded = isEmbeddedLogin(GoRouterState.of(context));
@@ -117,17 +118,17 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                 Text('Вход', style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32)),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Мы отправим код подтверждения в Telegram',
+                  'Мы отправим код подтверждения по SMS',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 AppInput(
                   controller: _controller,
                   labelText: 'Телефон',
-                  hintText: '+79001234567',
+                  hintText: '+7XXXXXXXXXX',
                   keyboardType: TextInputType.phone,
                   inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[\d+]')),
+                    const RuPhoneInputFormatter(),
                     LengthLimitingTextInputFormatter(12),
                   ],
                   validator: _validatePhone,

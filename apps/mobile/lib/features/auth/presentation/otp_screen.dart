@@ -149,14 +149,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     }
   }
 
-  Future<void> _resend({String channel = 'telegram'}) async {
+  Future<void> _resend({String channel = 'sms'}) async {
     if (_leavingOtp || ref.read(authProvider).isAuthenticated) return;
-    if (channel == 'telegram' && _secondsLeft > 0) return;
-    if (channel == 'sms' && _smsSending) return;
+    if (_secondsLeft > 0 || _smsSending) return;
 
-    if (channel == 'sms') {
-      setState(() => _smsSending = true);
-    }
+    setState(() => _smsSending = true);
 
     try {
       final debugCode = await ref.read(authProvider.notifier).sendOtp(
@@ -179,11 +176,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         _controller.clear();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              channel == 'sms'
-                  ? 'Код отправлен по SMS'
-                  : 'Код отправлен в Telegram',
-            ),
+            content: Text('Код отправлен по SMS'),
           ),
         );
       }
@@ -196,7 +189,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         );
       }
     } finally {
-      if (mounted && channel == 'sms') {
+      if (mounted) {
         setState(() => _smsSending = false);
       }
     }
@@ -233,7 +226,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Код из Telegram',
+                'Код из SMS',
                 style: Theme.of(context)
                     .textTheme
                     .displayLarge
@@ -274,18 +267,15 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 label: _secondsLeft > 0
                     ? 'Отправить повторно через $_secondsLeft сек'
                     : 'Отправить код повторно',
-                onPressed: _secondsLeft > 0 ? null : () => _resend(),
+                onPressed: _secondsLeft > 0 || _smsSending
+                    ? null
+                    : () => _resend(),
               ),
               const Spacer(),
               PrimaryButton(
                 label: 'Войти',
                 isLoading: _isLoading,
                 onPressed: _verify,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              SecondaryButton(
-                label: _smsSending ? 'Отправляем SMS…' : 'Отправить по SMS',
-                onPressed: _smsSending ? null : () => _resend(channel: 'sms'),
               ),
             ],
           ),

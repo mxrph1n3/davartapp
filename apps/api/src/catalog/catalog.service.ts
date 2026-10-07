@@ -10,6 +10,7 @@ import {
   SearchParams,
 } from '../meilisearch/meilisearch.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolveProductImageUrl } from './demo-product-image';
 
 const productListSelect = {
   id: true,
@@ -379,7 +380,11 @@ export class CatalogService {
       compareAtPrice: product.compareAtPrice
         ? Number(product.compareAtPrice)
         : null,
-      imageUrl: product.imageUrl,
+      imageUrl: resolveProductImageUrl({
+        productId: product.id,
+        categorySlug: product.category?.slug,
+        imageUrl: product.imageUrl,
+      }),
       description: product.description,
       inStock: product.inStock,
       isPopular: product.isPopular,

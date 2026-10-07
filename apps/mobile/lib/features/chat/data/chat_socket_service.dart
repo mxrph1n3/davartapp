@@ -26,11 +26,16 @@ class ChatSocketService {
 
   final TokenStorage _tokenStorage;
   io.Socket? _socket;
+  Future<void>? _connecting;
 
   final _messageListeners = <MessageHandler>[];
   final _unreadListeners = <UnreadHandler>[];
   final _chatsInvalidateListeners = <void Function()>[];
   final _typingListeners = <TypingHandler>[];
+  final _reconnectListeners = <void Function()>[];
+  final _joinedChats = <String>{};
+
+  bool get isConnected => _socket?.connected == true;
 
   void addMessageListener(MessageHandler handler) {
     _messageListeners.add(handler);
@@ -64,7 +69,30 @@ class ChatSocketService {
     _typingListeners.remove(handler);
   }
 
+  void addReconnectListener(void Function() handler) {
+    _reconnectListeners.add(handler);
+  }
+
+  void removeReconnectListener(void Function() handler) {
+    _reconnectListeners.remove(handler);
+  }
+
   Future<void> connect({bool force = false}) async {
+    if (!force && _socket?.connected == true) return;
+    if (!force && _connecting != null) return _connecting!;
+
+    final future = _connectInternal(force: force);
+    _connecting = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_connecting, future)) {
+        _connecting = null;
+      }
+    }
+  }
+
+  Future<void> _connectInternal({required bool force}) async {
     if (!force && _socket?.connected == true) return;
 
     final token = await _tokenStorage.getAccessToken();
@@ -73,29 +101,77 @@ class ChatSocketService {
       return;
     }
 
-    _socket?.dispose();
-    _socket = io.io(
+    // Only tear down an existing socket when forcing reconnect or replacing a dead one.
+    if (force || _socket != null) {
+      _socket?.dispose();
+      _socket = null;
+    }
+
+    final connected = Completer<void>();
+    final socket = io.io(
       ApiConfig.socketUrl,
       io.OptionBuilder()
           .setPath('/ws')
+          .setTransports(['websocket'])
           .setAuth({'token': token})
           .enableAutoConnect()
-          .disableForceNew()
+          .enableReconnection()
+          .setReconnectionAttempts(999999)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(8000)
           .build(),
     );
+    _socket = socket;
 
-    _socket!
+    void rejoinAndNotify() {
+      for (final chatId in List<String>.from(_joinedChats)) {
+        socket.emit('join', chatId);
+      }
+      for (final listener in List<void Function()>.from(_reconnectListeners)) {
+        listener();
+      }
+    }
+
+    socket
+      ..onConnect((_) {
+        rejoinAndNotify();
+        if (!connected.isCompleted) connected.complete();
+      })
+      ..onReconnect((_) => rejoinAndNotify())
+      ..onConnectError((error) {
+        if (!connected.isCompleted) {
+          connected.completeError(
+            StateError('Socket connect failed: $error'),
+          );
+        }
+      })
       ..on('message:new', (data) {
-        if (data is! Map) return;
-        final message =
-            ChatMessage.fromJson(Map<String, dynamic>.from(data));
-        for (final listener in List<MessageHandler>.from(_messageListeners)) {
-          listener(message);
+        final json = _asStringKeyMap(data);
+        if (json == null) return;
+        try {
+          final message = ChatMessage.fromJson(json);
+          for (final listener in List<MessageHandler>.from(_messageListeners)) {
+            listener(message);
+          }
+          // Always refresh chat list when any message arrives — even if no
+          // thread screen is open (autoDispose list listeners may be gone).
+          for (final listener
+              in List<void Function()>.from(_chatsInvalidateListeners)) {
+            listener();
+          }
+        } catch (_) {
+          // Bad payload must not kill the socket event loop.
+          for (final listener
+              in List<void Function()>.from(_chatsInvalidateListeners)) {
+            listener();
+          }
         }
       })
       ..on('unread:update', (data) {
-        if (data is! Map || data['total'] is! int) return;
-        final total = data['total'] as int;
+        final json = _asStringKeyMap(data);
+        if (json == null) return;
+        final total = json['total'];
+        if (total is! int) return;
         for (final listener in List<UnreadHandler>.from(_unreadListeners)) {
           listener(total);
         }
@@ -107,25 +183,33 @@ class ChatSocketService {
         }
       })
       ..on('typing', (data) {
-        if (data is! Map ||
-            data['chatId'] is! String ||
-            data['userId'] is! String) {
-          return;
-        }
-        final chatId = data['chatId'] as String;
-        final userId = data['userId'] as String;
-        final preview = data['preview'] as String? ?? '';
+        final json = _asStringKeyMap(data);
+        if (json == null) return;
+        final chatId = json['chatId'];
+        final userId = json['userId'];
+        if (chatId is! String || userId is! String) return;
+        final preview = json['preview'] as String? ?? '';
         for (final listener in List<TypingHandler>.from(_typingListeners)) {
           listener(chatId, userId, preview);
         }
       });
+
+    try {
+      await connected.future.timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // Keep socket for auto-reconnect; callers can still join later.
+    }
   }
 
   void joinChat(String chatId) {
-    _socket?.emit('join', chatId);
+    _joinedChats.add(chatId);
+    if (_socket?.connected == true) {
+      _socket?.emit('join', chatId);
+    }
   }
 
   void leaveChat(String chatId) {
+    _joinedChats.remove(chatId);
     _socket?.emit('leave', chatId);
   }
 
@@ -147,6 +231,25 @@ class ChatSocketService {
     _unreadListeners.clear();
     _chatsInvalidateListeners.clear();
     _typingListeners.clear();
+    _reconnectListeners.clear();
+    _joinedChats.clear();
     disconnect();
   }
+}
+
+Map<String, dynamic>? _asStringKeyMap(Object? value) {
+  if (value is! Map) return null;
+  return value.map((key, dynamic item) {
+    final k = key.toString();
+    if (item is Map) {
+      return MapEntry(k, _asStringKeyMap(item));
+    }
+    if (item is List) {
+      return MapEntry(
+        k,
+        item.map((e) => e is Map ? _asStringKeyMap(e) : e).toList(),
+      );
+    }
+    return MapEntry(k, item);
+  });
 }

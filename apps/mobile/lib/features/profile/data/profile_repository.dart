@@ -76,6 +76,10 @@ class ProfileRepository {
     await _dio.delete('/users/me/addresses/$id');
   }
 
+  Future<void> deleteAccount() async {
+    await _dio.delete('/users/me');
+  }
+
   Future<List<FaqItem>> getFaq() async {
     final response = await _dio.get('/faq');
     return (response.data as List<dynamic>)

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
@@ -32,6 +33,7 @@ class _BriefStep {
 class _BriefScreenState extends ConsumerState<BriefScreen> {
   final _controllers = <String, TextEditingController>{};
   var _prefilled = false;
+  var _participantsMerged = false;
   var _hydrated = false;
   var _step = 0;
 
@@ -102,12 +104,62 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
       notifier.setGeneral('address', address);
       _controller('g.address', address).text = address;
     }
-    final members = briefParseFamilyMembers(general['householdMembers']);
-    if (members.isEmpty) {
-      notifier.setFamilyMembers([
-        const BriefFamilyMember(role: 'self'),
-      ]);
+    _ensureHousehold();
+  }
+
+  void _ensureHousehold() {
+    final profile = ref.read(profileProvider).asData?.value;
+    final projectMembers =
+        ref.read(projectMembersProvider(widget.projectId)).asData?.value;
+    if (profile == null) return;
+
+    final ownerName = profile.name?.trim() ?? '';
+    final current = briefParseFamilyMembers(
+      ref.read(briefFormProvider(widget.projectId)).answers.general['householdMembers'],
+    );
+    final next = <BriefFamilyMember>[...current];
+
+    final selfIndex = next.indexWhere((member) => member.role == 'self');
+    if (selfIndex < 0) {
+      next.insert(0, BriefFamilyMember(role: 'self', name: ownerName));
+    } else if (ownerName.isNotEmpty && next[selfIndex].name.trim().isEmpty) {
+      next[selfIndex] = next[selfIndex].copyWith(name: ownerName);
     }
+
+    if (projectMembers != null && !_participantsMerged) {
+      _participantsMerged = true;
+      for (final participant in projectMembers) {
+        if (participant.role == 'owner') continue;
+        final name = participant.user.displayName.trim();
+        if (name.isEmpty) continue;
+        final role = _familyRoleForParticipant(participant);
+        final already = next.any(
+          (member) => member.name.trim().toLowerCase() == name.toLowerCase(),
+        );
+        if (already) continue;
+        next.add(BriefFamilyMember(role: role, name: name));
+      }
+    }
+
+    final changed = next.length != current.length ||
+        next.asMap().entries.any((entry) {
+          final before = current[entry.key];
+          final after = entry.value;
+          return before.role != after.role || before.name != after.name;
+        });
+    if (!changed) return;
+    ref
+        .read(briefFormProvider(widget.projectId).notifier)
+        .setFamilyMembers(next);
+  }
+
+  String _familyRoleForParticipant(ProjectMember member) {
+    final relation = (member.relation ?? '').toLowerCase();
+    if (relation.contains('супруг')) return 'partner';
+    if (relation.contains('реб')) return 'child';
+    if (relation.contains('родит')) return 'parent';
+    if (relation.contains('друг')) return 'other';
+    return 'relative';
   }
 
   bool _roomIncluded(BriefAnswers answers, String roomId) {
@@ -176,22 +228,24 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
       return;
     }
 
-    if (!isLocked) {
-      final success = await notifier.save();
-      if (!mounted) return;
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Анкета сохранена'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-        await Future<void>.delayed(const Duration(seconds: 1));
-        if (!mounted) return;
-        popOrGo(context, fallback);
-      }
-      return;
-    }
+        if (!isLocked) {
+          final success = await notifier.save();
+          if (!mounted) return;
+          if (success) {
+            final messenger = ScaffoldMessenger.of(context);
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Анкета сохранена'),
+                duration: Duration(seconds: 1),
+              ),
+            );
+            await Future<void>.delayed(const Duration(seconds: 1));
+            if (!mounted) return;
+            messenger.hideCurrentSnackBar();
+            context.go(fallback);
+          }
+          return;
+        }
 
     popOrGo(context, fallback);
   }
@@ -220,6 +274,11 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     ref.listen(profileProvider, (previous, next) {
       final brief = ref.read(briefProvider(widget.projectId)).asData?.value;
       if (brief != null) _prefillContacts(brief);
+    });
+    ref.listen(projectMembersProvider(widget.projectId), (previous, next) {
+      if (next.asData == null) return;
+      final brief = ref.read(briefProvider(widget.projectId)).asData?.value;
+      if (brief != null) _ensureHousehold();
     });
 
     return Scaffold(
@@ -416,9 +475,6 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                 member: members[i],
                 enabled: enabled,
                 onChanged: (member) => notifier.updateFamilyMember(i, member),
-                onRemove: enabled && members.length > 1
-                    ? () => notifier.removeFamilyMember(i)
-                    : null,
               ),
               const SizedBox(height: AppSpacing.md),
             ],
@@ -997,13 +1053,11 @@ class _FamilyMemberCard extends StatelessWidget {
     required this.member,
     required this.enabled,
     required this.onChanged,
-    this.onRemove,
   });
 
   final BriefFamilyMember member;
   final bool enabled;
   final ValueChanged<BriefFamilyMember> onChanged;
-  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -1017,29 +1071,25 @@ class _FamilyMemberCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Кто',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              if (onRemove != null)
-                IconButton(
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.close, size: 20),
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
+          Text(
+            member.name.trim().isNotEmpty ? member.name.trim() : 'Кто',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
+          const SizedBox(height: AppSpacing.sm),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
               for (final choice in briefFamilyRoleChoices)
                 ChoiceChip(
-                  label: Text(choice.label),
+                  label: Text(
+                    choice.label,
+                    style: TextStyle(
+                      color: member.role == choice.id
+                          ? const Color(0xFF111111)
+                          : colors.textPrimary,
+                    ),
+                  ),
                   selected: member.role == choice.id,
                   onSelected: enabled
                       ? (selected) {

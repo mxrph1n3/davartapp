@@ -15,14 +15,13 @@ class AuthRepository {
   /// Returns mock [debugCode] when API runs with SMS_PROVIDER=mock (non-prod).
   Future<String?> sendOtp(
     String phone, {
-    String channel = 'telegram',
+    String channel = 'sms',
   }) async {
     final response = await _dio.post(
       '/auth/send-otp',
       data: {
         'phone': phone,
-        // Only send channel for SMS so older APIs without the field still accept Telegram OTP.
-        if (channel != 'telegram') 'channel': channel,
+        'channel': channel,
       },
     );
     final data = response.data;

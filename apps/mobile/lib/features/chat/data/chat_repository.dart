@@ -220,6 +220,29 @@ class ChatRepository {
     return ChatSummary.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Which of [phones] already have a DAVart account (for address-book matching).
+  Future<Map<String, ChatContact>> matchPhones(List<String> phones) async {
+    if (phones.isEmpty) return {};
+    final response = await _dio.post(
+      '/chats/match-phones',
+      data: {'phones': phones},
+    );
+    final matches = response.data['matches'] as List<dynamic>? ?? [];
+    final map = <String, ChatContact>{};
+    for (final item in matches) {
+      final contact = ChatContact.fromJson(item as Map<String, dynamic>);
+      if (contact.phone != null && contact.phone!.isNotEmpty) {
+        map[contact.phone!] = contact;
+        final digits = contact.phone!.replaceAll(RegExp(r'\D'), '');
+        if (digits.length >= 10) {
+          map[digits.substring(digits.length - 10)] = contact;
+        }
+      }
+      // Also index by id-less keys already covered; keep id lookup unused here.
+    }
+    return map;
+  }
+
   Future<ChatDetails> getChat(String chatId) async {
     final response = await _dio.get('/chats/$chatId');
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);

@@ -9,6 +9,7 @@ import '../../../core/widgets/ds/ds.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/profile_repository.dart';
+import 'delete_account_button.dart';
 import 'profile_notifier.dart';
 import 'settings_screen.dart';
 
@@ -105,6 +106,7 @@ class ProfileScreen extends ConsumerWidget {
               if (context.mounted) context.go(AppRoutes.catalog);
             },
           ),
+          const DeleteAccountButton(),
         ],
       ),
     );

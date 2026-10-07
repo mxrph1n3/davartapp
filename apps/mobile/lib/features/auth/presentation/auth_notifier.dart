@@ -110,7 +110,7 @@ class AuthNotifier extends Notifier<AuthState> {
     );
   }
 
-  Future<String?> sendOtp(String phone, {String channel = 'telegram'}) async {
+  Future<String?> sendOtp(String phone, {String channel = 'sms'}) async {
     try {
       return await _repository.sendOtp(phone, channel: channel);
     } on DioException catch (error) {
@@ -184,22 +184,29 @@ class AuthNotifier extends Notifier<AuthState> {
 
   String _extractError(DioException error) {
     final status = error.response?.statusCode;
+    final data = error.response?.data;
+    String? apiMessage;
+    if (data is Map) {
+      final message = data['message'];
+      if (message is String && message.trim().isNotEmpty) {
+        apiMessage = message.trim();
+      } else if (message is List && message.isNotEmpty) {
+        apiMessage = message.map((e) => e.toString()).join(', ');
+      }
+    } else if (data is String && data.trim().isNotEmpty) {
+      apiMessage = data.trim();
+    }
+
     if (status == 429) {
       return 'Слишком много запросов кода. Подождите несколько минут.';
+    }
+    // Prefer provider/backend text over a generic 503 (e.g. TargetSMS sender error).
+    if (apiMessage != null && apiMessage.isNotEmpty) {
+      return apiMessage;
     }
     if (status == 503) {
       return 'Сервис временно недоступен. Попробуйте позже.';
     }
-
-    final data = error.response?.data;
-    if (data is Map) {
-      final message = data['message'];
-      if (message is String && message.trim().isNotEmpty) return message;
-      if (message is List && message.isNotEmpty) {
-        return message.map((e) => e.toString()).join(', ');
-      }
-    }
-    if (data is String && data.trim().isNotEmpty) return data;
 
     if (error.type == DioExceptionType.connectionTimeout ||
         error.type == DioExceptionType.receiveTimeout ||

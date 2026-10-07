@@ -17,6 +17,7 @@ import {
 import { SmsService } from '../auth/sms.service';
 import { actorProjectAccessWhere } from '../projects/project-access';
 import { randomUUID } from 'crypto';
+import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { StorageService } from '../storage/storage.service';
@@ -194,12 +195,10 @@ export class ChatService {
   async listContacts(userId: string, q?: string) {
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { role: true, extraRoles: true },
+      select: { id: true },
     });
     if (!viewer) throw new NotFoundException('User not found');
 
-    const roles = allRolesOf(viewer);
-    const isStudio = roles.some((role) => isStudioRole(role));
     const query = q?.trim();
 
     const namePhoneFilter: Prisma.UserWhereInput | undefined = query
@@ -211,151 +210,15 @@ export class ChatService {
         }
       : undefined;
 
-    let users: Array<{
-      id: string;
-      name: string | null;
-      phone: string;
-      role: UserRole;
-    }>;
-
-    if (isStudio) {
-      const canSeeAllClients = roles.some(
-        (role) => role === UserRole.admin || role === UserRole.complectator,
-      );
-      const clientWhere: Prisma.UserWhereInput = canSeeAllClients
-        ? { role: UserRole.client, ...(namePhoneFilter ?? {}) }
-        : {
-            role: UserRole.client,
-            AND: [
-              ...(namePhoneFilter ? [namePhoneFilter] : []),
-              {
-                OR: [
-                  { clientProjects: { some: { designerId: userId } } },
-                  { clientProjects: { some: { surveyorId: userId } } },
-                  {
-                    projectMemberships: {
-                      some: {
-                        project: {
-                          OR: [{ designerId: userId }, { surveyorId: userId }],
-                        },
-                      },
-                    },
-                  },
-                ],
-              },
-            ],
-          };
-
-      const [clients, colleagues] = await Promise.all([
-        this.prisma.user.findMany({
-          where: clientWhere,
-          select: { id: true, name: true, phone: true, role: true },
-          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
-          take: 100,
-        }),
-        this.prisma.user.findMany({
-          where: {
-            id: { not: userId },
-            role: {
-              in: [
-                UserRole.admin,
-                UserRole.complectator,
-                UserRole.designer,
-                UserRole.surveyor,
-              ],
-            },
-            ...(namePhoneFilter ?? {}),
-          },
-          select: { id: true, name: true, phone: true, role: true },
-          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
-          take: 100,
-        }),
-      ]);
-      users = [...clients, ...colleagues];
-    } else {
-      const projectStaff = await this.prisma.project.findMany({
-        where: {
-          isShowcase: false,
-          OR: [{ userId }, { members: { some: { userId } } }],
-        },
-        select: {
-          designerId: true,
-          surveyorId: true,
-          members: { select: { userId: true } },
-        },
-        take: 50,
-      });
-      const knownIds = new Set<string>();
-      for (const project of projectStaff) {
-        if (project.designerId) knownIds.add(project.designerId);
-        if (project.surveyorId) knownIds.add(project.surveyorId);
-        for (const member of project.members) knownIds.add(member.userId);
-      }
-
-      const support = await this.prisma.chat.findFirst({
-        where: {
-          type: ChatType.support,
-          participants: { some: { userId } },
-        },
-        include: {
-          participants: {
-            where: { userId: { not: userId } },
-            select: { userId: true },
-          },
-        },
-      });
-      for (const p of support?.participants ?? []) {
-        knownIds.add(p.userId);
-      }
-
-      // People already in personal chats with this client.
-      const personalPeers = await this.prisma.chatParticipant.findMany({
-        where: {
-          userId: { not: userId },
-          chat: {
-            type: ChatType.personal,
-            participants: { some: { userId } },
-          },
-        },
-        select: { userId: true },
-        take: 100,
-      });
-      for (const peer of personalPeers) {
-        knownIds.add(peer.userId);
-      }
-
-      const knownUsers = knownIds.size
-        ? await this.prisma.user.findMany({
-            where: {
-              id: { in: [...knownIds] },
-              ...(namePhoneFilter ?? {}),
-            },
-            select: { id: true, name: true, phone: true, role: true },
-            orderBy: [{ name: 'asc' }, { phone: 'asc' }],
-            take: 100,
-          })
-        : [];
-
-      // Search by name/phone across all users so clients can find each other.
-      let searchHits: typeof knownUsers = [];
-      if (query && query.length >= 2) {
-        searchHits = await this.prisma.user.findMany({
-          where: {
-            id: { not: userId },
-            ...(namePhoneFilter ?? {}),
-          },
-          select: { id: true, name: true, phone: true, role: true },
-          orderBy: [{ name: 'asc' }, { phone: 'asc' }],
-          take: 50,
-        });
-      }
-
-      const byId = new Map<string, (typeof knownUsers)[number]>();
-      for (const user of [...knownUsers, ...searchHits]) {
-        byId.set(user.id, user);
-      }
-      users = [...byId.values()];
-    }
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: { not: userId },
+        ...(namePhoneFilter ?? {}),
+      },
+      select: { id: true, name: true, phone: true, role: true },
+      orderBy: [{ name: 'asc' }, { phone: 'asc' }],
+      take: query ? 200 : 2000,
+    });
 
     const seen = new Set<string>();
     return {
@@ -451,6 +314,70 @@ export class ChatService {
     };
   }
 
+  /**
+   * Match normalized RU phones to existing users (for device contacts UI).
+   * Does not create accounts — unregistered numbers stay invite-via-SMS.
+   */
+  async matchPhones(actorId: string, phonesRaw: string[]) {
+    const normalized = [
+      ...new Set(
+        phonesRaw
+          .map((p) => this.normalizeRuPhone(p))
+          .filter((p): p is string => !!p),
+      ),
+    ].slice(0, 500);
+
+    if (normalized.length === 0) {
+      return {
+        matches: [] as Array<{
+          phone: string;
+          id: string;
+          name: string;
+          role: UserRole;
+          roleLabel: string;
+        }>,
+      };
+    }
+
+    const last10Set = new Set(normalized.map((p) => p.slice(-10)));
+    const requestPhoneByLast10 = new Map(
+      normalized.map((p) => [p.slice(-10), p] as const),
+    );
+
+    // In-memory last-10 match: reliable across +7 / 8 / 7 / formatting quirks.
+    const users = await this.prisma.user.findMany({
+      where: { id: { not: actorId } },
+      select: { id: true, name: true, phone: true, role: true },
+      take: 5000,
+    });
+
+    const matches: Array<{
+      phone: string;
+      id: string;
+      name: string;
+      role: UserRole;
+      roleLabel: string;
+    }> = [];
+    const seenIds = new Set<string>();
+
+    for (const user of users) {
+      const digits = (user.phone ?? '').replace(/\D/g, '').slice(-10);
+      if (digits.length !== 10 || !last10Set.has(digits)) continue;
+      if (seenIds.has(user.id)) continue;
+      seenIds.add(user.id);
+      const requestPhone = requestPhoneByLast10.get(digits) ?? `+7${digits}`;
+      matches.push({
+        phone: requestPhone,
+        id: user.id,
+        name: this.publicDisplayName(user, { revealPhone: true }),
+        role: user.role,
+        roleLabel: this.contactRoleLabel(user.role),
+      });
+    }
+
+    return { matches };
+  }
+
   /** Start personal chat by phone; create user if needed and send SMS invite. */
   async inviteByPhone(actorId: string, phoneRaw: string, name?: string) {
     const phone = this.normalizeRuPhone(phoneRaw);
@@ -486,14 +413,17 @@ export class ChatService {
 
     const chat = await this.getOrCreatePersonalChat(actorId, invitee.id);
 
-    const appUrl =
-      this.configService.get<string>('APP_DOWNLOAD_URL') ??
-      'https://davart.ru/app';
-    const from = actor.name?.trim() || actor.phone || 'пользователь DAVart';
-    await this.smsService.sendText(
-      phone,
-      `${from} приглашает вас в чат DAVart. Скачать: ${appUrl}`,
-    );
+    // SMS invite only for brand-new accounts — existing users just get a DM.
+    if (isNew) {
+      const appUrl =
+        this.configService.get<string>('APP_DOWNLOAD_URL') ??
+        'https://davart.ru/app';
+      const from = actor.name?.trim() || actor.phone || 'пользователь DAVart';
+      await this.smsService.sendText(
+        phone,
+        `${from} приглашает вас в чат DAVart. Скачать: ${appUrl}`,
+      );
+    }
 
     return { ...chat, invited: isNew, phone: invitee.phone };
   }
@@ -814,8 +744,10 @@ export class ChatService {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'audio/mp4',
       'audio/m4a',
+      'audio/x-m4a',
       'audio/aac',
       'audio/mpeg',
+      'audio/mp4a-latm',
       'video/mp4',
     ];
     if (!allowed.includes(dto.contentType.toLowerCase())) {
@@ -853,7 +785,11 @@ export class ChatService {
       throw new BadRequestException('File is too large (max 50 MB)');
     }
 
-    const contentType = (file.mimetype || 'application/octet-stream').toLowerCase();
+    const rawType = (file.mimetype || 'application/octet-stream').toLowerCase();
+    final name = file.originalname.toLowerCase();
+    final contentType = rawType == 'application/octet-stream' && name.endsWith('.m4a')
+      ? 'audio/mp4'
+      : rawType;
     this.assertAllowedAttachmentType(contentType);
 
     const attachmentId = randomUUID();
@@ -1016,8 +952,10 @@ export class ChatService {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'audio/mp4',
       'audio/m4a',
+      'audio/x-m4a',
       'audio/aac',
       'audio/mpeg',
+      'audio/mp4a-latm',
       'video/mp4',
     ];
     if (!allowed.includes(contentType)) {
@@ -1962,6 +1900,18 @@ export class ChatService {
     };
   }
 
+  /** Re-label a formatted message payload for a specific websocket viewer. */
+  asViewerMessage<T extends { sender?: { id: string }; isMine?: boolean }>(
+    message: T,
+    viewerId: string,
+  ): T {
+    const senderId = message.sender?.id;
+    return {
+      ...message,
+      isMine: senderId === viewerId,
+    };
+  }
+
   private async formatMessage(message: MessageWithRelations, viewerId: string) {
     let attachmentUrl: string | null = null;
     if (message.attachmentKey && this.storage.isAvailable()) {
@@ -1993,7 +1943,10 @@ export class ChatService {
             id: message.product.id,
             name: message.product.name,
             price: Number(message.product.price),
-            imageUrl: message.product.imageUrl,
+            imageUrl: resolveProductImageUrl({
+              productId: message.product.id,
+              imageUrl: message.product.imageUrl,
+            }),
             slug: message.product.slug,
           }
         : null,

@@ -32,6 +32,7 @@ import {
   CreatePersonalChatDto,
   ForwardMessageDto,
   InviteChatByPhoneDto,
+  MatchPhonesDto,
   MessageIdParamDto,
   MessagesQueryDto,
   ProjectChatParamDto,
@@ -86,6 +87,15 @@ export class ChatController {
     @Body() dto: InviteChatByPhoneDto,
   ) {
     return this.chatService.inviteByPhone(user.sub, dto.phone, dto.name);
+  }
+
+  @Post('match-phones')
+  @HttpCode(200)
+  matchPhones(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: MatchPhonesDto,
+  ) {
+    return this.chatService.matchPhones(user.sub, dto.phones ?? []);
   }
 
   @Get('project/:projectId')
@@ -161,7 +171,10 @@ export class ChatController {
       params.id,
       user.sub,
     );
-    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+    this.chatGateway.emitNewMessage(params.id, message, [
+      ...otherUserIds,
+      user.sub,
+    ]);
     return message;
   }
 
@@ -181,7 +194,10 @@ export class ChatController {
       params.id,
       user.sub,
     );
-    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+    this.chatGateway.emitNewMessage(params.id, message, [
+      ...otherUserIds,
+      user.sub,
+    ]);
     return message;
   }
 
@@ -201,7 +217,10 @@ export class ChatController {
       params.id,
       user.sub,
     );
-    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+    this.chatGateway.emitNewMessage(params.id, message, [
+      ...otherUserIds,
+      user.sub,
+    ]);
     return message;
   }
 
@@ -221,7 +240,10 @@ export class ChatController {
       dto.targetChatId,
       user.sub,
     );
-    this.chatGateway.emitNewMessage(dto.targetChatId, message, otherUserIds);
+    this.chatGateway.emitNewMessage(dto.targetChatId, message, [
+      ...otherUserIds,
+      user.sub,
+    ]);
     for (const userId of otherUserIds) {
       const total = (await this.chatService.getUnreadTotal(userId)).total;
       this.chatGateway.emitUnreadUpdate(userId, total);
@@ -276,7 +298,10 @@ export class ChatController {
         params.id,
         user.sub,
       );
-      this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+      this.chatGateway.emitNewMessage(params.id, message, [
+        ...otherUserIds,
+        user.sub,
+      ]);
 
       for (const userId of otherUserIds) {
         const total = (await this.chatService.getUnreadTotal(userId)).total;
@@ -310,16 +335,31 @@ export class ChatController {
       user.sub,
     );
 
-    this.chatGateway.emitNewMessage(params.id, message, otherUserIds);
+    // One chat-room broadcast for anyone currently viewing the thread.
+    this.chatGateway.emitNewMessage(params.id, message, []);
 
-    for (const userId of otherUserIds) {
-      const total = (await this.chatService.getUnreadTotal(userId)).total;
-      this.chatGateway.emitUnreadUpdate(userId, total);
+    // Fan-out to every participant's user sockets — including the sender —
+    // so other devices / users not inside the room update instantly.
+    const fanoutIds = [...new Set([...otherUserIds, user.sub])];
+    for (const recipientId of fanoutIds) {
+      const forRecipient = this.chatService.asViewerMessage(
+        message,
+        recipientId,
+      );
+      this.chatGateway.emitNewMessage(params.id, forRecipient, [recipientId], {
+        skipChatRoom: true,
+      });
+
+      if (recipientId === user.sub) continue;
+
+      const total = (await this.chatService.getUnreadTotal(recipientId)).total;
+      this.chatGateway.emitUnreadUpdate(recipientId, total);
 
       const push = this.chatService.buildPushPayload(message);
-      await this.pushService.sendToUser(userId, {
+      await this.pushService.sendToUser(recipientId, {
         title: push.title,
         body: push.body,
+        badge: total,
         data: { type: 'chat', chatId: params.id },
       });
     }

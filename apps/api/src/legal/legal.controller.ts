@@ -23,7 +23,7 @@ export class LegalController {
         },
         {
           heading: 'Контакты',
-          body: 'По вопросам персональных данных: privacy@davart.ru',
+          body: 'По вопросам персональных данных: info@davart.ru',
         },
       ],
     };

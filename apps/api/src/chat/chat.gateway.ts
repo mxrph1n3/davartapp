@@ -152,8 +152,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  emitNewMessage(chatId: string, message: unknown, recipientUserIds: string[] = []) {
-    this.server.to(`chat:${chatId}`).emit('message:new', message);
+  emitNewMessage(
+    chatId: string,
+    message: unknown,
+    recipientUserIds: string[] = [],
+    options: { skipChatRoom?: boolean } = {},
+  ) {
+    // Chat-room broadcast is optional so fan-out can send per-viewer payloads
+    // without flooding everyone in the thread with the wrong isMine flag.
+    if (!options.skipChatRoom) {
+      this.server.to(`chat:${chatId}`).emit('message:new', message);
+    }
     // Recipients who have not joined the chat room still get the event + list refresh.
     for (const userId of recipientUserIds) {
       this.server.to(`user:${userId}`).emit('message:new', message);

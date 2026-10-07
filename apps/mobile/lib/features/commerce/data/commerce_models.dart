@@ -1,3 +1,5 @@
+import '../../../core/utils/demo_media.dart';
+
 class CartProduct {
   const CartProduct({
     required this.id,
@@ -11,14 +13,22 @@ class CartProduct {
   });
 
   factory CartProduct.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String;
     return CartProduct(
-      id: json['id'] as String,
+      id: id,
       name: json['name'] as String,
       slug: json['slug'] as String,
       sku: json['sku'] as String,
       price: (json['price'] as num).toDouble(),
       compareAtPrice: (json['compareAtPrice'] as num?)?.toDouble(),
-      imageUrl: json['imageUrl'] as String?,
+      imageUrl: demoProductImageUrl(
+        productId: id,
+        categorySlug: (json['category'] is Map
+                ? (json['category'] as Map)['slug'] as String?
+                : null) ??
+            'mebel',
+        imageUrl: json['imageUrl'] as String?,
+      ),
       inStock: json['inStock'] as bool? ?? false,
     );
   }

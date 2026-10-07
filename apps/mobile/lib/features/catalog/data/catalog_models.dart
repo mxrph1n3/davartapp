@@ -1,3 +1,5 @@
+import '../../../core/utils/demo_media.dart';
+
 enum ProductSort {
   popular('popular', 'Популярные'),
   priceAsc('price_asc', 'Сначала дешевле'),
@@ -218,20 +220,26 @@ class ProductSummary {
   });
 
   factory ProductSummary.fromJson(Map<String, dynamic> json) {
+    final category = CatalogCategory.fromJson(
+      json['category'] as Map<String, dynamic>,
+    );
+    final id = json['id'] as String;
     return ProductSummary(
-      id: json['id'] as String,
+      id: id,
       name: json['name'] as String,
       slug: json['slug'] as String,
       sku: json['sku'] as String,
       price: (json['price'] as num).toDouble(),
       compareAtPrice: (json['compareAtPrice'] as num?)?.toDouble(),
-      imageUrl: json['imageUrl'] as String?,
+      imageUrl: demoProductImageUrl(
+        productId: id,
+        categorySlug: category.slug,
+        imageUrl: json['imageUrl'] as String?,
+      ),
       description: json['description'] as String?,
       inStock: json['inStock'] as bool? ?? false,
       isPopular: json['isPopular'] as bool? ?? false,
-      category: CatalogCategory.fromJson(
-        json['category'] as Map<String, dynamic>,
-      ),
+      category: category,
       brand: CatalogBrand.fromJson(json['brand'] as Map<String, dynamic>?),
     );
   }
@@ -282,20 +290,26 @@ class ProductDetail extends ProductSummary {
   });
 
   factory ProductDetail.fromJson(Map<String, dynamic> json) {
+    final category = CatalogCategory.fromJson(
+      json['category'] as Map<String, dynamic>,
+    );
+    final id = json['id'] as String;
     return ProductDetail(
-      id: json['id'] as String,
+      id: id,
       name: json['name'] as String,
       slug: json['slug'] as String,
       sku: json['sku'] as String,
       price: (json['price'] as num).toDouble(),
       compareAtPrice: (json['compareAtPrice'] as num?)?.toDouble(),
-      imageUrl: json['imageUrl'] as String?,
+      imageUrl: demoProductImageUrl(
+        productId: id,
+        categorySlug: category.slug,
+        imageUrl: json['imageUrl'] as String?,
+      ),
       description: json['description'] as String?,
       inStock: json['inStock'] as bool? ?? false,
       isPopular: json['isPopular'] as bool? ?? false,
-      category: CatalogCategory.fromJson(
-        json['category'] as Map<String, dynamic>,
-      ),
+      category: category,
       brand: CatalogBrand.fromJson(json['brand'] as Map<String, dynamic>?),
       attributes: (json['attributes'] as List<dynamic>? ?? [])
           .map((item) => ProductAttribute.fromJson(item as Map<String, dynamic>))

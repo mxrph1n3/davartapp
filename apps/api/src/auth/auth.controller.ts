@@ -11,7 +11,7 @@ export class AuthController {
   @Post('send-otp')
   @HttpCode(200)
   sendOtp(@Body() dto: SendOtpDto) {
-    return this.authService.sendOtp(dto.phone, dto.channel ?? 'telegram');
+    return this.authService.sendOtp(dto.phone, dto.channel ?? 'sms');
   }
 
   @Post('verify-otp')

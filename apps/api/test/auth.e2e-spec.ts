@@ -130,9 +130,41 @@ describe('Auth (e2e)', () => {
 
     expect(response.body.message).toBe('OTP sent');
     expect(response.body.debugCode).toMatch(/^\d{4}$/);
-    expect(redisStore.get('otp:+79001234567')).toBe(
-      hashOtp(response.body.debugCode as string),
-    );
+    const stored = JSON.parse(redisStore.get('otp:+79001234567')!);
+    expect(stored.hashes).toContain(hashOtp(response.body.debugCode as string));
+  });
+
+  it('POST /api/auth/send-otp + verify for AUTH_TEST_PHONES without SMS', async () => {
+    process.env.AUTH_TEST_PHONES = '+70000000000';
+    process.env.AUTH_TEST_CODE = '0000';
+
+    // Rebuild app so ConfigService picks up env (module already compiled —
+    // AuthService reads config at call time via ConfigService.get, so OK).
+    const send = await request(app.getHttpServer())
+      .post('/api/auth/send-otp')
+      .send({ phone: '+70000000000' })
+      .expect(200);
+
+    expect(send.body.channel).toBe('test');
+    expect(send.body.debugCode).toBe('0000');
+
+    mockPrismaService.user.upsert.mockResolvedValueOnce({
+      id: 'user-test',
+      phone: '+70000000000',
+      name: null,
+      role: 'client',
+      extraRoles: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const verified = await request(app.getHttpServer())
+      .post('/api/auth/verify-otp')
+      .send({ phone: '+70000000000', code: '0000' })
+      .expect(200);
+
+    expect(verified.body.accessToken).toBeDefined();
+    expect(verified.body.user.phone).toBe('+70000000000');
   });
 
   it('POST /api/auth/send-otp fails when Redis is down', async () => {

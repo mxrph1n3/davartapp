@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -28,11 +29,19 @@ class PushService {
   PushService(this._ref);
 
   final Ref _ref;
+  static const _iosChannel = MethodChannel('davart/push');
+
   StreamSubscription<String>? _tokenRefreshSub;
   var _firebaseReady = false;
+  var _iosBound = false;
+  String? _apnsToken;
 
   Future<bool> bootstrap() async {
     if (kIsWeb) return false;
+    if (Platform.isIOS) {
+      _bindIosChannel();
+      return true;
+    }
     try {
       await Firebase.initializeApp();
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -48,6 +57,18 @@ class PushService {
     final authState = _ref.read(authProvider);
     if (!authState.isAuthenticated || authState.user == null) return;
 
+    if (Platform.isIOS) {
+      _bindIosChannel();
+      try {
+        await _iosChannel.invokeMethod<bool>('register');
+      } catch (error) {
+        debugPrint('APNs register failed: $error');
+      }
+      await _sendApnsToken();
+      await _openPending();
+      return;
+    }
+
     if (!_firebaseReady) {
       await _registerDevToken(authState.user!.id);
       return;
@@ -55,14 +76,6 @@ class PushService {
 
     final messaging = FirebaseMessaging.instance;
     await messaging.requestPermission(alert: true, badge: true, sound: true);
-
-    if (Platform.isIOS) {
-      await messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
 
     final token = await messaging.getToken();
     if (token != null) {
@@ -73,6 +86,75 @@ class PushService {
     _tokenRefreshSub = messaging.onTokenRefresh.listen(_sendToken);
   }
 
+  /// System banner that slides down on the iPhone, including while the app is open.
+  Future<void> showChatBanner({
+    required String messageId,
+    required String title,
+    required String body,
+    required String chatId,
+  }) async {
+    if (kIsWeb || !Platform.isIOS) return;
+    _bindIosChannel();
+    try {
+      await _iosChannel.invokeMethod<void>('show', {
+        'messageId': messageId,
+        'title': title,
+        'body': body,
+        'chatId': chatId,
+      });
+    } catch (error) {
+      debugPrint('iOS banner failed: $error');
+    }
+  }
+
+  void _bindIosChannel() {
+    if (_iosBound) return;
+    _iosBound = true;
+    _iosChannel.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'token':
+          final token = call.arguments as String?;
+          if (token == null || token.isEmpty) return;
+          _apnsToken = token;
+          await _sendApnsToken();
+        case 'open':
+          final args = _stringMap(call.arguments);
+          _openChat(args['chatId'], args['title']);
+      }
+    });
+  }
+
+  Future<void> _sendApnsToken() async {
+    final token = _apnsToken;
+    final authState = _ref.read(authProvider);
+    if (token == null || !authState.isAuthenticated) return;
+    await _sendToken(token, platform: kDebugMode ? 'ios-sandbox' : 'ios');
+  }
+
+  Future<void> _openPending() async {
+    try {
+      final pending = await _iosChannel.invokeMethod<Object?>('pendingOpen');
+      final args = _stringMap(pending);
+      _openChat(args['chatId'], args['title']);
+    } catch (_) {}
+  }
+
+  Map<String, String> _stringMap(Object? value) {
+    if (value is! Map) return const {};
+    return value.map((key, item) => MapEntry(key.toString(), item?.toString() ?? ''));
+  }
+
+  void _openChat(String? chatId, String? title) {
+    if (chatId == null || chatId.isEmpty) return;
+    if (!_ref.read(authProvider).isAuthenticated) return;
+    final label = (title == null || title.trim().isEmpty) ? 'Чат' : title.trim();
+    try {
+      _ref.read(routerProvider).push(
+            '${AppRoutes.chatDetail(chatId)}?title=${Uri.encodeComponent(label)}',
+          );
+    } catch (_) {}
+  }
+
   Future<void> _registerDevToken(String userId) async {
     final token =
         'davart-$userId-${Platform.operatingSystem}-${DateTime.now().millisecondsSinceEpoch}';
@@ -81,11 +163,11 @@ class PushService {
     } catch (_) {}
   }
 
-  Future<void> _sendToken(String token) async {
+  Future<void> _sendToken(String token, {String? platform}) async {
     try {
       await _ref.read(profileRepositoryProvider).registerFcmToken(
             token: token,
-            platform: Platform.operatingSystem,
+            platform: platform ?? Platform.operatingSystem,
           );
     } catch (_) {}
   }

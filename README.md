@@ -23,7 +23,7 @@ cd ~/davartapp && git pull origin main
 BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh
 ```
 
-`BUNDLE_ID=...` обязателен на Personal Team — общий `com.davart.davartMobiledsawa` занят командой elees.
+`BUNDLE_ID=...` опционален для Personal Team / чужого Apple ID. По умолчанию в проекте: `com.davart.app`.
 
 - Скрипт ставит **release** (с Home Screen не падает)
 - API: `http://217.198.6.88:3000/api`

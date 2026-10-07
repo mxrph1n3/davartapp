@@ -8,6 +8,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
 	<string>DAVart</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +17,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>davart_mobile</string>
+	<string>DAVart</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -28,7 +30,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.davart.davartMobile</string>
+			<string>com.davart.app</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>davart</string>
@@ -46,6 +48,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Камера нужна, чтобы отправить фото в чат</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Контакты нужны, чтобы начать чат с людьми из телефонной книги</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Микрофон нужен, чтобы отправлять голосовые сообщения</string>
 	<key>NSPhotoLibraryUsageDescription</key>
@@ -76,6 +80,7 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>remote-notification</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

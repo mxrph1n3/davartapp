@@ -7,6 +7,7 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../auth/presentation/auth_notifier.dart';
+import '../../profile/presentation/delete_account_button.dart';
 import '../../profile/presentation/profile_notifier.dart';
 import '../../profile/presentation/settings_screen.dart';
 
@@ -90,6 +91,7 @@ class StaffProfileScreen extends ConsumerWidget {
               if (context.mounted) context.go(AppRoutes.catalog);
             },
           ),
+          const DeleteAccountButton(),
         ],
       ),
     );

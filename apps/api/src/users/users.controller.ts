@@ -35,6 +35,11 @@ export class UsersController {
     return this.usersService.updateProfile(user.sub, dto);
   }
 
+  @Delete('me')
+  deleteMe(@CurrentUser() user: JwtPayload) {
+    return this.usersService.deleteAccount(user.sub);
+  }
+
   @Post('me/fcm-token')
   registerFcmToken(
     @CurrentUser() user: JwtPayload,

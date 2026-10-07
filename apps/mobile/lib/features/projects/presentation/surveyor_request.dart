@@ -12,9 +12,9 @@ Future<void> requestSurveyorConfirm(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Вызов замерщика'),
+      title: const Text('Замер'),
       content: const Text(
-        'Отправить заявку на вызов замерщика? Студия свяжется с вами для согласования времени.',
+        'Для назначения даты и времени замера менеджер свяжется с Вами в ближайшее время☺️',
       ),
       actions: [
         TextButton(
@@ -23,7 +23,7 @@ Future<void> requestSurveyorConfirm(
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Вызвать'),
+          child: const Text('Ок'),
         ),
       ],
     ),
@@ -36,7 +36,7 @@ Future<void> requestSurveyorConfirm(
     ref.invalidate(projectsListProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заявка на вызов замерщика отправлена')),
+        const SnackBar(content: Text('Заявка на замер отправлена')),
       );
     }
   } catch (_) {

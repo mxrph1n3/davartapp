@@ -12,7 +12,14 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
+  /** Internal Docker network client (http://minio:9000) — Put/Head only. */
   private client: S3Client | null = null;
+  /**
+   * Client whose endpoint is the phone-reachable MinIO origin.
+   * Presigned URLs must be signed for this host — rewriting Host after
+   * signing breaks SigV4 (X-Amz-SignedHeaders includes host).
+   */
+  private signingClient: S3Client | null = null;
   private bucket = 'davart';
   private enabled = false;
 
@@ -30,13 +37,26 @@ export class StorageService implements OnModuleInit {
 
     this.bucket = this.config.get<string>('S3_BUCKET', 'davart');
     const region = this.config.get<string>('S3_REGION', 'us-east-1');
+    const credentials = {
+      accessKeyId: accessKey,
+      secretAccessKey: secretKey,
+    };
 
     this.client = new S3Client({
       endpoint,
       region,
-      credentials: { accessKeyId: accessKey, secretAccessKey: secretKey },
+      credentials,
       forcePathStyle: true,
     });
+
+    const publicOrigin = this.resolvePublicOrigin(endpoint);
+    this.signingClient = new S3Client({
+      endpoint: publicOrigin,
+      region,
+      credentials,
+      forcePathStyle: true,
+    });
+    this.logger.log(`S3 signing endpoint: ${publicOrigin}`);
 
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
@@ -56,7 +76,7 @@ export class StorageService implements OnModuleInit {
   }
 
   isAvailable(): boolean {
-    return this.enabled && this.client !== null;
+    return this.enabled && this.client !== null && this.signingClient !== null;
   }
 
   async getUploadUrl(
@@ -72,8 +92,7 @@ export class StorageService implements OnModuleInit {
       ContentType: contentType,
     });
 
-    const signed = await getSignedUrl(this.client!, command, { expiresIn });
-    return this.toPublicUrl(signed);
+    return getSignedUrl(this.signingClient!, command, { expiresIn });
   }
 
   async getDownloadUrl(storageKey: string, expiresIn = 1800): Promise<string> {
@@ -84,8 +103,7 @@ export class StorageService implements OnModuleInit {
       Key: storageKey,
     });
 
-    const signed = await getSignedUrl(this.client!, command, { expiresIn });
-    return this.toPublicUrl(signed);
+    return getSignedUrl(this.signingClient!, command, { expiresIn });
   }
 
   async uploadObject(
@@ -111,19 +129,20 @@ export class StorageService implements OnModuleInit {
     }
   }
 
-  /** Phones cannot reach http://minio:9000 — rewrite host to S3_PUBLIC_BASE_URL. */
-  private toPublicUrl(signedUrl: string): string {
+  /** Origin phones use for MinIO (never rewrite signed URLs after this). */
+  private resolvePublicOrigin(internalEndpoint: string): string {
     const publicBase = this.config.get<string>('S3_PUBLIC_BASE_URL')?.trim();
-    if (!publicBase) return signedUrl;
-
+    if (publicBase) {
+      try {
+        return new URL(publicBase).origin;
+      } catch {
+        this.logger.warn(`Invalid S3_PUBLIC_BASE_URL="${publicBase}"`);
+      }
+    }
     try {
-      const signed = new URL(signedUrl);
-      const pub = new URL(publicBase);
-      signed.protocol = pub.protocol;
-      signed.host = pub.host;
-      return signed.toString();
+      return new URL(internalEndpoint).origin;
     } catch {
-      return signedUrl;
+      return internalEndpoint;
     }
   }
 }

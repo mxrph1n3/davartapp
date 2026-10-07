@@ -2,7 +2,7 @@
 # Install DAVart on a physical iPhone against the staging VPS API.
 #
 #   bash scripts/run-ios-device.sh
-#   BUNDLE_ID=com.awxcss.davart bash scripts/run-ios-device.sh   # чужой Apple ID / Personal Team
+#   BUNDLE_ID=com.someone.davart bash scripts/run-ios-device.sh   # чужой Apple ID / Personal Team
 #   bash scripts/run-ios-device.sh --run
 #   bash scripts/run-ios-device.sh --xcode
 #   bash scripts/run-ios-device.sh 217.198.6.88
@@ -34,7 +34,7 @@ done
 API_BASE="http://${HOST}:3000/api"
 MOBILE="$ROOT/apps/mobile"
 DEFINES_FILE="$MOBILE/dart_defines.device.json"
-DEFAULT_BUNDLE_ID="com.davart.davartMobiledsawa"
+DEFAULT_BUNDLE_ID="com.davart.app"
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -56,11 +56,17 @@ if [[ -n "${BUNDLE_ID}" ]]; then
 from pathlib import Path
 import re
 root = Path("ios")
-old = "${DEFAULT_BUNDLE_ID}"
 new = "${BUNDLE_ID}"
 pbx = root / "Runner.xcodeproj" / "project.pbxproj"
 text = pbx.read_text()
-text = text.replace(old, new)
+# Replace any current Runner app id (default or previously patched).
+text = re.sub(
+    r"(PRODUCT_BUNDLE_IDENTIFIER = )com\.[^;]+;",
+    lambda m: m.group(0)
+    if ".RunnerTests" in m.group(0)
+    else f"{m.group(1)}{new};",
+    text,
+)
 text = re.sub(r"\t+DEVELOPMENT_TEAM = [A-Z0-9]+;\n", "", text)
 pbx.write_text(text)
 for name in ("Debug.xcconfig", "Release.xcconfig"):
@@ -71,7 +77,7 @@ for name in ("Debug.xcconfig", "Release.xcconfig"):
         if not line.startswith("DEVELOPMENT_TEAM=")
     ]
     cfg.write_text("".join(lines))
-print("patched", pbx)
+print("patched", pbx, "→", new)
 PY
 fi
 

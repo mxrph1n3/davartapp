@@ -52,3 +52,15 @@ lcov.info
 
 # Misc
 *.pem
+legal-site/.vercel/
+.vercel
+apps/legal-site/.vercel/
+
+# Android Play upload signing (never commit)
+*.jks
+*.keystore
+apps/mobile/android/key.properties
+apps/mobile/android/upload-keystore.jks
+apps/mobile/store_assets/play/UPLOAD_KEY_CREDENTIALS.txt
+apps/mobile/store_assets/play/*.aab
+

@@ -20,7 +20,6 @@ export const BRIEF_GENERAL_FIELDS: BriefField[] = [
   { id: 'floors', label: 'Количество этажей' },
   { id: 'area', label: 'Площадь, м²' },
   { id: 'commercialType', label: 'Тип коммерческого объекта' },
-  { id: 'kitchenLayout', label: 'Кухня или кухня-гостиная' },
   { id: 'householdKind', label: 'Кто будет жить' },
   { id: 'householdMembers', label: 'Состав семьи' },
   { id: 'household', label: 'Состав проживающих (имена и возраст)' },

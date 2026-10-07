@@ -6,10 +6,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/ds/app_avatar.dart';
 import '../../../core/widgets/ds/chat_bubble.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
@@ -21,10 +21,43 @@ import '../data/chat_voice_recorder.dart';
 import '../data/chat_socket_service.dart';
 import '../data/open_remote_attachment.dart';
 import 'chat_notifier.dart';
+import 'chat_image_viewer.dart';
 import 'product_picker_sheet.dart';
 import 'voice_message_player.dart';
 
-final _timeFormat = DateFormat('dd.MM.yyyy HH:mm');
+String _clock(DateTime raw) {
+  final local = raw.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+String _dayChip(DateTime raw) {
+  final local = raw.toLocal();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final day = DateTime(local.year, local.month, local.day);
+  final diff = today.difference(day).inDays;
+  if (diff == 0) return 'Сегодня';
+  if (diff == 1) return 'Вчера';
+  const months = [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ];
+  final label = '${local.day} ${months[local.month - 1]}';
+  if (local.year == now.year) return label;
+  return '$label ${local.year}';
+}
 
 class ChatDetailScreen extends ConsumerStatefulWidget {
   const ChatDetailScreen({
@@ -44,8 +77,10 @@ class ChatDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatDetailScreen> createState() => _ChatDetailScreenState();
 }
 
-class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
+class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
+    with WidgetsBindingObserver {
   final _controller = TextEditingController();
+  final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   final _imagePicker = ImagePicker();
   final _voiceRecorder = ChatVoiceRecorder();
@@ -53,10 +88,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   var _recordSeconds = 0;
   var _recordCancelled = false;
   var _recordBars = <double>[];
+  var _searchOpen = false;
+  var _searchQuery = '';
   Timer? _recordTicker;
   Timer? _typingEmitTimer;
   Timer? _typingClearTimer;
-  var _peerTypingPreview = '';
   var _isPeerTyping = false;
   TypingHandler? _typingHandler;
   ChatSocketService? _socket;
@@ -66,8 +102,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller.addListener(() {
       if (mounted) setState(() {});
+    });
+    _searchController.addListener(() {
+      if (mounted) setState(() => _searchQuery = _searchController.text.trim());
     });
     Future<void>.delayed(Duration.zero, _syncWorkingClient);
     _scrollController.addListener(_onScroll);
@@ -79,21 +119,15 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   void _bindTypingListener() {
     _socket ??= ref.read(chatSocketServiceProvider);
-    _typingHandler ??= (chatId, userId, preview) {
+    _typingHandler ??= (chatId, userId, _) {
       if (chatId != widget.chatId) return;
       final myId = ref.read(authProvider).user?.id;
       if (myId != null && userId == myId) return;
-      setState(() {
-        _isPeerTyping = true;
-        _peerTypingPreview = preview;
-      });
+      setState(() => _isPeerTyping = true);
       _typingClearTimer?.cancel();
       _typingClearTimer = Timer(const Duration(seconds: 3), () {
         if (mounted) {
-          setState(() {
-            _isPeerTyping = false;
-            _peerTypingPreview = '';
-          });
+          setState(() => _isPeerTyping = false);
         }
       });
     };
@@ -138,6 +172,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _recordTicker?.cancel();
     _typingEmitTimer?.cancel();
     _typingClearTimer?.cancel();
@@ -148,8 +183,30 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
     }
     unawaited(_voiceRecorder.dispose());
     _controller.dispose();
+    _searchController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    final socket = ref.read(chatSocketServiceProvider);
+    unawaited(socket.connect(force: true));
+    socket.joinChat(widget.chatId);
+    unawaited(
+      ref.read(chatMessagesProvider(widget.chatId).notifier).refreshLatest(),
+    );
+    unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // Keep the latest messages above the keyboard when it opens.
+    final inset = WidgetsBinding
+        .instance.platformDispatcher.views.first.viewInsets.bottom;
+    if (inset > 0) _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -196,35 +253,106 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
       if (isNewAtEnd) _scrollToBottom();
     });
 
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+
+    final colors = AppColors.of(context);
+
     return Scaffold(
+      backgroundColor: colors.background,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
-        title: GestureDetector(
-          onTap: () => context.push(
-            chatInfoPathForRole(
-              ref.read(authProvider).user?.role,
-              widget.chatId,
-            ),
-          ),
-          behavior: HitTestBehavior.opaque,
-          child: Text(widget.title ?? 'Чат'),
-        ),
+        titleSpacing: 0,
+        title: _searchOpen
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Поиск',
+                  border: InputBorder.none,
+                ),
+                style: Theme.of(context).textTheme.titleMedium,
+              )
+            : GestureDetector(
+                onTap: () => context.push(
+                  chatInfoPathForRole(
+                    ref.read(authProvider).user?.role,
+                    widget.chatId,
+                  ),
+                ),
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  children: [
+                    AppAvatar(label: widget.title ?? 'Чат', size: 36),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.title ?? 'Чат',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                          Text(
+                            _isPeerTyping ? 'печатает…' : 'сведения о чате',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.of(context).textSecondary,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
         leading: IconButton(
           tooltip: 'Назад',
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () => popOrGo(
-            context,
-            chatPathForRole(ref.watch(authProvider).user?.role),
-          ),
+          onPressed: () {
+            if (_searchOpen) {
+              setState(() {
+                _searchOpen = false;
+                _searchController.clear();
+                _searchQuery = '';
+              });
+              return;
+            }
+            popOrGo(
+              context,
+              chatPathForRole(ref.watch(authProvider).user?.role),
+            );
+          },
         ),
         actions: [
           IconButton(
-            tooltip: 'Написать или пригласить',
-            icon: const Icon(Icons.person_add_outlined),
-            onPressed: () => context.push(
-              newChatPathForRole(ref.read(authProvider).user?.role),
-            ),
+            tooltip: _searchOpen ? 'Закрыть поиск' : 'Поиск',
+            icon: Icon(_searchOpen ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                _searchOpen = !_searchOpen;
+                if (!_searchOpen) {
+                  _searchController.clear();
+                  _searchQuery = '';
+                }
+              });
+            },
           ),
-          if (isStaff && (clientId != null || widget.projectId != null)) ...[
+          if (!_searchOpen)
+            IconButton(
+              tooltip: 'Написать или пригласить',
+              icon: const Icon(Icons.person_add_outlined),
+              onPressed: () => context.push(
+                newChatPathForRole(ref.read(authProvider).user?.role),
+              ),
+            ),
+          if (!_searchOpen &&
+              isStaff &&
+              (clientId != null || widget.projectId != null)) ...[
             IconButton(
               tooltip: 'Корзина проекта',
               icon: const Icon(Icons.shopping_bag_outlined),
@@ -253,7 +381,11 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
           ],
         ],
       ),
-      body: Column(
+      body: AnimatedPadding(
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: Column(
         children: [
           Expanded(
             child: messagesAsync.when(
@@ -264,22 +396,57 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                     ref.invalidate(chatMessagesProvider(widget.chatId)),
               ),
               data: (thread) {
-                final messages = thread.messages;
-                if (messages.isEmpty) {
+                final allMessages = thread.messages;
+                if (allMessages.isEmpty) {
                   return const Center(child: Text('Напишите первое сообщение'));
                 }
 
-                ChatMessage? pinned;
+                final q = _searchQuery.toLowerCase();
+                final messages = q.isEmpty
+                    ? allMessages
+                    : allMessages.where((m) {
+                        final text = (m.content ?? '').toLowerCase();
+                        final name = m.sender.name.toLowerCase();
+                        final file = (m.attachmentName ?? '').toLowerCase();
+                        return text.contains(q) ||
+                            name.contains(q) ||
+                            file.contains(q);
+                      }).toList();
+
+                if (q.isNotEmpty && messages.isEmpty) {
+                  return const Center(child: Text('Ничего не найдено'));
+                }
+
+                final others = <String>{
+                  for (final item in messages)
+                    if (!item.isMine) item.sender.id,
+                };
+                final showNames = others.length > 1;
+                final entries = <Object>[];
+                DateTime? lastDay;
                 for (final item in messages) {
+                  final local = item.createdAt.toLocal();
+                  final day = DateTime(local.year, local.month, local.day);
+                  if (lastDay != day) {
+                    entries.add(day);
+                    lastDay = day;
+                  }
+                  entries.add(item);
+                }
+
+                ChatMessage? pinned;
+                for (final item in allMessages) {
                   if (item.isPinned) {
                     pinned = item;
                     break;
                   }
                 }
-                final extra = thread.hasMore || thread.loadingOlder ? 1 : 0;
+                final extra = q.isEmpty && (thread.hasMore || thread.loadingOlder)
+                    ? 1
+                    : 0;
                 return Column(
                   children: [
-                    if (pinned != null)
+                    if (pinned != null && q.isEmpty)
                       Material(
                         color: AppColors.of(context).surfaceMuted,
                         child: ListTile(
@@ -316,8 +483,8 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                   controller: _scrollController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length + extra,
+                  padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                  itemCount: entries.length + extra,
                   itemBuilder: (context, index) {
                     if (extra == 1 && index == 0) {
                       return Padding(
@@ -348,10 +515,50 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                         ),
                       );
                     }
-                    final message = messages[index - extra];
+                    final entry = entries[index - extra];
+                    if (entry is DateTime) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.of(context).surfaceMuted,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _dayChip(entry),
+                              style: TextStyle(
+                                color: AppColors.of(context).textSecondary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    final message = entry as ChatMessage;
+                    final next = index - extra + 1 < entries.length
+                        ? entries[index - extra + 1]
+                        : null;
+                    final prev = index - extra > 0
+                        ? entries[index - extra - 1]
+                        : null;
+                    final showTail = next is! ChatMessage ||
+                        next.sender.id != message.sender.id ||
+                        next.isMine != message.isMine;
+                    final showSender = showNames &&
+                        !message.isMine &&
+                        (prev is! ChatMessage || prev.sender.id != message.sender.id);
                     return _MessageBubble(
                       message: message,
                       chatId: widget.chatId,
+                      showTail: showTail,
+                      showSender: showSender,
                       onLongPress: () => _showMessageActions(message),
                     );
                   },
@@ -385,21 +592,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
                 ),
               ),
             ),
-          if (_isPeerTyping)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  _peerTypingPreview.isEmpty
-                      ? 'Печатает…'
-                      : 'Печатает: $_peerTypingPreview',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.of(context).textSecondary,
-                      ),
-                ),
-              ),
-            ),
           ChatInputBar(
             controller: _controller,
             onSend: _sendText,
@@ -415,6 +607,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
             onTyping: (_) => _emitTyping(),
           ),
         ],
+      ),
       ),
     );
   }
@@ -446,7 +639,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen> {
 
   Future<void> _showMessageActions(ChatMessage message) async {
     if (message.isPending || message.isFailed) return;
-    const reactions = ['👍', '❤️', '😂', '🔥', '👀', '👏', '😮'];
+    const reactions = ['👍', '❤️', '😂', '🔥', '👀', '😆', '😮'];
     final action = await showModalBottomSheet<String>(
       context: context,
       builder: (context) {
@@ -778,11 +971,15 @@ class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({
     required this.message,
     required this.chatId,
+    this.showTail = true,
+    this.showSender = false,
     this.onLongPress,
   });
 
   final ChatMessage message;
   final String chatId;
+  final bool showTail;
+  final bool showSender;
   final VoidCallback? onLongPress;
 
   @override
@@ -797,18 +994,32 @@ class _MessageBubble extends ConsumerWidget {
           children: [
             ChatBubble(
               isMine: message.isMine,
+              showTail: showTail,
+              pending: message.isPending,
+              failed: message.isFailed,
+              onFailedTap: message.isFailed
+                  ? () {
+                      ref
+                          .read(chatMessagesProvider(chatId).notifier)
+                          .retryFailedUpload(message.id);
+                    }
+                  : null,
               time: message.isPending || message.isFailed
                   ? null
-                  : _timeFormat.format(message.createdAt),
+                  : _clock(message.createdAt),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (!message.isMine)
-                    Text(
-                      message.sender.name,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                  if (showSender)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        message.sender.name,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                      ),
                     ),
                   if (message.replyTo != null) ...[
                     Container(
@@ -899,43 +1110,6 @@ class _MessageBubble extends ConsumerWidget {
                 ],
               ),
             ),
-            if (message.isPending)
-              Positioned(
-                right: message.isMine ? 12 : null,
-                left: message.isMine ? null : 12,
-                bottom: 8,
-                child: const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            if (message.isFailed)
-              Positioned(
-                right: message.isMine ? -2 : null,
-                left: message.isMine ? null : -2,
-                top: 10,
-                child: Container(
-                  width: 22,
-                  height: 22,
-                  decoration: BoxDecoration(
-                    color: colors.error,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: colors.background, width: 2),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      '!',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
-                        height: 1,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -967,12 +1141,25 @@ class _MessageContent extends ConsumerWidget {
         if (message.attachmentUrl == null) {
           return const Text('Изображение');
         }
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Image.network(
-            message.attachmentUrl!,
-            height: 180,
-            fit: BoxFit.cover,
+        return GestureDetector(
+          onTap: () => ChatImageViewer.open(
+            context,
+            url: message.attachmentUrl!,
+            title: message.attachmentName,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              message.attachmentUrl!,
+              height: 180,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Container(
+                height: 120,
+                alignment: Alignment.center,
+                color: Colors.black12,
+                child: const Text('Не удалось загрузить фото'),
+              ),
+            ),
           ),
         );
       case 'file':

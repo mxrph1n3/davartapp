@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_radius.dart';
+import '../../utils/demo_media.dart';
 
 class StatusBadge extends StatelessWidget {
   const StatusBadge({
@@ -74,7 +75,8 @@ Color projectStatusColor(String statusOrLabel, [DavartColors? colors]) {
 }
 
 String projectCoverUrl(String projectId) {
-  return 'https://picsum.photos/seed/davart-proj-$projectId/240/240';
+  // Curated interiors (picsum seeds often resolve to unrelated photos).
+  return interiorCoverUrl(projectId);
 }
 
 String projectStageLabel(String status) {

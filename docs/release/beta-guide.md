@@ -19,7 +19,7 @@ version: 1.0.0+1  # name+build
 
 ## iOS — TestFlight
 
-1. Настройте signing в Xcode (Team, Bundle ID: `com.davart.mobile`)
+1. Настройте signing в Xcode (Team, Bundle ID: `com.davart.app`)
 2. Создайте App Store Connect запись
 3. Соберите:
 

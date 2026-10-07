@@ -73,6 +73,17 @@ abstract final class AppTheme {
         ),
         shape: RoundedRectangleBorder(borderRadius: AppRadius.buttonRadius),
       ),
+      chipTheme: ChipThemeData(
+        backgroundColor: colors.surfaceMuted,
+        selectedColor: colors.accent,
+        disabledColor: colors.surfaceMuted,
+        checkmarkColor: colors.textOnAccent,
+        labelStyle: textTheme.bodyMedium?.copyWith(color: colors.textPrimary),
+        secondaryLabelStyle:
+            textTheme.bodyMedium?.copyWith(color: colors.textOnAccent),
+        side: BorderSide(color: colors.border),
+        shape: const StadiumBorder(),
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surface,
         shape: const RoundedRectangleBorder(

@@ -8,6 +8,12 @@ String? locationFromDeepLink(Uri uri) {
 
   final segments = path.split('/').where((part) => part.isNotEmpty).toList();
 
+  // Generic in-app navigation: davart://go/chat → /chat (for QA / store screenshots).
+  if (segments.length >= 2 && segments[0] == 'go') {
+    final rest = segments.skip(1).join('/');
+    return rest.startsWith('/') ? rest : '/$rest';
+  }
+
   if (segments.length >= 4 &&
       segments[0] == 'open' &&
       segments[1] == 'orders') {
