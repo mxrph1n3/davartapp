@@ -11,6 +11,7 @@ import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
+import '../../chat/presentation/chat_notifier.dart';
 import '../../commerce/presentation/active_project_provider.dart';
 import '../data/projects_models.dart';
 import '../data/projects_repository.dart';
@@ -102,6 +103,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
         ref.read(activeProjectProvider.notifier).state = null;
       }
       ref.invalidate(projectsListProvider);
+      ref.invalidate(chatsListProvider);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Проект удалён')),

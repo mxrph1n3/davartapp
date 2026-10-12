@@ -86,9 +86,40 @@ class ChatScreen extends ConsumerWidget {
                                 ),
                                 itemBuilder: (context, index) {
                                   final chat = sorted[index];
-                                  return _TelegramChatTile(
-                                    chat: chat,
-                                    onTap: () => _openChat(context, chat),
+                                  return Dismissible(
+                                    key: ValueKey(chat.id),
+                                    direction: DismissDirection.endToStart,
+                                    confirmDismiss: (_) =>
+                                        _confirmDeleteChat(context, chat),
+                                    onDismissed: (_) {
+                                      ref
+                                          .read(chatsListProvider.notifier)
+                                          .deleteChat(chat.id)
+                                          .catchError((_) {
+                                        if (!context.mounted) return;
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Не удалось удалить чат',
+                                            ),
+                                          ),
+                                        );
+                                      });
+                                    },
+                                    background: Container(
+                                      color: colors.error,
+                                      alignment: Alignment.centerRight,
+                                      padding: const EdgeInsets.only(right: 20),
+                                      child: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    child: _TelegramChatTile(
+                                      chat: chat,
+                                      onTap: () => _openChat(context, chat),
+                                    ),
                                   );
                                 },
                               ),
@@ -99,6 +130,36 @@ class ChatScreen extends ConsumerWidget {
               ],
             ),
     );
+  }
+
+  Future<bool> _confirmDeleteChat(BuildContext context, ChatSummary chat) async {
+    if (chat.type == 'support') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Чат поддержки нельзя удалить')),
+      );
+      return false;
+    }
+    final ok = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('Удалить чат?'),
+        content: Text(
+          '«${chat.title}» пропадёт из списка и больше не появится.',
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
   }
 
   void _openChat(BuildContext context, ChatSummary chat) {

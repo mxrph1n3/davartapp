@@ -378,6 +378,7 @@ export class SmsService {
           'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
       });
     } catch (error) {
       this.logger.error(

@@ -275,6 +275,7 @@ model Project {
   startDate  DateTime?     @map("start_date")
   status     ProjectStatus @default(brief_filling)
   isShowcase Boolean       @default(false) @map("is_showcase")
+  projectChatDismissed Boolean @default(false) @map("project_chat_dismissed")
   user       User          @relation("ClientProjects", fields: [userId], references: [id], onDelete: Cascade)
   designer   User?         @relation("DesignerProjects", fields: [designerId], references: [id], onDelete: SetNull)
   manager    User?         @relation("ManagerProjects", fields: [managerId], references: [id], onDelete: SetNull)
@@ -364,6 +365,7 @@ model ChatParticipant {
   userId      String    @map("user_id")
   lastReadAt  DateTime? @map("last_read_at")
   unreadCount Int       @default(0) @map("unread_count")
+  hiddenAt    DateTime? @map("hidden_at")
   chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -112,8 +112,10 @@ class ChatSocketService {
       ApiConfig.socketUrl,
       io.OptionBuilder()
           .setPath('/ws')
-          .setTransports(['websocket'])
+          .setTransports(['polling', 'websocket'])
           .setAuth({'token': token})
+          // Query keeps the handshake authenticated if the auth packet is dropped.
+          .setQuery({'token': token})
           .enableAutoConnect()
           .enableReconnection()
           .setReconnectionAttempts(999999)
@@ -147,7 +149,13 @@ class ChatSocketService {
       })
       ..on('message:new', (data) {
         final json = _asStringKeyMap(data);
-        if (json == null) return;
+        if (json == null) {
+          for (final listener
+              in List<void Function()>.from(_chatsInvalidateListeners)) {
+            listener();
+          }
+          return;
+        }
         try {
           final message = ChatMessage.fromJson(json);
           for (final listener in List<MessageHandler>.from(_messageListeners)) {
@@ -171,9 +179,14 @@ class ChatSocketService {
         final json = _asStringKeyMap(data);
         if (json == null) return;
         final total = json['total'];
-        if (total is! int) return;
+        final count = total is int
+            ? total
+            : total is num
+                ? total.toInt()
+                : int.tryParse(total?.toString() ?? '');
+        if (count == null) return;
         for (final listener in List<UnreadHandler>.from(_unreadListeners)) {
-          listener(total);
+          listener(count);
         }
       })
       ..on('chats:invalidate', (_) {

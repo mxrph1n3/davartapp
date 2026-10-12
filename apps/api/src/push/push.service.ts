@@ -20,14 +20,15 @@ export class PushService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async sendToUser(userId: string, payload: PushPayload) {
+  /** True only when a push provider accepted the notification. */
+  async sendToUser(userId: string, payload: PushPayload): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { notificationsEnabled: true },
     });
 
     if (!user?.notificationsEnabled) {
-      return;
+      return false;
     }
 
     const tokens = await this.prisma.fcmToken.findMany({
@@ -39,22 +40,25 @@ export class PushService {
       this.logger.log(
         `[PUSH] ${userId}: ${payload.title} — ${payload.body} (no tokens)`,
       );
-      return;
+      return false;
     }
 
+    let delivered = false;
     for (const row of tokens) {
-      await this.sendToToken(row.token, row.platform, payload);
+      if (await this.sendToToken(row.token, row.platform, payload)) {
+        delivered = true;
+      }
     }
+    return delivered;
   }
 
   private async sendToToken(
     token: string,
     platform: string | null,
     payload: PushPayload,
-  ) {
+  ): Promise<boolean> {
     if (this.isApnsToken(token, platform)) {
-      await this.sendApns(token, platform, payload);
-      return;
+      return this.sendApns(token, platform, payload);
     }
 
     const serverKey = process.env.FCM_SERVER_KEY;
@@ -63,11 +67,11 @@ export class PushService {
       this.logger.log(
         `[PUSH MOCK] ${token.slice(0, 12)}...: ${payload.title} — ${payload.body}`,
       );
-      return;
+      return false;
     }
 
     try {
-      await fetch('https://fcm.googleapis.com/fcm/send', {
+      const response = await fetch('https://fcm.googleapis.com/fcm/send', {
         method: 'POST',
         headers: {
           Authorization: `key=${serverKey}`,
@@ -82,8 +86,10 @@ export class PushService {
           data: payload.data ?? {},
         }),
       });
+      return response.ok;
     } catch (error) {
       this.logger.warn(`FCM send failed: ${error}`);
+      return false;
     }
   }
 
@@ -137,7 +143,7 @@ export class PushService {
     token: string,
     platform: string | null,
     payload: PushPayload,
-  ) {
+  ): Promise<boolean> {
     const key = this.apnsPrivateKey();
     const keyId = process.env.APNS_KEY_ID?.trim();
     const teamId = process.env.APNS_TEAM_ID?.trim();
@@ -147,7 +153,7 @@ export class PushService {
       this.logger.log(
         `[PUSH] iOS ${payload.title} — ${payload.body} (нет APNS_KEY_ID / APNS_TEAM_ID / ключа .p8)`,
       );
-      return;
+      return false;
     }
 
     const sandbox = platform === 'ios-sandbox';
@@ -164,18 +170,24 @@ export class PushService {
       ...(payload.data ?? {}),
     });
 
-    await new Promise<void>((resolve) => {
+    return new Promise<boolean>((resolve) => {
       const client = http2.connect(`https://${host}`);
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      client.close();
-      resolve();
-    };
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout>;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        client.close();
+        resolve(ok);
+      };
+      timer = setTimeout(() => {
+        this.logger.warn(`APNs timed out for ${token.slice(0, 8)}…`);
+        finish(false);
+      }, 4000);
       client.on('error', (error) => {
         this.logger.warn(`APNs connection failed: ${error}`);
-        finish();
+        finish(false);
       });
       const req = client.request({
         ':method': 'POST',
@@ -205,11 +217,11 @@ export class PushService {
             void this.prisma.fcmToken.deleteMany({ where: { token } });
           }
         }
-        finish();
+        finish(status === 200);
       });
       req.on('error', (error) => {
         this.logger.warn(`APNs request failed: ${error}`);
-        finish();
+        finish(false);
       });
       req.end(body);
     });

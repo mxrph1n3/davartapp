@@ -50,7 +50,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   @override
   void initState() {
     super.initState();
-    _loadContacts();
+    Future<void>.microtask(_loadContacts);
   }
 
   @override
@@ -96,6 +96,19 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     } catch (_) {
       directory = const [];
     }
+
+    if (!mounted) return;
+    setState(() {
+      _registered = [
+        for (final u in directory)
+          _BookContact(
+            name: u.name,
+            phone: u.phone ?? '',
+            user: u,
+          ),
+      ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      _loading = false;
+    });
 
     final granted = await FlutterContacts.requestPermission(readonly: true);
     if (!granted) {
@@ -387,10 +400,21 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       );
     }
 
-    return ListView(
-      children: [
-        if (_matchError)
-          Padding(
+    final rows = <Object>[
+      if (_matchError) 'match-error',
+      if (_permissionDenied) 'permission',
+      if (registered.isNotEmpty) 'В приложении',
+      ...registered,
+      if (invite.isNotEmpty) 'Все номера',
+      ...invite,
+    ];
+
+    return ListView.builder(
+      itemCount: rows.length,
+      itemBuilder: (context, index) {
+        final row = rows[index];
+        if (row == 'match-error') {
+          return Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenPadding,
               AppSpacing.sm,
@@ -403,9 +427,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                     color: colors.textSecondary,
                   ),
             ),
-          ),
-        if (_permissionDenied)
-          Padding(
+          );
+        }
+        if (row == 'permission') {
+          return Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.screenPadding,
               AppSpacing.sm,
@@ -428,16 +453,15 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                 ),
               ],
             ),
-          ),
-        if (registered.isNotEmpty) ...[
-          _sectionHeader(colors, 'В приложении'),
-          ...registered.map((c) => _registeredTile(colors, c)),
-        ],
-        if (invite.isNotEmpty) ...[
-          _sectionHeader(colors, 'Все номера'),
-          ...invite.map((c) => _inviteTile(colors, c)),
-        ],
-      ],
+          );
+        }
+        if (row is String) return _sectionHeader(colors, row);
+        if (row is _BookContact && row.isRegistered) {
+          return _registeredTile(colors, row);
+        }
+        if (row is _BookContact) return _inviteTile(colors, row);
+        return const SizedBox.shrink();
+      },
     );
   }
 

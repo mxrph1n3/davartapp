@@ -27,6 +27,7 @@ interface AuthedSocket extends Socket {
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
+  private readonly onlineCounts = new Map<string, number>();
 
   @WebSocketServer()
   server!: Server;
@@ -67,13 +68,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         extraRoles: user.extraRoles,
       };
       client.join(`user:${payload.sub}`);
+      this.onlineCounts.set(
+        payload.sub,
+        (this.onlineCounts.get(payload.sub) ?? 0) + 1,
+      );
     } catch {
       client.disconnect();
     }
   }
 
-  handleDisconnect(_client: AuthedSocket) {
-    // no-op
+  handleDisconnect(client: AuthedSocket) {
+    const userId = client.data.user?.sub;
+    if (!userId) return;
+    const next = (this.onlineCounts.get(userId) ?? 1) - 1;
+    if (next <= 0) this.onlineCounts.delete(userId);
+    else this.onlineCounts.set(userId, next);
+  }
+
+  isOnline(userId: string) {
+    return (this.onlineCounts.get(userId) ?? 0) > 0;
   }
 
   @SubscribeMessage('join')

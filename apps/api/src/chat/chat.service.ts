@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -97,6 +98,8 @@ const messageInclude = {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
@@ -116,7 +119,7 @@ export class ChatService {
       viewerRoles.find((role) => isStudioRole(role)) ?? viewer?.role;
 
     const participants = await this.prisma.chatParticipant.findMany({
-      where: { userId },
+      where: { userId, hiddenAt: null },
       include: {
         chat: {
           include: {
@@ -143,8 +146,25 @@ export class ChatService {
       orderBy: { chat: { updatedAt: 'desc' } },
     });
 
-    const items = participants.map((participant) => {
-      const lastMessage = participant.chat.messages[0];
+    const buckets = new Map<string, typeof participants>();
+    for (const participant of participants) {
+      const key = this.personalPeerKey(participant.chat, userId);
+      const bucket = buckets.get(key) ?? [];
+      bucket.push(participant);
+      buckets.set(key, bucket);
+    }
+
+    const items = [...buckets.values()].map((bucket) => {
+      const participant = bucket.reduce((best, row) => {
+        const bestAt =
+          best.chat.messages[0]?.createdAt ?? best.chat.updatedAt;
+        const rowAt = row.chat.messages[0]?.createdAt ?? row.chat.updatedAt;
+        return rowAt > bestAt ? row : best;
+      });
+      const lastMessage = bucket
+        .map((row) => row.chat.messages[0])
+        .filter((message) => message != null)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
       return {
         id: participant.chat.id,
         type: participant.chat.type,
@@ -152,8 +172,8 @@ export class ChatService {
         title: this.resolveChatTitle(participant.chat, viewerRole, userId),
         clientId: this.resolveClientId(participant.chat, viewerRole),
         projectId: participant.chat.projectId,
-        unreadCount: participant.unreadCount,
-        updatedAt: participant.chat.updatedAt,
+        unreadCount: bucket.reduce((sum, row) => sum + row.unreadCount, 0),
+        updatedAt: lastMessage?.createdAt ?? participant.chat.updatedAt,
         lastMessage: lastMessage
           ? {
               id: lastMessage.id,
@@ -185,7 +205,7 @@ export class ChatService {
 
   async getUnreadTotal(userId: string) {
     const result = await this.prisma.chatParticipant.aggregate({
-      where: { userId },
+      where: { userId, hiddenAt: null },
       _sum: { unreadCount: true },
     });
 
@@ -253,7 +273,7 @@ export class ChatService {
     });
     if (!other) throw new NotFoundException('User not found');
 
-    const existing = await this.prisma.chat.findFirst({
+    const candidates = await this.prisma.chat.findMany({
       where: {
         type: ChatType.personal,
         AND: [
@@ -265,19 +285,27 @@ export class ChatService {
         participants: { select: { userId: true } },
         project: { select: { id: true, name: true, userId: true } },
       },
+      orderBy: { updatedAt: 'desc' },
     });
+    const exact = candidates.filter(
+      (chat) =>
+        chat.participants.length === 2 &&
+        chat.participants.every(
+          (p) => p.userId === userId || p.userId === otherUserId,
+        ),
+    );
 
     const personal =
-      existing &&
-      existing.participants.length === 2 &&
-      existing.participants.every(
-        (p) => p.userId === userId || p.userId === otherUserId,
-      )
-        ? existing
-        : await this.createChatWithParticipants({
-            type: ChatType.personal,
-            userIds: [userId, otherUserId],
-          });
+      exact[0] ??
+      (await this.createChatWithParticipants({
+        type: ChatType.personal,
+        userIds: [userId, otherUserId],
+      }));
+
+    await this.prisma.chatParticipant.updateMany({
+      where: { chatId: personal.id, userId, hiddenAt: { not: null } },
+      data: { hiddenAt: null },
+    });
 
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -469,17 +497,18 @@ export class ChatService {
 
   async getMessages(userId: string, chatId: string, page = 1, limit = 30) {
     await this.ensureParticipant(userId, chatId);
+    const chatIds = await this.personalThreadChatIds(userId, chatId);
 
     const skip = (page - 1) * limit;
     const [items, total] = await Promise.all([
       this.prisma.message.findMany({
-        where: { chatId },
+        where: { chatId: { in: chatIds } },
         include: messageInclude,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.message.count({ where: { chatId } }),
+      this.prisma.message.count({ where: { chatId: { in: chatIds } } }),
     ]);
 
     const formatted = await Promise.all(
@@ -495,7 +524,7 @@ export class ChatService {
   }
 
   async sendMessage(userId: string, chatId: string, dto: SendMessageDto) {
-    await this.ensureParticipant(userId, chatId);
+    await this.ensureParticipant(userId, chatId, { unhide: true });
     this.validateMessagePayload(dto);
 
     if (
@@ -524,6 +553,8 @@ export class ChatService {
       }
     }
 
+    const threadIds = await this.personalThreadChatIds(userId, chatId);
+
     const message = await this.prisma.$transaction(async (tx) => {
       const created = await tx.message.create({
         data: {
@@ -545,6 +576,11 @@ export class ChatService {
         data: { updatedAt: new Date() },
       });
 
+      // A dismissed duplicate of the same 1:1 chat must open again too.
+      await tx.chatParticipant.updateMany({
+        where: { chatId: { in: threadIds }, userId: { not: userId } },
+        data: { hiddenAt: null },
+      });
       await tx.chatParticipant.updateMany({
         where: { chatId, userId: { not: userId } },
         data: { unreadCount: { increment: 1 } },
@@ -705,10 +741,11 @@ export class ChatService {
   }
 
   async markRead(userId: string, chatId: string) {
-    const participant = await this.ensureParticipant(userId, chatId);
+    await this.ensureParticipant(userId, chatId);
+    const chatIds = await this.personalThreadChatIds(userId, chatId);
 
-    await this.prisma.chatParticipant.update({
-      where: { id: participant.id },
+    await this.prisma.chatParticipant.updateMany({
+      where: { userId, chatId: { in: chatIds } },
       data: { lastReadAt: new Date(), unreadCount: 0 },
     });
 
@@ -786,10 +823,11 @@ export class ChatService {
     }
 
     const rawType = (file.mimetype || 'application/octet-stream').toLowerCase();
-    final name = file.originalname.toLowerCase();
-    final contentType = rawType == 'application/octet-stream' && name.endsWith('.m4a')
-      ? 'audio/mp4'
-      : rawType;
+    const name = file.originalname.toLowerCase();
+    const contentType =
+      rawType === 'application/octet-stream' && name.endsWith('.m4a')
+        ? 'audio/mp4'
+        : rawType;
     this.assertAllowedAttachmentType(contentType);
 
     const attachmentId = randomUUID();
@@ -911,7 +949,7 @@ export class ChatService {
 
       await tx.chatParticipant.updateMany({
         where: { chatId: targetChatId, userId: { not: userId } },
-        data: { unreadCount: { increment: 1 } },
+        data: { hiddenAt: null, unreadCount: { increment: 1 } },
       });
 
       return created;
@@ -1273,6 +1311,7 @@ export class ChatService {
         name: true,
         userId: true,
         isShowcase: true,
+        projectChatDismissed: true,
         designerId: true,
         managerId: true,
         surveyorId: true,
@@ -1282,7 +1321,7 @@ export class ChatService {
     if (!project) {
       throw new NotFoundException('Project not found');
     }
-    if (project.isShowcase) {
+    if (project.isShowcase || project.projectChatDismissed) {
       return null;
     }
 
@@ -1370,6 +1409,7 @@ export class ChatService {
         name: true,
         userId: true,
         isShowcase: true,
+        projectChatDismissed: true,
       },
     });
     if (!project) {
@@ -1378,17 +1418,27 @@ export class ChatService {
     if (project.isShowcase) {
       throw new BadRequestException('Showcase has no project chat');
     }
+    if (project.projectChatDismissed) {
+      throw new NotFoundException('Project chat not found');
+    }
 
     const chat = await this.ensureProjectChat(projectId);
     if (!chat) {
       throw new NotFoundException('Project chat not found');
     }
 
-    await this.prisma.chatParticipant.upsert({
+    const mine = await this.prisma.chatParticipant.findUnique({
       where: { chatId_userId: { chatId: chat.id, userId: actorId } },
-      update: {},
-      create: { chatId: chat.id, userId: actorId },
+      select: { hiddenAt: true },
     });
+    if (mine?.hiddenAt) {
+      throw new NotFoundException('Project chat not found');
+    }
+    if (!mine) {
+      await this.prisma.chatParticipant.create({
+        data: { chatId: chat.id, userId: actorId },
+      });
+    }
 
     const items = await this.listChats(actorId);
     const item = items.find((row) => row.id === chat.id);
@@ -1657,12 +1707,56 @@ export class ChatService {
   ) {
     const userIds = this.collectProjectParticipantIds(project);
     for (const userId of userIds) {
+      const existing = await this.prisma.chatParticipant.findUnique({
+        where: { chatId_userId: { chatId, userId } },
+        select: { hiddenAt: true },
+      });
+      if (existing?.hiddenAt) continue;
       await this.prisma.chatParticipant.upsert({
         where: { chatId_userId: { chatId, userId } },
         update: {},
         create: { chatId, userId },
       });
     }
+  }
+
+  /** Hide a chat for this user. A dismissed project chat is not created again. */
+  async dismissChat(userId: string, chatId: string) {
+    const participant = await this.prisma.chatParticipant.findUnique({
+      where: { chatId_userId: { chatId, userId } },
+      include: {
+        chat: { select: { id: true, type: true, projectId: true } },
+      },
+    });
+    if (!participant) {
+      throw new NotFoundException('Chat not found');
+    }
+    if (participant.chat.type === ChatType.support) {
+      throw new BadRequestException('Чат поддержки нельзя удалить');
+    }
+
+    if (
+      participant.chat.type === ChatType.project &&
+      participant.chat.projectId
+    ) {
+      const project = await this.prisma.project.findUnique({
+        where: { id: participant.chat.projectId },
+        select: { userId: true },
+      });
+      if (project?.userId === userId) {
+        await this.prisma.project.update({
+          where: { id: participant.chat.projectId },
+          data: { projectChatDismissed: true },
+        });
+      }
+    }
+
+    await this.prisma.chatParticipant.update({
+      where: { id: participant.id },
+      data: { hiddenAt: new Date(), unreadCount: 0 },
+    });
+
+    return { message: 'Chat hidden' };
   }
 
   private async syncStaffIntoSupportChat(
@@ -1725,7 +1819,11 @@ export class ChatService {
         data: { updatedAt: new Date() },
       }),
       this.prisma.chatParticipant.updateMany({
-        where: { chatId: params.chatId, userId: { not: params.senderId } },
+        where: {
+          chatId: params.chatId,
+          userId: { not: params.senderId },
+          hiddenAt: null,
+        },
         data: { unreadCount: { increment: 1 } },
       }),
     ]);
@@ -1737,13 +1835,87 @@ export class ChatService {
     return this.ensureParticipant(userId, chatId);
   }
 
-  private async ensureParticipant(userId: string, chatId: string) {
+  /** Chat ids the viewer's open thread might be using for this 1:1 conversation. */
+  listDeliveryChatIds(userId: string, chatId: string) {
+    return this.personalThreadChatIds(userId, chatId);
+  }
+
+  /** One row per person: duplicate 1:1 chats are the same conversation. */
+  private personalPeerKey(
+    chat: {
+      id: string;
+      type: ChatType;
+      participants?: Array<{ user: { id: string } }>;
+    },
+    userId: string,
+  ) {
+    if (chat.type !== ChatType.personal) return `chat:${chat.id}`;
+    const others = (chat.participants ?? [])
+      .map((participant) => participant.user.id)
+      .filter((id) => id !== userId);
+    if (others.length !== 1) return `chat:${chat.id}`;
+    return `dm:${others[0]}`;
+  }
+
+  /** All exact 1:1 personal chats between the viewer and the other person. */
+  private async personalThreadChatIds(userId: string, chatId: string) {
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: {
+        type: true,
+        participants: { select: { userId: true } },
+      },
+    });
+    if (!chat || chat.type !== ChatType.personal) return [chatId];
+    const others = chat.participants
+      .map((participant) => participant.userId)
+      .filter((id) => id !== userId);
+    if (others.length !== 1) return [chatId];
+    const otherId = others[0];
+    const related = await this.prisma.chat.findMany({
+      where: {
+        type: ChatType.personal,
+        AND: [
+          { participants: { some: { userId } } },
+          { participants: { some: { userId: otherId } } },
+        ],
+      },
+      select: { id: true, participants: { select: { userId: true } } },
+    });
+    const ids = related
+      .filter(
+        (row) =>
+          row.participants.length === 2 &&
+          row.participants.every(
+            (participant) =>
+              participant.userId === userId || participant.userId === otherId,
+          ),
+      )
+      .map((row) => row.id);
+    return ids.length > 0 ? ids : [chatId];
+  }
+
+  private async ensureParticipant(
+    userId: string,
+    chatId: string,
+    options?: { unhide?: boolean },
+  ) {
     const participant = await this.prisma.chatParticipant.findUnique({
       where: { chatId_userId: { chatId, userId } },
     });
 
     if (!participant) {
       throw new ForbiddenException('Access denied');
+    }
+
+    if (participant.hiddenAt) {
+      if (!options?.unhide) {
+        throw new ForbiddenException('Access denied');
+      }
+      await this.prisma.chatParticipant.update({
+        where: { chatId_userId: { chatId, userId } },
+        data: { hiddenAt: null },
+      });
     }
 
     return participant;
@@ -1879,6 +2051,34 @@ export class ChatService {
         return 'Голосовое';
       default:
         return '';
+    }
+  }
+
+  /**
+   * Phone is closed and push did not go out: deliver the text by SMS
+   * so the message still reaches the person.
+   */
+  async notifyOfflineBySms(
+    userId: string,
+    message: {
+      type: string;
+      content?: string | null;
+      attachmentName?: string | null;
+      sender?: { name?: string | null };
+    },
+  ) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { phone: true },
+      });
+      const phone = user?.phone?.trim();
+      if (!phone || phone.startsWith('+7000')) return;
+      const push = this.buildPushPayload(message);
+      const text = `${push.title}: ${push.body}`.slice(0, 280);
+      await this.smsService.sendText(phone, text);
+    } catch (error) {
+      this.logger.warn(`Offline SMS failed for ${userId}: ${error}`);
     }
   }
 

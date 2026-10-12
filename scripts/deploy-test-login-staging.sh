@@ -24,6 +24,9 @@ touch "\$ENV"
 grep -q "^AUTH_TEST_PHONES=" "\$ENV" 2>/dev/null \
   && sed -i "s|^AUTH_TEST_PHONES=.*|AUTH_TEST_PHONES=+70000000000|" "\$ENV" \
   || echo "AUTH_TEST_PHONES=+70000000000" >> "\$ENV"
+grep -q "^AUTH_TEST_STAFF_PHONES=" "\$ENV" 2>/dev/null \
+  && sed -i "s|^AUTH_TEST_STAFF_PHONES=.*|AUTH_TEST_STAFF_PHONES=+70000000001|" "\$ENV" \
+  || echo "AUTH_TEST_STAFF_PHONES=+70000000001" >> "\$ENV"
 grep -q "^AUTH_TEST_CODE=" "\$ENV" 2>/dev/null \
   && sed -i "s|^AUTH_TEST_CODE=.*|AUTH_TEST_CODE=0000|" "\$ENV" \
   || echo "AUTH_TEST_CODE=0000" >> "\$ENV"
@@ -35,7 +38,11 @@ curl -sS http://127.0.0.1:3000/api/health; echo
 curl -sS -X POST http://127.0.0.1:3000/api/auth/send-otp \
   -H "Content-Type: application/json" \
   -d '{"phone":"+70000000000"}'; echo
+curl -sS -X POST http://127.0.0.1:3000/api/auth/send-otp \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+70000000001"}'; echo
 EOF
 
 echo
-echo "OK — test login: +70000000000 / 0000"
+echo "OK — client: +70000000000 / 0000"
+echo "OK — studio: +70000000001 / 0000"

@@ -164,6 +164,7 @@ export class ProjectsService {
       );
     }
 
+    await this.prisma.chat.deleteMany({ where: { projectId: project.id } });
     await this.prisma.project.delete({ where: { id: project.id } });
     return { message: 'Project deleted' };
   }

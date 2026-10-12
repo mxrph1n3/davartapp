@@ -168,9 +168,6 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
         _suppressAutoVerify = true;
         _controller.text = debugCode;
         _suppressAutoVerify = false;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Mock-код: $debugCode')),
-        );
         await _verify();
       } else {
         _controller.clear();

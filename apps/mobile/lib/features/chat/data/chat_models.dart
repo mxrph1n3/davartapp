@@ -1,5 +1,22 @@
 import 'package:flutter/material.dart';
 
+int _asInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+DateTime _asDate(Object? value) {
+  if (value is DateTime) return value;
+  if (value is int) {
+    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true).toLocal();
+  }
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value)?.toLocal() ?? DateTime.now();
+  }
+  return DateTime.now();
+}
+
 class ChatSummary {
   const ChatSummary({
     required this.id,
@@ -24,18 +41,25 @@ class ChatSummary {
   final ChatLastMessage? lastMessage;
 
   factory ChatSummary.fromJson(Map<String, dynamic> json) {
+    final last = json['lastMessage'];
     return ChatSummary(
       id: json['id'] as String,
-      type: json['type'] as String,
-      typeLabel: json['typeLabel'] as String,
-      title: json['title'] as String,
+      type: json['type'] as String? ?? 'personal',
+      typeLabel: json['typeLabel'] as String? ?? '',
+      title: (json['title'] as String?)?.trim().isNotEmpty == true
+          ? json['title'] as String
+          : 'Чат',
       projectId: json['projectId'] as String?,
       clientId: json['clientId'] as String?,
-      unreadCount: json['unreadCount'] as int? ?? 0,
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
-      lastMessage: json['lastMessage'] != null
-          ? ChatLastMessage.fromJson(json['lastMessage'] as Map<String, dynamic>)
-          : null,
+      unreadCount: _asInt(json['unreadCount']),
+      updatedAt: _asDate(json['updatedAt']),
+      lastMessage: last is Map<String, dynamic>
+          ? ChatLastMessage.fromJson(last)
+          : last is Map
+              ? ChatLastMessage.fromJson(
+                  last.map((key, value) => MapEntry(key.toString(), value)),
+                )
+              : null,
     );
   }
 }
@@ -56,10 +80,13 @@ class ChatContact {
   final String roleLabel;
 
   factory ChatContact.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final name = json['name'];
+    final phone = json['phone'];
     return ChatContact(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      phone: json['phone'] as String?,
+      id: id is String ? id : '',
+      name: name is String && name.trim().isNotEmpty ? name.trim() : 'Участник',
+      phone: phone is String && phone.isNotEmpty ? phone : null,
       role: json['role'] as String? ?? '',
       roleLabel: json['roleLabel'] as String? ?? '',
     );
@@ -84,10 +111,10 @@ class ChatLastMessage {
   factory ChatLastMessage.fromJson(Map<String, dynamic> json) {
     return ChatLastMessage(
       id: json['id'] as String,
-      type: json['type'] as String,
-      preview: json['preview'] as String,
-      senderName: json['senderName'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      type: json['type'] as String? ?? 'text',
+      preview: json['preview'] as String? ?? '',
+      senderName: json['senderName'] as String? ?? '',
+      createdAt: _asDate(json['createdAt']),
     );
   }
 }
@@ -201,10 +228,15 @@ class ChatMessage {
     final productMap = asMap(json['product']);
     final replyMap = asMap(json['replyTo']);
 
+    String text(Object? value, [String fallback = '']) {
+      if (value is String && value.isNotEmpty) return value;
+      return fallback;
+    }
+
     return ChatMessage(
-      id: json['id'] as String,
-      chatId: json['chatId'] as String,
-      type: json['type'] as String,
+      id: text(json['id']),
+      chatId: text(json['chatId']),
+      type: text(json['type'], 'text'),
       content: json['content'] as String?,
       attachmentUrl: json['attachmentUrl'] as String?,
       attachmentName: json['attachmentName'] as String?,
@@ -306,9 +338,10 @@ class ChatSender {
   final String name;
 
   factory ChatSender.fromJson(Map<String, dynamic> json) {
+    final name = json['name'];
     return ChatSender(
-      id: json['id'] as String,
-      name: json['name'] as String,
+      id: json['id'] is String ? json['id'] as String : '',
+      name: name is String && name.trim().isNotEmpty ? name : 'Участник',
     );
   }
 }

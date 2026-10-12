@@ -9,8 +9,8 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/settings/settings_notifier.dart';
 import 'core/widgets/dismiss_keyboard.dart';
+import 'core/push/push_service.dart';
 import 'features/auth/presentation/auth_notifier.dart';
-import 'features/chat/data/chat_socket_service.dart';
 import 'features/chat/presentation/chat_notifier.dart';
 import 'features/chat/presentation/in_app_message_notice.dart';
 
@@ -36,7 +36,7 @@ class _DavartAppState extends ConsumerState<DavartApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
     if (!ref.read(authProvider).isAuthenticated) return;
-    unawaited(ref.read(chatSocketServiceProvider).connect(force: true));
+    unawaited(ref.read(pushServiceProvider).initialize());
     unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
   }
 

@@ -193,7 +193,13 @@ class ChatRepository {
     );
     final items = response.data['items'] as List<dynamic>? ?? [];
     return items
-        .map((item) => ChatContact.fromJson(item as Map<String, dynamic>))
+        .whereType<Map>()
+        .map(
+          (item) => ChatContact.fromJson(
+            item.map((key, value) => MapEntry(key.toString(), value)),
+          ),
+        )
+        .where((contact) => contact.id.isNotEmpty)
         .toList();
   }
 
@@ -241,6 +247,10 @@ class ChatRepository {
       // Also index by id-less keys already covered; keep id lookup unused here.
     }
     return map;
+  }
+
+  Future<void> deleteChat(String chatId) async {
+    await _dio.delete('/chats/$chatId');
   }
 
   Future<ChatDetails> getChat(String chatId) async {

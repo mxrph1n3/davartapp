@@ -156,10 +156,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
+    const staffDemo = this.isStaffDemoPhone(normalizedPhone);
     const user = await this.prisma.user.upsert({
       where: { phone: normalizedPhone },
-      update: {},
-      create: { phone: normalizedPhone, role: 'client' },
+      update: staffDemo ? this.staffDemoProfile() : {},
+      create: staffDemo
+        ? { phone: normalizedPhone, ...this.staffDemoProfile() }
+        : { phone: normalizedPhone, role: UserRole.client },
       select: {
         id: true,
         phone: true,
@@ -304,17 +307,44 @@ export class AuthService {
 
   /** Fixed OTP for demo / App Review numbers. No SMS is sent. */
   private testLoginCodeFor(phone: string): string | null {
-    const phonesRaw = this.configService.get<string>('AUTH_TEST_PHONES', '');
     const code = this.configService.get<string>('AUTH_TEST_CODE', '0000').trim();
-    if (!phonesRaw.trim() || !code) return null;
+    if (!code) return null;
+    const allowed = [
+      ...this.phonesFromEnv('AUTH_TEST_PHONES'),
+      ...this.phonesFromEnv('AUTH_TEST_STAFF_PHONES'),
+    ];
+    return allowed.includes(phone) ? code : null;
+  }
 
-    const allowed = phonesRaw
+  /** Studio demo: same fixed code, but the account is the studio shell. */
+  private isStaffDemoPhone(phone: string): boolean {
+    return this.phonesFromEnv('AUTH_TEST_STAFF_PHONES').includes(phone);
+  }
+
+  private staffDemoProfile(): {
+    name: string;
+    role: UserRole;
+    extraRoles: UserRole[];
+  } {
+    return {
+      name: 'Студия DAVart',
+      role: UserRole.admin,
+      extraRoles: [
+        UserRole.designer,
+        UserRole.complectator,
+        UserRole.surveyor,
+      ],
+    };
+  }
+
+  private phonesFromEnv(key: string): string[] {
+    const phonesRaw = this.configService.get<string>(key, '');
+    if (!phonesRaw.trim()) return [];
+    return phonesRaw
       .split(/[,;\s]+/)
       .map((p) => p.trim())
       .filter(Boolean)
       .map((p) => this.normalizePhone(p));
-
-    return allowed.includes(phone) ? code : null;
   }
 
   private hashOtp(code: string): string {

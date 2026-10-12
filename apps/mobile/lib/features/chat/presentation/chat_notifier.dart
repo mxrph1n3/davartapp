@@ -54,18 +54,29 @@ class ChatsListNotifier extends AsyncNotifier<List<ChatSummary>> {
     return ref.read(chatRepositoryProvider).getChats();
   }
 
+  Future<void> deleteChat(String chatId) async {
+    final previous = state.value ?? const <ChatSummary>[];
+    state = AsyncData(previous.where((chat) => chat.id != chatId).toList());
+    try {
+      await ref.read(chatRepositoryProvider).deleteChat(chatId);
+    } catch (error) {
+      state = AsyncData(previous);
+      rethrow;
+    }
+  }
+
   /// Pull the list from the API without replacing the current rows with a loader.
   Future<void> refreshSilently() async {
     if (!ref.read(authProvider).isAuthenticated) return;
     if (_reloadInFlight) return;
     _reloadInFlight = true;
     try {
-      final socket = ref.read(chatSocketServiceProvider);
-      if (!socket.isConnected) {
-        unawaited(socket.connect(force: true));
-      }
       final chats = await ref.read(chatRepositoryProvider).getChats();
       state = AsyncData(chats);
+      final socket = ref.read(chatSocketServiceProvider);
+      if (!socket.isConnected) {
+        await socket.connect(force: true);
+      }
     } catch (_) {
       // Keep the list already on screen.
     } finally {
@@ -181,7 +192,11 @@ class ChatMessagesNotifier
 
     void onMessage(ChatMessage message) {
       message = _owned(message);
-      if (message.chatId != chatId) return;
+      if (message.chatId != chatId) {
+        // Same person can be open under another chat id. Pull the thread now.
+        unawaited(refreshLatest());
+        return;
+      }
       final current = state.value?.messages ?? [];
       if (current.any((item) => item.id == message.id)) return;
       _total += 1;
@@ -308,7 +323,19 @@ class ChatMessagesNotifier
           );
       _appendMessage(message);
     } catch (error) {
-      throw ChatSendException(chatErrorMessage(error));
+      await refreshLatest();
+      final mine = ref.read(authProvider).user?.id;
+      final arrived = state.value?.messages.any(
+            (item) =>
+                item.sender.id == mine &&
+                item.content == text &&
+                !item.isPending &&
+                DateTime.now().difference(item.createdAt).inSeconds < 20,
+          ) ??
+          false;
+      if (!arrived) {
+        throw ChatSendException(chatErrorMessage(error));
+      }
     } finally {
       ref.read(chatSendingProvider(arg).notifier).setSending(false);
     }

@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Logger,
   Param,
   Post,
   Query,
@@ -43,6 +45,8 @@ import {
 @Controller('chats')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
+  private readonly logger = new Logger(ChatController.name);
+
   constructor(
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
@@ -236,18 +240,7 @@ export class ChatController {
       params.messageId,
       dto.targetChatId,
     );
-    const otherUserIds = await this.chatService.getOtherParticipantIds(
-      dto.targetChatId,
-      user.sub,
-    );
-    this.chatGateway.emitNewMessage(dto.targetChatId, message, [
-      ...otherUserIds,
-      user.sub,
-    ]);
-    for (const userId of otherUserIds) {
-      const total = (await this.chatService.getUnreadTotal(userId)).total;
-      this.chatGateway.emitUnreadUpdate(userId, total);
-    }
+    await this.publishLive(user.sub, dto.targetChatId, message);
     return message;
   }
 
@@ -279,6 +272,15 @@ export class ChatController {
     return this.chatService.getChat(user.sub, params.id);
   }
 
+  @Delete(':id')
+  @HttpCode(200)
+  dismissChat(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+  ) {
+    return this.chatService.dismissChat(user.sub, params.id);
+  }
+
   @Post(':id/participants')
   @UseGuards(RolesGuard)
   @Roles(UserRole.complectator, UserRole.admin)
@@ -304,14 +306,7 @@ export class ChatController {
       ]);
 
       for (const userId of otherUserIds) {
-        const total = (await this.chatService.getUnreadTotal(userId)).total;
-        this.chatGateway.emitUnreadUpdate(userId, total);
-        const push = this.chatService.buildPushPayload(message);
-        await this.pushService.sendToUser(userId, {
-          title: push.title,
-          body: push.body,
-          data: { type: 'chat', chatId: params.id },
-        });
+        this.scheduleDelivery(userId, params.id, message);
       }
     }
 
@@ -330,41 +325,93 @@ export class ChatController {
       dto,
     );
 
-    const otherUserIds = await this.chatService.getOtherParticipantIds(
-      params.id,
-      user.sub,
+    await this.publishLive(user.sub, params.id, message);
+    return message;
+  }
+
+  /**
+   * Each phone may have a different chat id for the same person.
+   * Send a correctly labeled copy to every such id, then return.
+   * Push and SMS run after the HTTP response.
+   */
+  private async publishLive(
+    actorId: string,
+    chatId: string,
+    message: {
+      chatId: string;
+      type: string;
+      content?: string | null;
+      attachmentName?: string | null;
+      sender?: { id: string; name?: string | null };
+      isMine?: boolean;
+    },
+  ) {
+    const others = await this.chatService.getOtherParticipantIds(
+      chatId,
+      actorId,
     );
+    const viewers = [...new Set([actorId, ...others])];
 
-    // One chat-room broadcast for anyone currently viewing the thread.
-    this.chatGateway.emitNewMessage(params.id, message, []);
-
-    // Fan-out to every participant's user sockets — including the sender —
-    // so other devices / users not inside the room update instantly.
-    const fanoutIds = [...new Set([...otherUserIds, user.sub])];
-    for (const recipientId of fanoutIds) {
-      const forRecipient = this.chatService.asViewerMessage(
-        message,
-        recipientId,
+    for (const viewerId of viewers) {
+      const labeled = this.chatService.asViewerMessage(message, viewerId);
+      const threadIds = await this.chatService.listDeliveryChatIds(
+        viewerId,
+        chatId,
       );
-      this.chatGateway.emitNewMessage(params.id, forRecipient, [recipientId], {
-        skipChatRoom: true,
-      });
-
-      if (recipientId === user.sub) continue;
-
-      const total = (await this.chatService.getUnreadTotal(recipientId)).total;
-      this.chatGateway.emitUnreadUpdate(recipientId, total);
-
-      const push = this.chatService.buildPushPayload(message);
-      await this.pushService.sendToUser(recipientId, {
-        title: push.title,
-        body: push.body,
-        badge: total,
-        data: { type: 'chat', chatId: params.id },
-      });
+      for (const threadId of threadIds) {
+        this.chatGateway.emitNewMessage(
+          threadId,
+          { ...labeled, chatId: threadId },
+          [viewerId],
+          { skipChatRoom: true },
+        );
+      }
     }
 
-    return message;
+    for (const recipientId of others) {
+      this.scheduleDelivery(recipientId, chatId, message);
+    }
+  }
+
+  /** Push and SMS must not hold the HTTP response. The sender's app times out at 10s. */
+  private scheduleDelivery(
+    userId: string,
+    chatId: string,
+    message: {
+      type: string;
+      content?: string | null;
+      attachmentName?: string | null;
+      sender?: { name?: string | null };
+    },
+  ) {
+    void this.deliverToRecipient(userId, chatId, message).catch((error) => {
+      this.logger.warn(`Chat delivery failed for ${userId}: ${error}`);
+    });
+  }
+
+  /** Socket if the app is open, Apple push if it is registered, SMS if neither can deliver. */
+  private async deliverToRecipient(
+    userId: string,
+    chatId: string,
+    message: {
+      type: string;
+      content?: string | null;
+      attachmentName?: string | null;
+      sender?: { name?: string | null };
+    },
+  ) {
+    const total = (await this.chatService.getUnreadTotal(userId)).total;
+    this.chatGateway.emitUnreadUpdate(userId, total);
+    const push = this.chatService.buildPushPayload(message);
+    const delivered = await this.pushService.sendToUser(userId, {
+      title: push.title,
+      body: push.body,
+      badge: total,
+      data: { type: 'chat', chatId },
+    });
+    if (!delivered && !this.chatGateway.isOnline(userId)) {
+      await this.chatService.notifyOfflineBySms(userId, message);
+    }
   }
 
   @Post(':id/read')
