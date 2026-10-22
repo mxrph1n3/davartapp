@@ -266,6 +266,14 @@ export class StaffController {
     return this.staffService.getClientPersonalCart(user, clientId);
   }
 
+  @Get('clients/:clientId/favorites')
+  getClientFavorites(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+  ) {
+    return this.staffService.getClientFavorites(user, clientId);
+  }
+
   @Get('projects/:projectId/cart')
   getCart(
     @CurrentUser() user: JwtPayload,

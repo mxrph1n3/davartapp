@@ -13,28 +13,18 @@ import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../../catalog/presentation/widgets/shop_cart.dart';
 import '../../catalog/presentation/widgets/shop_widgets.dart';
-import '../../chat/data/chat_repository.dart';
-import '../../projects/data/projects_models.dart';
-import '../../projects/data/projects_repository.dart';
 import '../data/commerce_models.dart';
 import 'cart_selection_provider.dart';
 import 'commerce_notifier.dart';
-
-/// The client's projects — one cart tab each, even while the designer has not filled it yet.
-final cartProjectsProvider = FutureProvider.autoDispose<List<Project>>((ref) async {
-  if (!ref.watch(authProvider).isAuthenticated) return const [];
-  final projects = await ref.watch(projectsRepositoryProvider).getProjects();
-  return projects.where((p) => !p.isDraft && !p.isShowcase).toList();
-});
 
 /// Open tab: null — «Личная», otherwise a project id.
 final cartTabProvider = StateProvider<String?>((ref) => null);
 
 String cartScope(String? projectId) => projectId == null ? 'personal' : 'project:$projectId';
 
-/// Cart tab inside [MainShell]: «Личная» + a tab per project (the project cart is the
-/// designer's подборка). Nothing is selected on open; orders go to the complectation
-/// department without payment.
+/// Cart tab inside [MainShell]. Until the designer fills a project cart (after the
+/// подборка is approved) it is one plain cart; then tabs «Личная» + «Дизайн-проект №…».
+/// Nothing is selected on open; orders go to the complectation department.
 class CartScreen extends ConsumerStatefulWidget {
   const CartScreen({super.key});
 
@@ -56,9 +46,9 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(cartProvider);
     final authed = ref.watch(authProvider).isAuthenticated;
-    final projects = ref.watch(cartProjectsProvider).value ?? const <Project>[];
+    final projectCarts = state.projectCarts.where((c) => c.projectId != null && _lineCount(c) > 0).toList();
     var tab = ref.watch(cartTabProvider);
-    if (tab != null && !projects.any((p) => p.id == tab)) tab = null;
+    if (tab != null && !projectCarts.any((c) => c.projectId == tab)) tab = null;
 
     Widget body;
     if (!authed) {
@@ -68,7 +58,7 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     } else if (state.errorMessage != null && state.cart == null) {
       body = ErrorState(message: state.errorMessage!, onRetry: () => ref.read(cartProvider.notifier).loadCart());
     } else {
-      body = _CartTab(projectId: tab, projects: projects);
+      body = _CartTab(projectId: tab);
     }
 
     return TabPage(
@@ -77,15 +67,8 @@ class _CartScreenState extends ConsumerState<CartScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const ScreenHeader(title: 'Корзина'),
-            if (authed && projects.isNotEmpty)
-              _Tabs(
-                selected: tab,
-                projects: projects,
-                counts: {
-                  null: _lineCount(state.cart),
-                  for (final p in projects) p.id: _lineCount(_projectCart(state, p.id)),
-                },
-              ),
+            if (authed && projectCarts.isNotEmpty)
+              _Tabs(selected: tab, projectCarts: projectCarts, personalCount: _lineCount(state.cart)),
             Expanded(child: body),
           ],
         ),
@@ -104,19 +87,18 @@ Cart? _projectCart(CartState state, String projectId) {
 }
 
 class _Tabs extends ConsumerWidget {
-  const _Tabs({required this.selected, required this.projects, required this.counts});
+  const _Tabs({required this.selected, required this.projectCarts, required this.personalCount});
 
   final String? selected;
-  final List<Project> projects;
-  final Map<String?, int> counts;
+  final List<Cart> projectCarts;
+  final int personalCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = AppColors.of(context);
 
-    Widget chip(String? id, String label) {
+    Widget chip(String? id, String label, int n) {
       final active = id == selected;
-      final n = counts[id] ?? 0;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: Material(
@@ -152,18 +134,21 @@ class _Tabs extends ConsumerWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        children: [chip(null, 'Личная'), for (final p in projects) chip(p.id, p.name.isEmpty ? 'Проект' : p.name)],
+        children: [
+          chip(null, 'Личная', personalCount),
+          for (final c in projectCarts)
+            chip(c.projectId, (c.projectName ?? '').isEmpty ? 'Дизайн-проект' : c.projectName!, _lineCount(c)),
+        ],
       ),
     );
   }
 }
 
 class _CartTab extends ConsumerWidget {
-  const _CartTab({required this.projectId, required this.projects});
+  const _CartTab({required this.projectId});
 
   /// null — personal cart.
   final String? projectId;
-  final List<Project> projects;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -257,8 +242,6 @@ class _CartTab extends ConsumerWidget {
         _Summary(
           count: selected.length,
           total: total,
-          showPropose: projectId == null && projects.isNotEmpty,
-          onPropose: selected.isEmpty ? null : () => _propose(context, ref, selected),
           onCheckout: selected.isEmpty
               ? null
               : () =>
@@ -286,59 +269,6 @@ class _CartTab extends ConsumerWidget {
     } catch (_) {
       if (context.mounted) showTopNotice(context, 'Не удалось удалить товары');
     }
-  }
-
-  /// «Предложить в проект»: the chosen goods go to the project chat for the designer to approve.
-  Future<void> _propose(BuildContext context, WidgetRef ref, List<CartItem> items) async {
-    final project = projects.length == 1 ? projects.first : await _pickProject(context);
-    if (project == null) return;
-    try {
-      final chats = ref.read(chatRepositoryProvider);
-      final chat = await chats.getProjectChat(project.id);
-      await chats.sendMessage(
-        chatId: chat.id,
-        type: 'text',
-        content: items.length == 1
-            ? 'Предлагаю добавить в проект этот товар:'
-            : 'Предлагаю добавить в проект эти товары (${items.length}):',
-      );
-      for (final item in items) {
-        final p = item.product;
-        await chats.sendMessage(
-          chatId: chat.id,
-          type: 'product',
-          productId: p.id,
-          content: p.sellByPack
-              ? '${item.quantity} уп. · ${packAmountLabel(p.packSize, p.unit, item.quantity)}'
-              : packAmountLabel(null, p.unit, item.quantity),
-        );
-      }
-      ref.read(cartSelectionProvider(cartScope(null)).notifier).state = {};
-      if (context.mounted) showTopNotice(context, 'Отправлено дизайнеру в чат проекта');
-    } catch (_) {
-      if (context.mounted) showTopNotice(context, 'Не удалось отправить предложение');
-    }
-  }
-
-  Future<Project?> _pickProject(BuildContext context) {
-    return showModalBottomSheet<Project>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text('В какой проект предложить?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            ),
-            for (final p in projects) ListTile(title: Text(p.name), onTap: () => Navigator.pop(ctx, p)),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -495,24 +425,15 @@ class _CartLine extends StatelessWidget {
 }
 
 class _Summary extends StatelessWidget {
-  const _Summary({
-    required this.count,
-    required this.total,
-    required this.onCheckout,
-    required this.onPropose,
-    required this.showPropose,
-  });
+  const _Summary({required this.count, required this.total, required this.onCheckout});
 
   final int count;
   final double total;
   final VoidCallback? onCheckout;
-  final VoidCallback? onPropose;
-  final bool showPropose;
 
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final accent = shopAccentLine(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
       decoration: BoxDecoration(
@@ -541,22 +462,6 @@ class _Summary extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              if (showPropose) ...[
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: onPropose,
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      side: BorderSide(color: onPropose == null ? colors.border : accent, width: 1.5),
-                      foregroundColor: colors.textPrimary,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('Предложить в проект', style: TextStyle(fontWeight: FontWeight.w500)),
-                  ),
-                ),
-                const SizedBox(width: 10),
-              ],
               Expanded(
                 child: FilledButton(
                   onPressed: onCheckout,

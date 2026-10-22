@@ -8,6 +8,7 @@ import { OrderStatus, Prisma, ProjectStatus, UserRole } from '@prisma/client';
 import { canSeeContactPhone } from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
 import { CartService } from '../commerce/cart.service';
+import { FavoritesService } from '../commerce/favorites.service';
 import { OrdersService } from '../commerce/orders.service';
 import { LiveSyncService } from '../live/live-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,6 +36,7 @@ export class StaffService {
     private readonly usersService: UsersService,
     private readonly projectsService: ProjectsService,
     private readonly cartService: CartService,
+    private readonly favoritesService: FavoritesService,
     private readonly ordersService: OrdersService,
     private readonly pushService: PushService,
     private readonly chatService: ChatService,
@@ -225,6 +227,12 @@ export class StaffService {
   async getClientPersonalCart(actor: JwtPayload, clientId: string) {
     await this.assertClientAccess(actor, clientId);
     return this.cartService.getPersonalCartOf(clientId);
+  }
+
+  /** The client's favourites — alternatives the designer may take into the подборка. */
+  async getClientFavorites(actor: JwtPayload, clientId: string) {
+    await this.assertClientAccess(actor, clientId);
+    return this.favoritesService.list(clientId);
   }
 
   async getCart(actor: JwtPayload, projectId: string) {

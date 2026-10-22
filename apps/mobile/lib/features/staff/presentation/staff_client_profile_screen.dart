@@ -97,7 +97,7 @@ class StaffClientProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ListItem(
-                  title: 'Личная корзина клиента',
+                  title: 'Корзина и избранное клиента',
                   subtitle: 'Что клиент отложил сам — для подборки',
                   leading: const Icon(Icons.shopping_bag_outlined, size: 22),
                   onTap: () => context.push(AppRoutes.staffClientPersonalCart(clientId)),

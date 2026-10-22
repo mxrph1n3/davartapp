@@ -97,7 +97,9 @@ export class CatalogService {
         const subs = (children.get(top.id) ?? []).map(shape);
         return {
           ...shape(top),
-          productCount: top._count.products + subs.reduce((sum, c) => sum + c.productCount, 0),
+          productCount:
+            top._count.products +
+            subs.reduce((sum, c) => sum + c.productCount, 0),
           children: subs,
         };
       });
@@ -116,7 +118,9 @@ export class CatalogService {
    *  every characteristic present with its values and product counts. */
   async getFilterOptions(categoryId?: string) {
     const scope = categoryId ? await this.categoryScope(categoryId) : undefined;
-    const productWhere: Prisma.ProductWhereInput = scope ? { categoryId: { in: scope } } : {};
+    const productWhere: Prisma.ProductWhereInput = scope
+      ? { categoryId: { in: scope } }
+      : {};
 
     const [brands, attributes, priceAgg] = await Promise.all([
       this.prisma.brand.findMany({
@@ -154,7 +158,10 @@ export class CatalogService {
       colors: (facets.get('Цвет') ?? []).map((v) => v.value),
       collections: [],
       attributes: [...facets.entries()]
-        .filter(([key, values]) => !SKIP.has(key) && values.length > 1 && values.length <= 40)
+        .filter(
+          ([key, values]) =>
+            !SKIP.has(key) && values.length > 1 && values.length <= 40,
+        )
         .map(([key, values]) => ({ key, values })),
       priceRange: {
         min: Number(priceAgg._min.price ?? 0),
@@ -192,7 +199,12 @@ export class CatalogService {
   async searchProducts(query: SearchQueryDto) {
     // Browsing without text, characteristic filters, several brands and category trees go to
     // Postgres; Meilisearch is only for text search (its index may lag behind the database).
-    if (!query.q?.trim() || query.attr?.length || query.brandIds || query.categoryId) {
+    if (
+      !query.q?.trim() ||
+      query.attr?.length ||
+      query.brandIds ||
+      query.categoryId
+    ) {
       return this.searchWithPrisma(query);
     }
     const params: SearchParams = {
@@ -235,7 +247,10 @@ export class CatalogService {
       throw new NotFoundException('Product not found');
     }
 
-    return this.formatProductDetail(product, await this.relatedProducts(product));
+    return this.formatProductDetail(
+      product,
+      await this.relatedProducts(product),
+    );
   }
 
   async reindexProducts(): Promise<number> {
@@ -293,7 +308,9 @@ export class CatalogService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
-    const scope = query.categoryId ? await this.categoryScope(query.categoryId) : undefined;
+    const scope = query.categoryId
+      ? await this.categoryScope(query.categoryId)
+      : undefined;
     const where = this.buildPrismaWhere(query, scope);
 
     const [items, total] = await Promise.all([
@@ -492,7 +509,11 @@ export class CatalogService {
     };
   }
 
-  /** Same collection, and alternatives from the same subcategory at a similar price. */
+  /**
+   * Same collection, plus «Похожие» — every product gets alternatives: first the same
+   * subcategory at a similar price, then the same subcategory at any price, then the
+   * neighbouring subcategories of the same tile. Empty only when the tile has nothing else.
+   */
   private async relatedProducts(product: {
     id: string;
     collectionSlug: string | null;
@@ -500,29 +521,51 @@ export class CatalogService {
     price: Prisma.Decimal;
   }) {
     const price = Number(product.price);
-    const [collection, similar] = await Promise.all([
-      product.collectionSlug
-        ? this.prisma.product.findMany({
-            where: { collectionSlug: product.collectionSlug, id: { not: product.id } },
-            take: 12,
-            orderBy: { isPopular: 'desc' },
-            select: productListSelect,
-          })
-        : Promise.resolve([]),
-      product.category
-        ? this.prisma.product.findMany({
-            where: {
-              categoryId: product.category.id,
-              id: { not: product.id },
-              ...(product.collectionSlug ? { NOT: { collectionSlug: product.collectionSlug } } : {}),
-              price: { gte: price * 0.5, lte: price * 1.6 },
-            },
-            take: 12,
-            orderBy: [{ inStock: 'desc' }, { isPopular: 'desc' }],
-            select: productListSelect,
-          })
-        : Promise.resolve([]),
-    ]);
+    const limit = 12;
+    const collection = product.collectionSlug
+      ? await this.prisma.product.findMany({
+          where: {
+            collectionSlug: product.collectionSlug,
+            id: { not: product.id },
+          },
+          take: limit,
+          orderBy: { isPopular: 'desc' },
+          select: productListSelect,
+        })
+      : [];
+
+    const similar: typeof collection = [];
+    if (product.category) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: product.category.id },
+        select: { id: true, parentId: true },
+      });
+      const tileId = category?.parentId ?? category?.id;
+      const tileScope = tileId ? await this.categoryScope(tileId) : [];
+      const exclude = new Set([product.id, ...collection.map((p) => p.id)]);
+      const tiers: Prisma.ProductWhereInput[] = [
+        {
+          categoryId: product.category.id,
+          price: { gte: price * 0.5, lte: price * 1.6 },
+        },
+        { categoryId: product.category.id },
+        { categoryId: { in: tileScope } },
+      ];
+      for (const where of tiers) {
+        if (similar.length >= limit) break;
+        const found = await this.prisma.product.findMany({
+          where: { ...where, id: { notIn: [...exclude] } },
+          take: limit - similar.length,
+          orderBy: [{ inStock: 'desc' }, { isPopular: 'desc' }],
+          select: productListSelect,
+        });
+        for (const p of found) {
+          exclude.add(p.id);
+          similar.push(p);
+        }
+      }
+    }
+
     return {
       collection: collection.map((p) => this.formatProductListItem(p)),
       similar: similar.map((p) => this.formatProductListItem(p)),

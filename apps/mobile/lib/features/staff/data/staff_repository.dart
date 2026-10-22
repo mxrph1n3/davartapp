@@ -155,6 +155,13 @@ class StaffRepository {
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<List<FavoriteItem>> getClientFavorites(String clientId) async {
+    final response = await _dio.get('/staff/clients/$clientId/favorites');
+    return (response.data as List<dynamic>)
+        .map((item) => FavoriteItem.fromJson(item as Map<String, dynamic>))
+        .toList();
+  }
+
   Future<Cart> getCart(String projectId) async {
     final response = await _dio.get('/staff/projects/$projectId/cart');
     return Cart.fromJson(response.data as Map<String, dynamic>);

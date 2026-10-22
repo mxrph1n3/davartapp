@@ -153,13 +153,6 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
                       'Цену и наличие подтвердит менеджер после оформления',
                       style: TextStyle(fontSize: 12, color: colors.textSecondary),
                     ),
-                    if (product.sellByPack && product.packSize != null) ...[
-                      const SizedBox(height: 18),
-                      _AreaCalculator(
-                        product: product,
-                        onApply: (n) => setState(() => _packs = n),
-                      ),
-                    ],
                     if (product.attributes.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       _SectionTitle('Характеристики'),
@@ -175,6 +168,13 @@ class _ProductScreenState extends ConsumerState<ProductScreen> {
                       Text(
                         product.description!.trim(),
                         style: TextStyle(fontSize: 14.5, height: 1.45, color: colors.textPrimary.withValues(alpha: 0.8)),
+                      ),
+                    ],
+                    if (product.sellByPack && product.packSize != null) ...[
+                      const SizedBox(height: 24),
+                      _AreaCalculator(
+                        product: product,
+                        onApply: (n) => setState(() => _packs = n),
                       ),
                     ],
                   ],

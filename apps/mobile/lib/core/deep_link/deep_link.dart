@@ -42,6 +42,10 @@ String? locationFromDeepLink(Uri uri) {
     return '/chat/${segments[1]}';
   }
 
+  if (segments.length >= 2 && segments.first == 'product') {
+    return '/product/${segments[1]}';
+  }
+
   if (segments.length == 1 && segments.first == 'cart') {
     return '/cart';
   }
