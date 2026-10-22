@@ -156,13 +156,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    const staffDemo = this.isStaffDemoPhone(normalizedPhone);
+    // Every sign-up starts as a client; studio roles are granted only in the admin panel.
     const user = await this.prisma.user.upsert({
       where: { phone: normalizedPhone },
-      update: staffDemo ? this.staffDemoProfile() : {},
-      create: staffDemo
-        ? { phone: normalizedPhone, ...this.staffDemoProfile() }
-        : { phone: normalizedPhone, role: UserRole.client },
+      update: {},
+      create: { phone: normalizedPhone, role: UserRole.client },
       select: {
         id: true,
         phone: true,
@@ -305,34 +303,14 @@ export class AuthService {
     return phone.startsWith('+') ? `+${digits}` : phone.trim();
   }
 
-  /** Fixed OTP for demo / App Review numbers. No SMS is sent. */
+  /**
+   * Fixed OTP for App Review demo numbers (client accounts only). No SMS is sent.
+   * Off unless both AUTH_TEST_PHONES and AUTH_TEST_CODE are set (no default code).
+   */
   private testLoginCodeFor(phone: string): string | null {
-    const code = this.configService
-      .get<string>('AUTH_TEST_CODE', '0000')
-      .trim();
-    if (!code) return null;
-    const allowed = [
-      ...this.phonesFromEnv('AUTH_TEST_PHONES'),
-      ...this.phonesFromEnv('AUTH_TEST_STAFF_PHONES'),
-    ];
-    return allowed.includes(phone) ? code : null;
-  }
-
-  /** Studio demo: same fixed code, but the account is the studio shell. */
-  private isStaffDemoPhone(phone: string): boolean {
-    return this.phonesFromEnv('AUTH_TEST_STAFF_PHONES').includes(phone);
-  }
-
-  private staffDemoProfile(): {
-    name: string;
-    role: UserRole;
-    extraRoles: UserRole[];
-  } {
-    return {
-      name: 'Студия DAVart',
-      role: UserRole.admin,
-      extraRoles: [UserRole.designer, UserRole.complectator, UserRole.surveyor],
-    };
+    const code = this.configService.get<string>('AUTH_TEST_CODE', '').trim();
+    if (!/^\d{4}$/.test(code)) return null;
+    return this.phonesFromEnv('AUTH_TEST_PHONES').includes(phone) ? code : null;
   }
 
   private phonesFromEnv(key: string): string[] {

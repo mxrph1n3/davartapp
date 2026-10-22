@@ -303,9 +303,10 @@ export class ChatService {
   async listContacts(userId: string, q?: string) {
     const viewer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true },
+      select: { id: true, role: true, extraRoles: true },
     });
     if (!viewer) throw new NotFoundException('User not found');
+    const viewerIsStaff = hasStudioRole(allRolesOf(viewer));
 
     const query = q?.trim();
 
@@ -318,14 +319,20 @@ export class ChatService {
         }
       : undefined;
 
+    // Only people the viewer already talks to. Everyone else is found through the
+    // phone's own address book (POST /chats/match-phones) — the server never hands
+    // out its full user list.
     const users = await this.prisma.user.findMany({
       where: {
         id: { not: userId },
+        chatParticipants: {
+          some: { chat: { participants: { some: { userId } } } },
+        },
         ...(namePhoneFilter ?? {}),
       },
       select: { id: true, name: true, phone: true, role: true },
       orderBy: [{ name: 'asc' }, { phone: 'asc' }],
-      take: query ? 200 : 2000,
+      take: 200,
     });
 
     const seen = new Set<string>();
@@ -339,11 +346,11 @@ export class ChatService {
         .map((user) => ({
           id: user.id,
           name: this.publicDisplayName(user, {
-            // Clients need phone/name to recognize people they message.
-            revealPhone: true,
+            revealPhone: viewerIsStaff || user.role === UserRole.client,
           }),
-          // Phone is required for invite/search UX for everyone in contacts.
-          phone: user.phone,
+          // Studio staff numbers stay private from clients.
+          phone:
+            viewerIsStaff || user.role === UserRole.client ? user.phone : null,
           role: user.role,
           roleLabel: this.contactRoleLabel(user.role),
         })),
@@ -516,9 +523,11 @@ export class ChatService {
     });
     const isNew = existing == null;
 
+    // The name is only a label for a brand-new account; an existing user's
+    // name is theirs and must not be overwritten by whoever invites them.
     const invitee = await this.prisma.user.upsert({
       where: { phone },
-      update: name?.trim() ? { name: name.trim() } : {},
+      update: {},
       create: {
         phone,
         name: name?.trim() || null,

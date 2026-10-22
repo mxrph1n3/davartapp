@@ -172,51 +172,29 @@ describe('Auth (e2e)', () => {
     );
   });
 
-  it('AUTH_TEST_STAFF_PHONES logs in as the studio account', async () => {
+  it('a staff demo number gets no test code and signs up as a client', async () => {
     process.env.AUTH_TEST_STAFF_PHONES = '+70000000001';
-    process.env.AUTH_TEST_CODE = '0000';
+    process.env.AUTH_TEST_CODE = '4821';
 
     const send = await request(app.getHttpServer())
       .post('/api/auth/send-otp')
       .send({ phone: '+70000000001' })
       .expect(200);
 
-    expect(send.body.channel).toBe('test');
-    expect(send.body.debugCode).toBe('0000');
+    expect(send.body.channel).not.toBe('test');
+    expect(send.body.debugCode).not.toBe('4821');
+  });
 
-    mockPrismaService.user.upsert.mockResolvedValueOnce({
-      id: 'user-studio',
-      phone: '+70000000001',
-      name: 'Студия DAVart',
-      role: 'admin',
-      extraRoles: ['designer', 'complectator', 'surveyor'],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+  it('test login is off when AUTH_TEST_CODE is not set', async () => {
+    process.env.AUTH_TEST_PHONES = '+70000000000';
+    delete process.env.AUTH_TEST_CODE;
 
-    const verified = await request(app.getHttpServer())
-      .post('/api/auth/verify-otp')
-      .send({ phone: '+70000000001', code: '0000' })
+    const send = await request(app.getHttpServer())
+      .post('/api/auth/send-otp')
+      .send({ phone: '+70000000000' })
       .expect(200);
 
-    expect(verified.body.user.role).toBe('admin');
-    expect(verified.body.user.extraRoles).toEqual(
-      expect.arrayContaining(['designer', 'complectator', 'surveyor']),
-    );
-    expect(mockPrismaService.user.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { phone: '+70000000001' },
-        create: expect.objectContaining({
-          role: 'admin',
-          name: 'Студия DAVart',
-          extraRoles: ['designer', 'complectator', 'surveyor'],
-        }),
-        update: expect.objectContaining({
-          role: 'admin',
-          name: 'Студия DAVart',
-        }),
-      }),
-    );
+    expect(send.body.channel).not.toBe('test');
   });
 
   it('POST /api/auth/send-otp fails when Redis is down', async () => {

@@ -124,6 +124,14 @@ class UserProfile {
       hasRole(UserRole.admin) || hasRole(UserRole.complectator);
 
   bool get canAssignRoles => hasRole(UserRole.admin);
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'phone': phone,
+        'name': name,
+        'role': role.name,
+        'extraRoles': [for (final item in extraRoles) item.name],
+      };
 }
 
 enum UserRole {

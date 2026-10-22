@@ -7,6 +7,7 @@ import {
 import { DocumentsService } from './documents.service';
 
 @Module({
+  imports: [LiveSyncModule],
   controllers: [DocumentsController, ProjectDocumentsController],
   providers: [DocumentsService],
   exports: [DocumentsService],

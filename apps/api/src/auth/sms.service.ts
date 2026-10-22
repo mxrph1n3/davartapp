@@ -396,7 +396,7 @@ export class SmsService {
 
     let payload: {
       error?: string;
-      sms?: Array<{ action?: string; id_sms?: string | number }>;
+      sms?: Array<{ action?: string; id_sms?: string | number; error?: string }>;
     };
     try {
       payload = JSON.parse(raw) as typeof payload;

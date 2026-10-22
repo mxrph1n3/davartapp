@@ -22,20 +22,20 @@ class InAppMessageNotice extends ConsumerStatefulWidget {
 
 class _InAppMessageNoticeState extends ConsumerState<InAppMessageNotice> {
   String? _lastMessageId;
-  var _socketBound = false;
+  // Kept from initState: `ref` can no longer be read inside dispose.
+  ChatSocketService? _socket;
 
   @override
   void initState() {
     super.initState();
-    ref.read(chatSocketServiceProvider).addMessageListener(_onSocketMessage);
-    _socketBound = true;
+    final socket = ref.read(chatSocketServiceProvider);
+    socket.addMessageListener(_onSocketMessage);
+    _socket = socket;
   }
 
   @override
   void dispose() {
-    if (_socketBound) {
-      ref.read(chatSocketServiceProvider).removeMessageListener(_onSocketMessage);
-    }
+    _socket?.removeMessageListener(_onSocketMessage);
     super.dispose();
   }
 

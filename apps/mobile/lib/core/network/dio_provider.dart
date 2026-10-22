@@ -54,8 +54,15 @@ final dioProvider = Provider<Dio>((ref) {
         refreshToken: newRefresh,
       );
       return newAccess;
+    } on DioException catch (error) {
+      // Sign out only when the server rejects the refresh token. A timeout or a
+      // dropped connection must not end the session — the next request retries.
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403) {
+        await invalidateSession();
+      }
+      return null;
     } catch (_) {
-      await invalidateSession();
       return null;
     } finally {
       completer.complete();
