@@ -1,10 +1,17 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, Prisma, ProjectStatus, UserRole } from '@prisma/client';
+import {
+  ChatType,
+  OrderStatus,
+  Prisma,
+  ProjectStatus,
+  UserRole,
+} from '@prisma/client';
 import { canSeeContactPhone } from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
 import { CartService } from '../commerce/cart.service';
@@ -12,7 +19,10 @@ import { FavoritesService } from '../commerce/favorites.service';
 import { OrdersService } from '../commerce/orders.service';
 import { LiveSyncService } from '../live/live-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProjectsService } from '../projects/projects.service';
+import {
+  designProjectName,
+  ProjectsService,
+} from '../projects/projects.service';
 import { clientLinkedToStaffWhere } from '../projects/project-access';
 import { PushService } from '../push/push.service';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
@@ -440,8 +450,14 @@ export class StaffService {
     dto: UpdateAddressDto,
   ) {
     await this.assertClientAccess(actor, clientId);
-    const address = await this.usersService.updateAddress(clientId, addressId, dto);
-    await this.recordAudit(actor.sub, clientId, 'address.update', { addressId });
+    const address = await this.usersService.updateAddress(
+      clientId,
+      addressId,
+      dto,
+    );
+    await this.recordAudit(actor.sub, clientId, 'address.update', {
+      addressId,
+    });
     return address;
   }
 
@@ -639,6 +655,47 @@ export class StaffService {
         role: user.role,
       })),
     };
+  }
+
+  /** Admin enters the contract number when the contract is signed. */
+  async setProjectNumber(actor: JwtPayload, projectId: string, raw: string) {
+    const number = raw.trim().replace(/^№\s*/, '');
+    if (!/^\d{3,7}(-\d{1,3})?$/.test(number)) {
+      throw new BadRequestException(
+        'Номер договора: цифры, например 16068 или 15272-2',
+      );
+    }
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, isShowcase: false },
+      select: { id: true, userId: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    const taken = await this.prisma.project.findFirst({
+      where: { number, id: { not: projectId } },
+      select: { id: true },
+    });
+    if (taken) {
+      throw new ConflictException('Этот номер уже у другого проекта');
+    }
+    await this.prisma.$transaction([
+      this.prisma.project.update({
+        where: { id: projectId },
+        data: { number, name: designProjectName(number) },
+      }),
+      // The project chat keeps the title it was created with — rename it too.
+      this.prisma.chat.updateMany({
+        where: { projectId, type: ChatType.project },
+        data: { title: designProjectName(number) },
+      }),
+    ]);
+    await this.recordAudit(actor.sub, project.userId, 'project.number', {
+      projectId,
+      number,
+    });
+    void this.liveSync.publish(projectId, 'project');
+    return { id: projectId, number, name: designProjectName(number) };
   }
 
   async assignProjectStaff(

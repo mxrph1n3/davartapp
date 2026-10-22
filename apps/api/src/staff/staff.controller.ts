@@ -21,6 +21,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import type { Response } from 'express';
@@ -103,6 +104,12 @@ class UpdateStaffClientDto {
 class StaffRosterQueryDto {
   @IsIn(['designer', 'surveyor'])
   role!: 'designer' | 'surveyor';
+}
+
+class SetProjectNumberDto {
+  @IsString()
+  @MaxLength(16)
+  number!: string;
 }
 
 class AssignProjectStaffDto {
@@ -280,6 +287,16 @@ export class StaffController {
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
     return this.staffService.getCart(user, projectId);
+  }
+
+  @Patch('projects/:projectId/number')
+  @Roles(UserRole.admin)
+  setProjectNumber(
+    @CurrentUser() user: JwtPayload,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: SetProjectNumberDto,
+  ) {
+    return this.staffService.setProjectNumber(user, projectId, dto.number);
   }
 
   @Patch('projects/:projectId/staff')

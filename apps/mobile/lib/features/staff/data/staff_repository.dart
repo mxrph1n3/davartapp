@@ -231,6 +231,11 @@ class StaffRepository {
     return Order.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Admin only: contract number → project becomes «Дизайн-проект №16068».
+  Future<void> setProjectNumber(String projectId, String number) async {
+    await _dio.patch('/staff/projects/$projectId/number', data: {'number': number});
+  }
+
   Future<Project> advanceProjectStatus(String projectId, String status) async {
     final response = await _dio.post(
       '/staff/projects/$projectId/status',

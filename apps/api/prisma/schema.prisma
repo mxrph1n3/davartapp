@@ -290,6 +290,9 @@ model Project {
   managerId  String?       @map("manager_id")
   surveyorId String?       @map("surveyor_id")
   name       String
+  /// Studio contract number (16068, 15272-2). Entered by the admin; the project is then
+  /// shown as «Дизайн-проект №<number>».
+  number     String?       @unique
   address    String?
   area       Float?
   style      String?

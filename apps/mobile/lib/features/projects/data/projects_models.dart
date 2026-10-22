@@ -183,6 +183,7 @@ class Project {
   const Project({
     required this.id,
     required this.name,
+    this.number,
     this.address,
     this.area,
     this.style,
@@ -202,7 +203,9 @@ class Project {
   });
 
   final String id;
+  /// «Дизайн-проект №16068» once the admin has entered the contract [number].
   final String name;
+  final String? number;
   final String? address;
   final double? area;
   final String? style;
@@ -230,6 +233,7 @@ class Project {
     return Project(
       id: json['id'] as String,
       name: json['name'] as String,
+      number: json['number'] as String?,
       address: json['address'] as String?,
       area: (json['area'] as num?)?.toDouble(),
       style: json['style'] as String?,
