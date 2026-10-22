@@ -74,7 +74,10 @@ flutter_launcher_icons:
   remove_alpha_ios: true
   adaptive_icon_background: "#000000"
   adaptive_icon_foreground: assets/icon/app_icon_foreground.png
-  # Master also used for App Store 1024 marketing icon via ios: true
+  # Light/dark variants are set up by hand (do not re-run the generator blindly):
+  #   iOS — AppIcon.appiconset: AppIcon-Light-1024 (any) + AppIcon-Dark-1024 (dark);
+  #   Android — ic_launcher_background white in values/, black in values-night/,
+  #   plus a monochrome layer for themed icons (Android 13+).
   min_sdk_android: 21
   web:
     generate: false
