@@ -97,6 +97,18 @@ class StaffRepository {
     return UserAddress.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<UserAddress> updateAddress(
+    String clientId,
+    String addressId,
+    CreateAddressRequest request,
+  ) async {
+    final response = await _dio.patch(
+      '/staff/clients/$clientId/addresses/$addressId',
+      data: request.toJson(),
+    );
+    return UserAddress.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<Project>> getProjects(String clientId) async {
     final response = await _dio.get('/staff/clients/$clientId/projects');
     return (response.data as List<dynamic>)

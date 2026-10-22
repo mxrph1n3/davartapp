@@ -15,7 +15,7 @@ import { ProjectsService } from '../projects/projects.service';
 import { clientLinkedToStaffWhere } from '../projects/project-access';
 import { PushService } from '../push/push.service';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
-import { CreateAddressDto } from '../users/dto/users.dto';
+import { CreateAddressDto, UpdateAddressDto } from '../users/dto/users.dto';
 import { UsersService } from '../users/users.service';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 
@@ -415,6 +415,19 @@ export class StaffService {
       addressId: address.id,
       city: dto.city,
     });
+    return address;
+  }
+
+  /** Staff and the client can both edit an address — whoever filled it in first. */
+  async updateAddress(
+    actor: JwtPayload,
+    clientId: string,
+    addressId: string,
+    dto: UpdateAddressDto,
+  ) {
+    await this.assertClientAccess(actor, clientId);
+    const address = await this.usersService.updateAddress(clientId, addressId, dto);
+    await this.recordAudit(actor.sub, clientId, 'address.update', { addressId });
     return address;
   }
 

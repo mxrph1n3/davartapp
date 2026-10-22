@@ -37,7 +37,7 @@ import { PushService } from '../push/push.service';
 import { AddCartItemDto, UpdateCartItemDto } from '../commerce/dto/cart.dto';
 import { CreateOrderDto } from '../commerce/dto/orders.dto';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
-import { CreateAddressDto } from '../users/dto/users.dto';
+import { CreateAddressDto, UpdateAddressDto } from '../users/dto/users.dto';
 import { StaffService } from './staff.service';
 
 class UpdateOrderStatusDto {
@@ -195,6 +195,16 @@ export class StaffController {
     @Body() dto: CreateAddressDto,
   ) {
     return this.staffService.createAddress(user, clientId, dto);
+  }
+
+  @Patch('clients/:clientId/addresses/:addressId')
+  updateAddress(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('addressId', ParseUUIDPipe) addressId: string,
+    @Body() dto: UpdateAddressDto,
+  ) {
+    return this.staffService.updateAddress(user, clientId, addressId, dto);
   }
 
   @Get('clients/:clientId/projects')
