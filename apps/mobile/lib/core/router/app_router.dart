@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -19,7 +20,6 @@ import '../../features/commerce/presentation/favorites_screen.dart';
 import '../../features/commerce/presentation/order_detail_screen.dart';
 import '../../features/commerce/presentation/orders_screen.dart';
 import '../../features/chat/presentation/chat_detail_screen.dart';
-import '../../features/chat/presentation/chat_info_screen.dart';
 import '../../features/chat/presentation/chat_screen.dart';
 import '../../features/chat/presentation/new_chat_screen.dart';
 import '../../features/profile/presentation/addresses_screen.dart';
@@ -98,8 +98,8 @@ abstract final class AppRoutes {
   static const privacy = '/profile/privacy';
   static const terms = '/profile/terms';
 
-  static String homeForRole(UserRole role) =>
-      role.isStudio ? staffChats : catalog;
+  static String homeForRole(UserRole role, {bool isStaff = false}) =>
+      (isStaff || role.isStudio) ? staffChats : catalog;
 }
 
 String catalogPathForRole(UserRole? role) =>
@@ -151,6 +151,23 @@ void popOrGo(BuildContext context, String fallback) {
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// go_router keys pages by the route pattern (`/chat/:id`), so the same
+/// pattern twice in one navigator locks the app on the next rebuild.
+/// Within a frame, the second copy gets a suffix; the next frame keeps it.
+Duration? _pageKeyFrame;
+final Map<String, int> _pageKeyCount = {};
+
+LocalKey distinctPageKey(String base) {
+  final frame = SchedulerBinding.instance.currentFrameTimeStamp;
+  if (_pageKeyFrame != frame) {
+    _pageKeyFrame = frame;
+    _pageKeyCount.clear();
+  }
+  final n = (_pageKeyCount[base] ?? 0) + 1;
+  _pageKeyCount[base] = n;
+  return ValueKey(n == 1 ? base : '$base#$n');
+}
+
 bool _isStaffPath(String location) => location.startsWith('/staff');
 
 bool _isClientShellPath(String location) {
@@ -192,7 +209,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final role = authState.user?.role ?? UserRole.client;
       final isStudio = authState.user?.isStaff ?? role.isStudio;
-      final home = AppRoutes.homeForRole(role);
+      final home = AppRoutes.homeForRole(role, isStaff: isStudio);
 
       if (isAuthRoute || isSplash) {
         // Embedded login pops itself back to the underlying screen; do not
@@ -259,32 +276,30 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (id == 'new') return AppRoutes.newChat;
           return null;
         },
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final chatId = state.pathParameters['id']!;
           final title = state.uri.queryParameters['title'];
           final clientId = state.uri.queryParameters['clientId'];
           final projectId = state.uri.queryParameters['projectId'];
-          return ChatDetailScreen(
-            chatId: chatId,
-            title: title,
-            clientId: clientId,
-            projectId: projectId,
+          return MaterialPage(
+            key: distinctPageKey(
+              '${state.matchedLocation}_${state.pageKey.value}',
+            ),
+            child: ChatDetailScreen(
+              chatId: chatId,
+              title: title,
+              clientId: clientId,
+              projectId: projectId,
+            ),
           );
         },
-        routes: [
-          GoRoute(
-            path: 'info',
-            parentNavigatorKey: rootNavigatorKey,
-            builder: (context, state) {
-              final chatId = state.pathParameters['id']!;
-              return ChatInfoScreen(chatId: chatId);
-            },
-          ),
-        ],
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          return MainShell(navigationShell: navigationShell);
+        pageBuilder: (context, state, navigationShell) {
+          return MaterialPage(
+            key: state.pageKey,
+            child: MainShell(navigationShell: navigationShell),
+          );
         },
         branches: [
           StatefulShellBranch(
@@ -366,13 +381,17 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'checkout',
-                    builder: (context, state) => const CheckoutScreen(),
+                    builder: (context, state) => CheckoutScreen(
+                      projectId: state.uri.queryParameters['projectId'],
+                    ),
                   ),
                 ],
               ),
               GoRoute(
                 path: AppRoutes.checkout,
-                builder: (context, state) => const CheckoutScreen(),
+                builder: (context, state) => CheckoutScreen(
+                  projectId: state.uri.queryParameters['projectId'],
+                ),
               ),
             ],
           ),
@@ -433,8 +452,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          return StaffShell(navigationShell: navigationShell);
+        pageBuilder: (context, state, navigationShell) {
+          return MaterialPage(
+            key: state.pageKey,
+            child: StaffShell(navigationShell: navigationShell),
+          );
         },
         branches: [
           StatefulShellBranch(

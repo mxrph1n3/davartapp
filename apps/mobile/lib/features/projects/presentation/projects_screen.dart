@@ -166,15 +166,18 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                           : '';
                       return ProjectCard(
                         compact: true,
-                        name: project.name,
+                        name: project.isDraft ? 'Черновик анкеты' : project.name,
                         status: project.status,
                         statusLabel: statusLabel,
                         address: projectBriefSummary(project) ??
                             project.objectType ??
                             project.address,
                         coverUrl: projectCoverUrl(project.id),
-                        onTap: () =>
-                            context.push(AppRoutes.projectDetail(project.id)),
+                        onTap: () => context.push(
+                          project.isDraft
+                              ? AppRoutes.projectBrief(project.id)
+                              : AppRoutes.projectDetail(project.id),
+                        ),
                         onMorePressed: isProjectDeletable(
                           status: project.status,
                           statusLabel: project.statusLabel,

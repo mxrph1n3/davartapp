@@ -109,9 +109,16 @@ services:
       P1SMS_BOT_USERNAME: ${P1SMS_BOT_USERNAME:-}
       P1SMS_CHANNEL: ${P1SMS_CHANNEL:-}
       FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-C7968P6K9R}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-com.davart.app}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_KEY_PATH: ${APNS_KEY_PATH:-/etc/davart/AuthKey.p8}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "3000:3000"
+    volumes:
+      - ./apns:/etc/davart:ro
 
   # Cloudflare Tunnel (вариант B). Не публикует порты роутера.
   # Запуск: docker compose ... --profile tunnel up -d

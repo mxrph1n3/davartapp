@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../../../core/push/push_service.dart';
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/ds/app_avatar.dart';
@@ -20,6 +21,7 @@ import '../data/chat_models.dart';
 import '../data/chat_voice_recorder.dart';
 import '../data/chat_socket_service.dart';
 import '../data/open_remote_attachment.dart';
+import 'chat_info_screen.dart';
 import 'chat_notifier.dart';
 import 'chat_image_viewer.dart';
 import 'product_picker_sheet.dart';
@@ -96,13 +98,23 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
   var _isPeerTyping = false;
   TypingHandler? _typingHandler;
   ChatSocketService? _socket;
-  double? _scrollExtentBeforeOlder;
   ChatMessage? _replyTo;
+  PushService? _push;
+
+  bool get _nearBottom {
+    if (!_scrollController.hasClients) return true;
+    return _scrollController.position.pixels < 140;
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _push = ref.read(pushServiceProvider);
+      unawaited(_push!.setActiveChat(widget.chatId));
+    });
     _controller.addListener(() {
       if (mounted) setState(() {});
     });
@@ -163,15 +175,16 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    if (_scrollController.position.pixels > 64) return;
+    final position = _scrollController.position;
+    if (position.maxScrollExtent - position.pixels > 80) return;
     final thread = ref.read(chatMessagesProvider(widget.chatId)).value;
     if (thread == null || !thread.hasMore || thread.loadingOlder) return;
-    _scrollExtentBeforeOlder = _scrollController.position.maxScrollExtent;
     ref.read(chatMessagesProvider(widget.chatId).notifier).loadOlder();
   }
 
   @override
   void dispose() {
+    unawaited(_push?.clearActiveChat(widget.chatId));
     WidgetsBinding.instance.removeObserver(this);
     _recordTicker?.cancel();
     _typingEmitTimer?.cancel();
@@ -203,19 +216,23 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
   @override
   void didChangeMetrics() {
     super.didChangeMetrics();
-    // Keep the latest messages above the keyboard when it opens.
     final inset = WidgetsBinding
         .instance.platformDispatcher.views.first.viewInsets.bottom;
-    if (inset > 0) _scrollToBottom();
+    if (inset <= 0 || !_nearBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      if (_scrollController.offset < 1) return;
+      _scrollController.jumpTo(0);
+    });
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
       _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
+        0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
       );
     });
   }
@@ -237,27 +254,18 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
       final prepended = prevMessages.isNotEmpty &&
           nextMessages.length > prevMessages.length &&
           prevMessages.last.id == nextMessages.last.id;
-      if (prepended) {
-        final oldMax = _scrollExtentBeforeOlder;
-        _scrollExtentBeforeOlder = null;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!_scrollController.hasClients || oldMax == null) return;
-          final delta = _scrollController.position.maxScrollExtent - oldMax;
-          _scrollController.jumpTo(_scrollController.position.pixels + delta);
-        });
-        return;
-      }
+      if (prepended) return;
       final isNewAtEnd = prevMessages.isEmpty ||
           (nextMessages.isNotEmpty &&
               prevMessages.last.id != nextMessages.last.id);
-      if (isNewAtEnd) _scrollToBottom();
+      if (isNewAtEnd && _nearBottom) _scrollToBottom();
     });
 
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     final colors = AppColors.of(context);
 
-    return Scaffold(
+    final thread = Scaffold(
       backgroundColor: colors.background,
       resizeToAvoidBottomInset: false,
       appBar: AppBar(
@@ -273,12 +281,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                 style: Theme.of(context).textTheme.titleMedium,
               )
             : GestureDetector(
-                onTap: () => context.push(
-                  chatInfoPathForRole(
-                    ref.read(authProvider).user?.role,
-                    widget.chatId,
-                  ),
-                ),
+                onTap: _openChatProfile,
                 behavior: HitTestBehavior.opaque,
                 child: Row(
                   children: [
@@ -421,7 +424,12 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                   for (final item in messages)
                     if (!item.isMine) item.sender.id,
                 };
-                final showNames = others.length > 1;
+                final chatType = ref
+                    .watch(chatDetailsProvider(widget.chatId))
+                    .asData
+                    ?.value
+                    .type;
+                final showNames = chatType == 'group' || others.length > 1;
                 final entries = <Object>[];
                 DateTime? lastDay;
                 for (final item in messages) {
@@ -444,6 +452,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                 final extra = q.isEmpty && (thread.hasMore || thread.loadingOlder)
                     ? 1
                     : 0;
+                final newestFirst = entries.reversed.toList();
                 return Column(
                   children: [
                     if (pinned != null && q.isEmpty)
@@ -480,13 +489,14 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                       ),
                     Expanded(
                       child: ListView.builder(
+                  reverse: true,
                   controller: _scrollController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-                  itemCount: entries.length + extra,
+                  itemCount: newestFirst.length + extra,
                   itemBuilder: (context, index) {
-                    if (extra == 1 && index == 0) {
+                    if (extra == 1 && index == newestFirst.length) {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: Center(
@@ -498,11 +508,6 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                                 )
                               : TextButton(
                                   onPressed: () {
-                                    _scrollExtentBeforeOlder =
-                                        _scrollController.hasClients
-                                            ? _scrollController
-                                                .position.maxScrollExtent
-                                            : null;
                                     ref
                                         .read(
                                           chatMessagesProvider(widget.chatId)
@@ -515,7 +520,7 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                         ),
                       );
                     }
-                    final entry = entries[index - extra];
+                    final entry = newestFirst[index];
                     if (entry is DateTime) {
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -542,24 +547,28 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
                       );
                     }
                     final message = entry as ChatMessage;
-                    final next = index - extra + 1 < entries.length
-                        ? entries[index - extra + 1]
+                    final below = index > 0 ? newestFirst[index - 1] : null;
+                    final above = index + 1 < newestFirst.length
+                        ? newestFirst[index + 1]
                         : null;
-                    final prev = index - extra > 0
-                        ? entries[index - extra - 1]
-                        : null;
-                    final showTail = next is! ChatMessage ||
-                        next.sender.id != message.sender.id ||
-                        next.isMine != message.isMine;
+                    final showTail = below is! ChatMessage ||
+                        below.sender.id != message.sender.id ||
+                        below.isMine != message.isMine;
                     final showSender = showNames &&
                         !message.isMine &&
-                        (prev is! ChatMessage || prev.sender.id != message.sender.id);
-                    return _MessageBubble(
+                        (above is! ChatMessage ||
+                            above.sender.id != message.sender.id);
+                    return _GlassMessageEnter(
+                      play: message.isPending ||
+                          DateTime.now().difference(message.createdAt).inSeconds <
+                              4,
+                      child: _MessageBubble(
                       message: message,
                       chatId: widget.chatId,
                       showTail: showTail,
                       showSender: showSender,
                       onLongPress: () => _showMessageActions(message),
+                    ),
                     );
                   },
                 ),
@@ -610,6 +619,24 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
       ),
       ),
     );
+
+    return thread;
+  }
+
+  Future<void> _openChatProfile() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute<String>(
+        builder: (_) => ChatInfoScreen(
+          chatId: widget.chatId,
+          onClose: ([value]) {
+            if (!mounted) return;
+            Navigator.of(context).pop(value);
+          },
+        ),
+      ),
+    );
+    if (!mounted || result != 'search') return;
+    setState(() => _searchOpen = true);
   }
 
   void _showSendError(Object error) {
@@ -967,6 +994,58 @@ class _ChatDetailScreenState extends ConsumerState<ChatDetailScreen>
   }
 }
 
+class _GlassMessageEnter extends StatefulWidget {
+  const _GlassMessageEnter({required this.play, required this.child});
+
+  final bool play;
+  final Widget child;
+
+  @override
+  State<_GlassMessageEnter> createState() => _GlassMessageEnterState();
+}
+
+class _GlassMessageEnterState extends State<_GlassMessageEnter>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 340),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.play) {
+      _controller.forward();
+    } else {
+      _controller.value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final curve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    return FadeTransition(
+      opacity: curve,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.12),
+          end: Offset.zero,
+        ).animate(curve),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _MessageBubble extends ConsumerWidget {
   const _MessageBubble({
     required this.message,
@@ -996,6 +1075,7 @@ class _MessageBubble extends ConsumerWidget {
               isMine: message.isMine,
               showTail: showTail,
               pending: message.isPending,
+              read: message.isRead,
               failed: message.isFailed,
               onFailedTap: message.isFailed
                   ? () {
@@ -1008,6 +1088,7 @@ class _MessageBubble extends ConsumerWidget {
                   ? null
                   : _clock(message.createdAt),
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (showSender)
@@ -1022,8 +1103,7 @@ class _MessageBubble extends ConsumerWidget {
                       ),
                     ),
                   if (message.replyTo != null) ...[
-                    Container(
-                      width: double.infinity,
+                      Container(
                       margin: const EdgeInsets.only(bottom: 6),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -1070,7 +1150,16 @@ class _MessageBubble extends ConsumerWidget {
                                   .toggleReaction(message.id, reaction.emoji);
                             },
                             borderRadius: BorderRadius.circular(12),
-                            child: Container(
+                            child: TweenAnimationBuilder<double>(
+                              key: ValueKey('${reaction.emoji}-${reaction.count}'),
+                              tween: Tween(begin: 0.86, end: 1),
+                              duration: const Duration(milliseconds: 280),
+                              curve: Curves.easeOutCubic,
+                              builder: (context, scale, child) => Transform.scale(
+                                scale: scale,
+                                child: child,
+                              ),
+                              child: Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 8,
                                 vertical: 2,
@@ -1085,6 +1174,7 @@ class _MessageBubble extends ConsumerWidget {
                                 '${reaction.emoji} ${reaction.count}',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
+                            ),
                             ),
                           ),
                       ],
@@ -1151,10 +1241,12 @@ class _MessageContent extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
             child: Image.network(
               message.attachmentUrl!,
+              width: 220,
               height: 180,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => Container(
-                height: 120,
+                width: 220,
+                height: 180,
                 alignment: Alignment.center,
                 color: Colors.black12,
                 child: const Text('Не удалось загрузить фото'),
@@ -1184,7 +1276,10 @@ class _MessageContent extends ConsumerWidget {
             children: [
               const Icon(Icons.insert_drive_file_outlined, size: 20),
               const SizedBox(width: 8),
-              Flexible(child: Text(message.attachmentName ?? 'Файл')),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 180),
+                child: Text(message.attachmentName ?? 'Файл'),
+              ),
             ],
           ),
         );
@@ -1207,9 +1302,11 @@ class _MessageContent extends ConsumerWidget {
                   child: Image.network(product.imageUrl!, width: 48, height: 48, fit: BoxFit.cover),
                 ),
               const SizedBox(width: 8),
-              Flexible(
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 160),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(product.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                     Text('${product.price.toStringAsFixed(0)} ₽'),

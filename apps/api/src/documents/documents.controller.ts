@@ -23,6 +23,15 @@ import {
 export class DocumentsController {
   constructor(private readonly documentsService: DocumentsService) {}
 
+  @Post(':id/confirm')
+  @HttpCode(200)
+  confirmUpload(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: DocumentIdParamDto,
+  ) {
+    return this.documentsService.confirmUpload(user.sub, params.id);
+  }
+
   @Get(':id/download')
   getDownloadUrl(
     @CurrentUser() user: JwtPayload,

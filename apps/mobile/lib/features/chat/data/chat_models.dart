@@ -27,6 +27,8 @@ class ChatSummary {
     this.clientId,
     required this.unreadCount,
     required this.updatedAt,
+    this.pinned = false,
+    this.muted = false,
     this.lastMessage,
   });
 
@@ -38,6 +40,8 @@ class ChatSummary {
   final String? clientId;
   final int unreadCount;
   final DateTime updatedAt;
+  final bool pinned;
+  final bool muted;
   final ChatLastMessage? lastMessage;
 
   factory ChatSummary.fromJson(Map<String, dynamic> json) {
@@ -53,6 +57,8 @@ class ChatSummary {
       clientId: json['clientId'] as String?,
       unreadCount: _asInt(json['unreadCount']),
       updatedAt: _asDate(json['updatedAt']),
+      pinned: json['pinned'] as bool? ?? false,
+      muted: json['muted'] as bool? ?? false,
       lastMessage: last is Map<String, dynamic>
           ? ChatLastMessage.fromJson(last)
           : last is Map
@@ -135,6 +141,7 @@ class ChatMessage {
     required this.sender,
     required this.isMine,
     required this.createdAt,
+    this.isRead = false,
     this.isPending = false,
     this.isFailed = false,
   });
@@ -153,6 +160,7 @@ class ChatMessage {
   final ChatSender sender;
   final bool isMine;
   final DateTime createdAt;
+  final bool isRead;
   final bool isPending;
   final bool isFailed;
 
@@ -161,6 +169,7 @@ class ChatMessage {
     bool? isFailed,
     bool? isMine,
     bool? isPinned,
+    bool? isRead,
     List<ChatReaction>? reactions,
     ChatReplyPreview? replyTo,
   }) {
@@ -179,6 +188,7 @@ class ChatMessage {
       sender: sender,
       isMine: isMine ?? this.isMine,
       createdAt: createdAt,
+      isRead: isRead ?? this.isRead,
       isPending: isPending ?? this.isPending,
       isFailed: isFailed ?? this.isFailed,
     );
@@ -256,6 +266,7 @@ class ChatMessage {
       isPinned: json['isPinned'] as bool? ?? false,
       sender: ChatSender.fromJson(senderMap),
       isMine: json['isMine'] as bool? ?? false,
+      isRead: json['read'] as bool? ?? false,
       createdAt: parseDate(json['createdAt']),
     );
   }
@@ -380,6 +391,11 @@ class ChatDetails {
     this.projectId,
     this.projectName,
     this.clientId,
+    this.peerPhone,
+    this.peerName,
+    this.alias,
+    this.pinned = false,
+    this.muted = false,
     required this.participants,
   });
 
@@ -389,6 +405,11 @@ class ChatDetails {
   final String? projectId;
   final String? projectName;
   final String? clientId;
+  final String? peerPhone;
+  final String? peerName;
+  final String? alias;
+  final bool pinned;
+  final bool muted;
   final List<ChatParticipant> participants;
 
   bool get isProject => type == 'project' && projectId != null;
@@ -403,6 +424,11 @@ class ChatDetails {
       projectId: json['projectId'] as String?,
       projectName: json['projectName'] as String?,
       clientId: json['clientId'] as String?,
+      peerPhone: json['peerPhone'] as String?,
+      peerName: json['peerName'] as String?,
+      alias: json['alias'] as String?,
+      pinned: json['pinned'] as bool? ?? false,
+      muted: json['muted'] as bool? ?? false,
       participants: (json['participants'] as List<dynamic>? ?? [])
           .map((item) => ChatParticipant.fromJson(item as Map<String, dynamic>))
           .toList(),
@@ -476,21 +502,26 @@ class MessagesPage {
     required this.page,
     required this.limit,
     required this.total,
+    required this.hasMore,
   });
 
   final List<ChatMessage> items;
   final int page;
   final int limit;
   final int total;
+  final bool hasMore;
 
   factory MessagesPage.fromJson(Map<String, dynamic> json) {
+    final items = (json['items'] as List<dynamic>)
+        .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
+        .toList();
+    final total = json['total'] as int? ?? items.length;
     return MessagesPage(
-      items: (json['items'] as List<dynamic>)
-          .map((item) => ChatMessage.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      page: json['page'] as int,
-      limit: json['limit'] as int,
-      total: json['total'] as int,
+      items: items,
+      page: json['page'] as int? ?? 1,
+      limit: json['limit'] as int? ?? items.length,
+      total: total,
+      hasMore: json['hasMore'] as bool? ?? items.length < total,
     );
   }
 }

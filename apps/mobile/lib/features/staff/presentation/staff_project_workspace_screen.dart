@@ -14,10 +14,58 @@ import '../../projects/presentation/projects_notifier.dart';
 import '../../staff/data/staff_repository.dart';
 import 'working_client_provider.dart';
 
+const _projectFlow = [
+  'brief_filling',
+  'measurement',
+  'in_progress',
+  'materials',
+  'visualization',
+  'final_assembly',
+  'completed',
+  'archived',
+];
+
+const _projectLabels = {
+  'brief_filling': 'Бриф',
+  'measurement': 'Замер',
+  'in_progress': 'Планировка',
+  'materials': 'Ведомость',
+  'visualization': 'Визуализация',
+  'final_assembly': 'Чертежи и сборка',
+  'completed': 'Завершить',
+  'archived': 'В архив',
+};
+
+String? _nextProjectStatus(String status) {
+  final index = _projectFlow.indexOf(status);
+  if (index < 0 || index >= _projectFlow.length - 1) return null;
+  return _projectFlow[index + 1];
+}
+
+String _projectStatusLabel(String status) => _projectLabels[status] ?? status;
+
 class StaffProjectWorkspaceScreen extends ConsumerWidget {
   const StaffProjectWorkspaceScreen({super.key, required this.projectId});
 
   final String projectId;
+
+  Future<void> _advanceProject(
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
+    try {
+      await ref
+          .read(staffRepositoryProvider)
+          .advanceProjectStatus(projectId, status);
+      ref.invalidate(projectDetailProvider(projectId));
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось сменить этап')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,6 +97,13 @@ class StaffProjectWorkspaceScreen extends ConsumerWidget {
                 label: project.statusLabel,
                 highlighted: project.status == 'in_progress',
               ),
+              if (_nextProjectStatus(project.status) case final next?) ...[
+                const SizedBox(height: AppSpacing.md),
+                PrimaryButton(
+                  label: 'Дальше: ${_projectStatusLabel(next)}',
+                  onPressed: () => _advanceProject(context, ref, next),
+                ),
+              ],
               if (project.address != null && project.address!.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(

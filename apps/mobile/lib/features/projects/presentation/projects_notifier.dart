@@ -80,8 +80,15 @@ class BriefFormNotifier extends AutoDisposeFamilyNotifier<BriefFormState, String
   ProjectsRepository get _repository => ref.read(projectsRepositoryProvider);
 
   void loadFromBrief(Brief brief) {
+    final general = Map<String, String>.from(brief.answers.general);
+    final styles = briefSelectedIds(general['likedStyles'])
+        .where((id) => id != 'travans')
+        .join(',');
+    if (styles != (general['likedStyles'] ?? '')) {
+      general['likedStyles'] = styles;
+    }
     state = BriefFormState(
-      answers: brief.answers,
+      answers: brief.answers.copyWith(general: general),
       rooms: brief.rooms,
     );
   }
@@ -142,7 +149,7 @@ class BriefFormNotifier extends AutoDisposeFamilyNotifier<BriefFormState, String
   void addFamilyMember() {
     final members = [
       ...briefParseFamilyMembers(state.answers.general['householdMembers']),
-      const BriefFamilyMember(role: 'relative'),
+      const BriefFamilyMember(),
     ];
     setFamilyMembers(members);
   }

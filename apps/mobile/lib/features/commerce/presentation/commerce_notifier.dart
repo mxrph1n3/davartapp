@@ -1,25 +1,35 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_notifier.dart';
+import '../../projects/data/projects_repository.dart';
 import '../data/commerce_models.dart';
 import '../data/commerce_repository.dart';
-import 'active_project_provider.dart';
 
 class CartState {
   const CartState({
     this.cart,
+    this.projectCarts = const [],
     this.isLoading = false,
     this.errorMessage,
   });
 
   final Cart? cart;
+  final List<Cart> projectCarts;
   final bool isLoading;
   final String? errorMessage;
 
-  int get itemCount => cart?.itemCount ?? 0;
+  int get itemCount =>
+      (cart?.itemCount ?? 0) +
+      projectCarts.fold<int>(0, (sum, cart) => sum + cart.itemCount);
+
+  bool get hasAnything =>
+      (cart?.items.isNotEmpty ?? false) ||
+      projectCarts.any((cart) => cart.items.isNotEmpty);
 
   CartState copyWith({
     Cart? cart,
+    List<Cart>? projectCarts,
     bool? isLoading,
     String? errorMessage,
     bool clearError = false,
@@ -27,6 +37,7 @@ class CartState {
   }) {
     return CartState(
       cart: clearCart ? null : (cart ?? this.cart),
+      projectCarts: projectCarts ?? this.projectCarts,
       isLoading: isLoading ?? this.isLoading,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
@@ -47,38 +58,33 @@ class CartNotifier extends Notifier<CartState> {
         state = const CartState();
       }
     });
-    ref.listen<ActiveProject?>(activeProjectProvider, (prev, next) {
-      if (prev?.id != next?.id) {
-        if (next == null) {
-          state = const CartState();
-        } else {
-          loadCart();
-        }
-      }
-    });
     return const CartState();
   }
 
   CommerceRepository get _repository => ref.read(commerceRepositoryProvider);
-
-  String? get _projectId => ref.read(activeProjectProvider)?.id;
 
   Future<void> loadCart() async {
     if (!ref.read(authProvider).isAuthenticated) {
       state = const CartState();
       return;
     }
-    final projectId = _projectId;
     final generation = ++_loadGeneration;
-    if (projectId == null) {
-      state = const CartState();
-      return;
-    }
     state = state.copyWith(isLoading: true, clearError: true);
     try {
-      final cart = await _repository.getCart(projectId);
+      final cart = await _repository.getCart();
       if (generation != _loadGeneration) return;
-      state = state.copyWith(cart: cart, isLoading: false);
+      var projectCarts = state.projectCarts;
+      try {
+        projectCarts = await _loadProjectCarts();
+      } catch (_) {
+        // Personal cart still shows if the project list is unavailable.
+      }
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(
+        cart: cart,
+        projectCarts: projectCarts,
+        isLoading: false,
+      );
     } catch (_) {
       if (generation != _loadGeneration) return;
       state = state.copyWith(
@@ -88,18 +94,43 @@ class CartNotifier extends Notifier<CartState> {
     }
   }
 
-  Future<void> addProduct(String productId) async {
-    final projectId = _projectId;
-    if (projectId == null) {
-      state = state.copyWith(errorMessage: 'Выберите проект');
-      throw StateError('No active project');
+  /// Pull carts without a spinner and without cancelling a tap in progress.
+  Future<void> refreshQuiet() async {
+    if (!ref.read(authProvider).isAuthenticated) return;
+    final generation = _loadGeneration;
+    try {
+      final cart = await _repository.getCart();
+      if (generation != _loadGeneration) return;
+      final projectCarts = await _loadProjectCarts();
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(
+        cart: cart,
+        projectCarts: projectCarts,
+        isLoading: false,
+        clearError: true,
+      );
+    } catch (_) {}
+  }
+
+  Future<List<Cart>> _loadProjectCarts() async {
+    final bundled = await _repository.getProjectCarts();
+    if (bundled != null) return bundled;
+    final projects = await ref.read(projectsRepositoryProvider).getProjects();
+    final carts = <Cart>[];
+    for (final project in projects) {
+      if (project.isDraft || project.isShowcase) continue;
+      try {
+        final cart = await _repository.getCart(projectId: project.id);
+        if (cart.items.isNotEmpty) carts.add(cart);
+      } catch (_) {}
     }
+    return carts;
+  }
+
+  Future<void> addProduct(String productId) async {
     final generation = ++_loadGeneration;
     try {
-      final cart = await _repository.addToCart(
-        projectId: projectId,
-        productId: productId,
-      );
+      final cart = await _repository.addToCart(productId: productId);
       if (generation != _loadGeneration) return;
       state = state.copyWith(cart: cart, clearError: true);
     } catch (_) {
@@ -109,13 +140,37 @@ class CartNotifier extends Notifier<CartState> {
     }
   }
 
+  Future<void> assignToProject(String projectId, List<CartItem> items) async {
+    if (items.isEmpty) return;
+    final generation = ++_loadGeneration;
+    try {
+      await _repository.assignToProject(
+        projectId,
+        items.map((item) => item.id).toList(),
+      );
+    } on DioException catch (error) {
+      final body = '${error.response?.data}';
+      final staleServer =
+          error.response?.statusCode == 400 && body.contains('itemIds');
+      if (!staleServer) rethrow;
+      for (final item in items) {
+        if (item.locked) continue;
+        await _repository.addToCart(
+          projectId: projectId,
+          productId: item.product.id,
+          quantity: item.quantity,
+        );
+        await _repository.removeCartItem(itemId: item.id);
+      }
+    }
+    if (generation != _loadGeneration) return;
+    await loadCart();
+  }
+
   Future<void> updateQuantity(String itemId, int quantity) async {
-    final projectId = _projectId;
-    if (projectId == null) return;
     final generation = ++_loadGeneration;
     try {
       final cart = await _repository.updateCartItem(
-        projectId: projectId,
         itemId: itemId,
         quantity: quantity,
       );
@@ -127,15 +182,55 @@ class CartNotifier extends Notifier<CartState> {
     }
   }
 
-  Future<void> removeItem(String itemId) async {
-    final projectId = _projectId;
-    if (projectId == null) return;
+  Future<void> updateProjectQuantity(
+    String projectId,
+    String itemId,
+    int quantity,
+  ) async {
+    final generation = ++_loadGeneration;
+    try {
+      final cart = await _repository.updateCartItem(
+        projectId: projectId,
+        itemId: itemId,
+        quantity: quantity,
+      );
+      if (generation != _loadGeneration) return;
+      _replaceProjectCart(cart);
+    } catch (_) {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(errorMessage: 'Не удалось обновить количество');
+    }
+  }
+
+  Future<void> removeProjectItem(String projectId, String itemId) async {
     final generation = ++_loadGeneration;
     try {
       final cart = await _repository.removeCartItem(
         projectId: projectId,
         itemId: itemId,
       );
+      if (generation != _loadGeneration) return;
+      _replaceProjectCart(cart);
+    } catch (_) {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(errorMessage: 'Не удалось удалить товар');
+    }
+  }
+
+  void _replaceProjectCart(Cart cart) {
+    final projectId = cart.projectId;
+    final next = [
+      for (final existing in state.projectCarts)
+        if (existing.projectId != projectId) existing,
+      if (cart.items.isNotEmpty) cart,
+    ];
+    state = state.copyWith(projectCarts: next, clearError: true);
+  }
+
+  Future<void> removeItem(String itemId) async {
+    final generation = ++_loadGeneration;
+    try {
+      final cart = await _repository.removeCartItem(itemId: itemId);
       if (generation != _loadGeneration) return;
       state = state.copyWith(cart: cart, clearError: true);
     } catch (_) {

@@ -123,22 +123,21 @@ describe('Catalog (e2e)', () => {
     expect(response.body.attributes).toHaveLength(1);
   });
 
-  it('POST /api/catalog/reindex denied without ALLOW_DEV_ENDPOINTS', async () => {
+  it('POST /api/catalog/reindex requires an admin session', async () => {
     const previous = process.env.ALLOW_DEV_ENDPOINTS;
     process.env.ALLOW_DEV_ENDPOINTS = 'false';
 
-    await request(app.getHttpServer()).post('/api/catalog/reindex').expect(403);
+    await request(app.getHttpServer()).post('/api/catalog/reindex').expect(401);
 
     process.env.ALLOW_DEV_ENDPOINTS = previous;
   });
 
-  it('POST /api/catalog/reindex when ALLOW_DEV_ENDPOINTS=true', async () => {
-    mockPrismaService.product.findMany.mockResolvedValueOnce([]);
+  it('POST /api/catalog/reindex stays closed without a token even if dev endpoints are allowed', async () => {
+    const previous = process.env.ALLOW_DEV_ENDPOINTS;
+    process.env.ALLOW_DEV_ENDPOINTS = 'true';
 
-    const response = await request(app.getHttpServer())
-      .post('/api/catalog/reindex')
-      .expect(200);
+    await request(app.getHttpServer()).post('/api/catalog/reindex').expect(401);
 
-    expect(response.body.indexed).toBe(0);
+    process.env.ALLOW_DEV_ENDPOINTS = previous;
   });
 });

@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../theme/app_radius.dart';
 import 'voice_waveform.dart';
 
 class ChatBubble extends StatelessWidget {
@@ -11,6 +14,7 @@ class ChatBubble extends StatelessWidget {
     this.time,
     this.showTail = true,
     this.pending = false,
+    this.read = false,
     this.failed = false,
     this.onFailedTap,
   });
@@ -20,6 +24,7 @@ class ChatBubble extends StatelessWidget {
   final String? time;
   final bool showTail;
   final bool pending;
+  final bool read;
   final bool failed;
   final VoidCallback? onFailedTap;
 
@@ -27,13 +32,18 @@ class ChatBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final bg = isMine
-        ? (dark ? const Color(0xFF2B5278) : colors.chatBubbleMine)
-        : (dark ? const Color(0xFF182533) : colors.chatBubbleTheirs);
-    final fg = isMine
-        ? (dark ? Colors.white : colors.chatBubbleMineFg)
-        : colors.textPrimary;
+    final fg = isMine ? colors.textOnAccent : colors.textPrimary;
     final timeColor = fg.withValues(alpha: isMine ? 0.72 : 0.6);
+
+    final radius = BorderRadius.only(
+      topLeft: const Radius.circular(AppRadius.card),
+      topRight: const Radius.circular(AppRadius.card),
+      bottomLeft: Radius.circular(!isMine && showTail ? 6 : AppRadius.card),
+      bottomRight: Radius.circular(isMine && showTail ? 6 : AppRadius.card),
+    );
+    final glass = isMine
+        ? colors.accent.withValues(alpha: dark ? 0.9 : 0.84)
+        : colors.chatBubbleTheirs.withValues(alpha: dark ? 0.78 : 0.64);
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -47,58 +57,72 @@ class ChatBubble extends StatelessWidget {
           data: IconThemeData(color: fg, size: 20),
           child: Container(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width * 0.78,
+              maxWidth: MediaQuery.sizeOf(context).width * 0.75,
             ),
             margin: EdgeInsets.only(
-              bottom: showTail ? 8 : 2,
-              left: isMine ? 48 : 6,
-              right: isMine ? 6 : 48,
+              top: showTail ? 10 : 6,
+              left: isMine ? 0 : 8,
+              right: isMine ? 8 : 0,
             ),
+            child: IntrinsicWidth(
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(10, 6, 10, 5),
-                  decoration: BoxDecoration(
-                    color: bg,
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(16),
-                      topRight: const Radius.circular(16),
-                      bottomLeft: Radius.circular(!isMine && showTail ? 4 : 16),
-                      bottomRight: Radius.circular(isMine && showTail ? 4 : 16),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      child,
-                      const SizedBox(height: 2),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Row(
+                ClipRRect(
+                  borderRadius: radius,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: glass,
+                        borderRadius: radius,
+                        border: Border.all(
+                          color: Colors.white.withValues(
+                            alpha: dark ? 0.2 : 0.55,
+                          ),
+                        ),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (time != null)
-                              Text(
-                                time!,
-                                style: TextStyle(
-                                  color: timeColor,
-                                  fontSize: 11,
-                                  height: 1,
-                                ),
+                            child,
+                            const SizedBox(height: 2),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (time != null)
+                                    Text(
+                                      time!,
+                                      style: TextStyle(
+                                        color: timeColor,
+                                        fontSize: 11,
+                                        height: 1,
+                                      ),
+                                    ),
+                                  if (isMine) ...[
+                                    const SizedBox(width: 3),
+                                    Icon(
+                                      pending
+                                          ? Icons.access_time
+                                          : (read
+                                              ? Icons.done_all
+                                              : Icons.done),
+                                      size: 15,
+                                      color: read ? fg : timeColor,
+                                    ),
+                                  ],
+                                ],
                               ),
-                            if (isMine) ...[
-                              const SizedBox(width: 3),
-                              Icon(
-                                pending ? Icons.access_time : Icons.done,
-                                size: 14,
-                                color: timeColor,
-                              ),
-                            ],
+                            ),
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 if (failed)
@@ -137,10 +161,11 @@ class ChatBubble extends StatelessWidget {
                     right: isMine ? -5 : null,
                     child: CustomPaint(
                       size: const Size(8, 12),
-                      painter: _BubbleTailPainter(color: bg, mine: isMine),
+                      painter: _BubbleTailPainter(color: glass, mine: isMine),
                     ),
                   ),
               ],
+            ),
             ),
           ),
         ),

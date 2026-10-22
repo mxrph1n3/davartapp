@@ -89,6 +89,17 @@ class ProjectsRepository {
     return Project.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<({Project project, String? chatId})> submitProject(
+    String projectId,
+  ) async {
+    final response = await _dio.post('/projects/$projectId/submit');
+    final data = response.data as Map<String, dynamic>;
+    return (
+      project: Project.fromJson(data['project'] as Map<String, dynamic>),
+      chatId: data['chatId'] as String?,
+    );
+  }
+
   Future<List<ProjectMember>> getMembers(String projectId) async {
     final response = await _dio.get('/projects/$projectId/members');
     final items = response.data['items'] as List<dynamic>? ?? [];

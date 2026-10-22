@@ -203,6 +203,44 @@ class ChatRepository {
         .toList();
   }
 
+  Future<ChatDetails> createGroup({
+    required String title,
+    required List<String> userIds,
+  }) async {
+    final response = await _dio.post(
+      '/chats/group',
+      data: {'title': title, 'userIds': userIds},
+    );
+    return ChatDetails.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> setPinned(String chatId, {required bool pinned}) async {
+    await _dio.patch('/chats/$chatId/pin', data: {'pinned': pinned});
+  }
+
+  Future<void> setMuted(String chatId, {required bool muted}) async {
+    await _dio.patch('/chats/$chatId/mute', data: {'muted': muted});
+  }
+
+  Future<ChatDetails> updateChat(
+    String chatId, {
+    String? title,
+    String? alias,
+  }) async {
+    final response = await _dio.patch(
+      '/chats/$chatId',
+      data: {
+        if (title != null) 'title': title,
+        if (alias != null) 'alias': alias,
+      },
+    );
+    return ChatDetails.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<void> leaveGroup(String chatId) async {
+    await _dio.post('/chats/$chatId/leave');
+  }
+
   Future<ChatSummary> createPersonalChat(String userId) async {
     final response = await _dio.post(
       '/chats/personal',
@@ -211,7 +249,8 @@ class ChatRepository {
     return ChatSummary.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Invite by phone: creates user if needed, opens personal chat, sends SMS.
+  /// Invite by phone: creates the account if needed and opens the personal chat.
+  /// Does not send SMS.
   Future<ChatSummary> inviteByPhone({
     required String phone,
     String? name,
@@ -226,25 +265,32 @@ class ChatRepository {
     return ChatSummary.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Which of [phones] already have a DAVart account (for address-book matching).
+  /// Which of [phones] already have a DAVart account.
   Future<Map<String, ChatContact>> matchPhones(List<String> phones) async {
     if (phones.isEmpty) return {};
-    final response = await _dio.post(
-      '/chats/match-phones',
-      data: {'phones': phones},
-    );
-    final matches = response.data['matches'] as List<dynamic>? ?? [];
     final map = <String, ChatContact>{};
-    for (final item in matches) {
-      final contact = ChatContact.fromJson(item as Map<String, dynamic>);
-      if (contact.phone != null && contact.phone!.isNotEmpty) {
-        map[contact.phone!] = contact;
-        final digits = contact.phone!.replaceAll(RegExp(r'\D'), '');
-        if (digits.length >= 10) {
-          map[digits.substring(digits.length - 10)] = contact;
+    const chunk = 400;
+    for (var start = 0; start < phones.length; start += chunk) {
+      final end =
+          start + chunk > phones.length ? phones.length : start + chunk;
+      final response = await _dio.post(
+        '/chats/match-phones',
+        data: {'phones': phones.sublist(start, end)},
+      );
+      final matches = response.data['matches'] as List<dynamic>? ?? [];
+      for (final item in matches) {
+        if (item is! Map) continue;
+        final contact = ChatContact.fromJson(
+          item.map((key, value) => MapEntry(key.toString(), value)),
+        );
+        if (contact.phone != null && contact.phone!.isNotEmpty) {
+          map[contact.phone!] = contact;
+          final digits = contact.phone!.replaceAll(RegExp(r'\D'), '');
+          if (digits.length >= 10) {
+            map[digits.substring(digits.length - 10)] = contact;
+          }
         }
       }
-      // Also index by id-less keys already covered; keep id lookup unused here.
     }
     return map;
   }

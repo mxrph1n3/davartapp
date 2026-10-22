@@ -7,7 +7,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Inject, Logger, forwardRef } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 import { Server, Socket } from 'socket.io';
@@ -34,6 +34,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly jwtService: JwtService,
+    @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly prisma: PrismaService,
   ) {}
@@ -152,11 +153,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       const result = await this.chatService.markRead(user.sub, body.chatId);
-      this.server.to(`chat:${body.chatId}`).emit('read', {
-        chatId: body.chatId,
-        userId: user.sub,
-        readAt: result.readAt,
-      });
+      this.publishReadReceipts(result.receipts);
       this.server.to(`user:${user.sub}`).emit('unread:update', {
         total: (await this.chatService.getUnreadTotal(user.sub)).total,
       });
@@ -183,8 +180,45 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  publishChatList(userIds: string[], chatId: string) {
+    if (!this.server) return;
+    for (const userId of userIds) {
+      this.server.to(`user:${userId}`).emit('chats:invalidate', { chatId });
+    }
+  }
+
+  publishReadReceipts(
+    receipts: Array<{
+      userId: string;
+      chatIds: string[];
+      readAt: Date | null;
+    }>,
+  ) {
+    if (!this.server) return;
+    for (const receipt of receipts) {
+      if (!receipt.readAt) continue;
+      this.server.to(`user:${receipt.userId}`).emit('read', {
+        chatIds: receipt.chatIds,
+        readAt: receipt.readAt,
+      });
+    }
+  }
+
   emitUnreadUpdate(userId: string, total: number) {
     this.server.to(`user:${userId}`).emit('unread:update', { total });
+  }
+
+  /** Cart, order, project, document — the open app refetches that screen. */
+  publishDomain(
+    userIds: string[],
+    event: 'cart' | 'order' | 'project' | 'document',
+    payload: Record<string, string>,
+  ) {
+    if (!this.server) return;
+    const name = `${event}:updated`;
+    for (const userId of new Set(userIds)) {
+      this.server.to(`user:${userId}`).emit(name, payload);
+    }
   }
 
   private extractToken(client: AuthedSocket): string | null {

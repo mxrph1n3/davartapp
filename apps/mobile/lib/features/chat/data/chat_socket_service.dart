@@ -14,6 +14,15 @@ typedef TypingHandler = void Function(
   String userId,
   String preview,
 );
+typedef ReadHandler = void Function(List<String> chatIds, DateTime readAt);
+typedef DomainHandler = void Function(Map<String, String> payload);
+
+const _domainEvents = <String>[
+  'cart:updated',
+  'order:updated',
+  'project:updated',
+  'document:updated',
+];
 
 final chatSocketServiceProvider = Provider<ChatSocketService>((ref) {
   final service = ChatSocketService(ref.watch(tokenStorageProvider));
@@ -32,7 +41,9 @@ class ChatSocketService {
   final _unreadListeners = <UnreadHandler>[];
   final _chatsInvalidateListeners = <void Function()>[];
   final _typingListeners = <TypingHandler>[];
+  final _readListeners = <ReadHandler>[];
   final _reconnectListeners = <void Function()>[];
+  final _domainListeners = <String, List<DomainHandler>>{};
   final _joinedChats = <String>{};
 
   bool get isConnected => _socket?.connected == true;
@@ -67,6 +78,22 @@ class ChatSocketService {
 
   void removeTypingListener(TypingHandler handler) {
     _typingListeners.remove(handler);
+  }
+
+  void addReadListener(ReadHandler handler) {
+    _readListeners.add(handler);
+  }
+
+  void removeReadListener(ReadHandler handler) {
+    _readListeners.remove(handler);
+  }
+
+  void addDomainListener(String event, DomainHandler handler) {
+    _domainListeners.putIfAbsent(event, () => []).add(handler);
+  }
+
+  void removeDomainListener(String event, DomainHandler handler) {
+    _domainListeners[event]?.remove(handler);
   }
 
   void addReconnectListener(void Function() handler) {
@@ -195,6 +222,24 @@ class ChatSocketService {
           listener();
         }
       })
+      ..on('read', (data) {
+        final json = _asStringKeyMap(data);
+        if (json == null) return;
+        final rawIds = json['chatIds'];
+        final ids = <String>[];
+        if (rawIds is List) {
+          for (final item in rawIds) {
+            if (item is String && item.isNotEmpty) ids.add(item);
+          }
+        }
+        final single = json['chatId'];
+        if (single is String && single.isNotEmpty) ids.add(single);
+        final readAt = _asDate(json['readAt']);
+        if (ids.isEmpty || readAt == null) return;
+        for (final listener in List<ReadHandler>.from(_readListeners)) {
+          listener(ids, readAt);
+        }
+      })
       ..on('typing', (data) {
         final json = _asStringKeyMap(data);
         if (json == null) return;
@@ -206,6 +251,20 @@ class ChatSocketService {
           listener(chatId, userId, preview);
         }
       });
+    for (final event in _domainEvents) {
+      socket.on(event, (data) {
+        final json = _asStringKeyMap(data);
+        if (json == null) return;
+        final payload = <String, String>{
+          for (final entry in json.entries)
+            if (entry.value != null) entry.key: entry.value.toString(),
+        };
+        for (final listener
+            in List<DomainHandler>.from(_domainListeners[event] ?? const [])) {
+          listener(payload);
+        }
+      });
+    }
 
     try {
       await connected.future.timeout(const Duration(seconds: 12));
@@ -244,10 +303,21 @@ class ChatSocketService {
     _unreadListeners.clear();
     _chatsInvalidateListeners.clear();
     _typingListeners.clear();
+    _readListeners.clear();
     _reconnectListeners.clear();
+    _domainListeners.clear();
     _joinedChats.clear();
     disconnect();
   }
+}
+
+DateTime? _asDate(Object? value) {
+  if (value is DateTime) return value;
+  if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
+  if (value is int) {
+    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+  }
+  return null;
 }
 
 Map<String, dynamic>? _asStringKeyMap(Object? value) {

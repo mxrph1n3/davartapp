@@ -65,7 +65,10 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     if (mounted) setState(() {});
 
     final embedded = isEmbeddedLogin(GoRouterState.of(context));
-    final home = AppRoutes.homeForRole(auth.user?.role ?? UserRole.client);
+    final home = AppRoutes.homeForRole(
+      auth.user?.role ?? UserRole.client,
+      isStaff: auth.user?.isStaff ?? false,
+    );
 
     // Leave OTP first so the user never sees a second «code» screen.
     if (embedded) {

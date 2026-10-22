@@ -1,3 +1,4 @@
+import Contacts
 import Flutter
 import UIKit
 import UserNotifications
@@ -7,6 +8,7 @@ import UserNotifications
   private var pushChannel: FlutterMethodChannel?
   private var apnsToken: String?
   private var pendingOpen: [String: String]?
+  private var activeChatId: String = ""
 
   override func application(
     _ application: UIApplication,
@@ -49,6 +51,10 @@ import UserNotifications
           messageId: args["messageId"] as? String ?? UUID().uuidString
         )
         result(nil)
+      case "setActiveChat":
+        let args = call.arguments as? [String: Any]
+        activeChatId = args?["chatId"] as? String ?? ""
+        result(nil)
       case "pendingOpen":
         result(self.pendingOpen)
         self.pendingOpen = nil
@@ -63,6 +69,87 @@ import UserNotifications
     if let pendingOpen {
       channel.invokeMethod("open", arguments: pendingOpen)
     }
+    registerContactsChannel(engineBridge.applicationRegistrar.messenger())
+  }
+
+  private func registerContactsChannel(_ messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(name: "davart/contacts", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self else {
+        result(nil)
+        return
+      }
+      switch call.method {
+      case "load":
+        self.loadAddressBook(result)
+      case "openSettings":
+        DispatchQueue.main.async {
+          guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            result(false)
+            return
+          }
+          UIApplication.shared.open(url, options: [:]) { opened in
+            result(opened)
+          }
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  private func contactsAuthorized(_ status: CNAuthorizationStatus) -> Bool {
+    if status == .authorized { return true }
+    if #available(iOS 18.0, *), status == .limited { return true }
+    return false
+  }
+
+  private func loadAddressBook(_ result: @escaping FlutterResult) {
+    DispatchQueue.main.async {
+      let store = CNContactStore()
+      let status = CNContactStore.authorizationStatus(for: .contacts)
+      if self.contactsAuthorized(status) {
+        DispatchQueue.global(qos: .userInitiated).async {
+          let rows = self.readAddressBook(store)
+          DispatchQueue.main.async {
+            result(["granted": true, "contacts": rows])
+          }
+        }
+        return
+      }
+      if status != .notDetermined {
+        result(["granted": false, "prompted": false, "contacts": []])
+        return
+      }
+      store.requestAccess(for: .contacts) { granted, _ in
+        if !granted {
+          DispatchQueue.main.async {
+            result(["granted": false, "prompted": true, "contacts": []])
+          }
+          return
+        }
+        let rows = self.readAddressBook(store)
+        DispatchQueue.main.async {
+          result(["granted": true, "contacts": rows])
+        }
+      }
+    }
+  }
+
+  private func readAddressBook(_ store: CNContactStore) -> [[String: Any]] {
+    let keys: [CNKeyDescriptor] = [
+      CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
+      CNContactPhoneNumbersKey as CNKeyDescriptor,
+    ]
+    let request = CNContactFetchRequest(keysToFetch: keys)
+    var rows: [[String: Any]] = []
+    try? store.enumerateContacts(with: request) { contact, _ in
+      let name = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
+      let phones = contact.phoneNumbers.map { $0.value.stringValue }
+      if phones.isEmpty { return }
+      rows.append(["name": name, "phones": phones])
+    }
+    return rows
   }
 
   override func application(
@@ -86,6 +173,12 @@ import UserNotifications
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
+    let chatId = notification.request.content.userInfo["chatId"] as? String ?? ""
+    let onThisChat = !activeChatId.isEmpty && chatId == activeChatId
+    if UIApplication.shared.applicationState == .active && onThisChat {
+      completionHandler([])
+      return
+    }
     completionHandler([.banner, .list, .sound, .badge])
   }
 
@@ -95,9 +188,19 @@ import UserNotifications
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
     let info = response.notification.request.content.userInfo
-    if let chatId = info["chatId"] as? String, !chatId.isEmpty {
-      let title = (info["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      let open = ["chatId": chatId, "title": (title?.isEmpty == false ? title! : "Чат")]
+    var open: [String: String] = [:]
+    for (key, value) in info {
+      guard let key = key as? String, key != "aps" else { continue }
+      if let text = value as? String, !text.isEmpty {
+        open[key] = text
+      } else if let number = value as? NSNumber {
+        open[key] = number.stringValue
+      }
+    }
+    if open["type"] == nil, let chatId = open["chatId"], !chatId.isEmpty {
+      open["type"] = "chat"
+    }
+    if open["chatId"] != nil || open["type"] != nil {
       pendingOpen = open
       pushChannel?.invokeMethod("open", arguments: open)
     }

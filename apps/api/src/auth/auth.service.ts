@@ -307,7 +307,9 @@ export class AuthService {
 
   /** Fixed OTP for demo / App Review numbers. No SMS is sent. */
   private testLoginCodeFor(phone: string): string | null {
-    const code = this.configService.get<string>('AUTH_TEST_CODE', '0000').trim();
+    const code = this.configService
+      .get<string>('AUTH_TEST_CODE', '0000')
+      .trim();
     if (!code) return null;
     const allowed = [
       ...this.phonesFromEnv('AUTH_TEST_PHONES'),
@@ -329,11 +331,7 @@ export class AuthService {
     return {
       name: 'Студия DAVart',
       role: UserRole.admin,
-      extraRoles: [
-        UserRole.designer,
-        UserRole.complectator,
-        UserRole.surveyor,
-      ],
+      extraRoles: [UserRole.designer, UserRole.complectator, UserRole.surveyor],
     };
   }
 

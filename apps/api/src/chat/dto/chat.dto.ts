@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -33,6 +34,41 @@ export class AddChatParticipantDto {
 export class CreatePersonalChatDto {
   @IsUUID()
   userId!: string;
+}
+
+export class CreateGroupChatDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  title!: string;
+
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsUUID('4', { each: true })
+  userIds!: string[];
+}
+
+export class UpdateChatDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  alias?: string;
+}
+
+export class SetChatPinnedDto {
+  @IsBoolean()
+  pinned!: boolean;
+}
+
+export class SetChatMutedDto {
+  @IsBoolean()
+  muted!: boolean;
 }
 
 export class InviteChatByPhoneDto {
@@ -166,6 +202,7 @@ export const CHAT_TYPE_LABELS: Record<ChatType, string> = {
   project: 'Проект',
   personal: 'Личный',
   support: 'DAVart',
+  group: 'Группа',
 };
 
 export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {

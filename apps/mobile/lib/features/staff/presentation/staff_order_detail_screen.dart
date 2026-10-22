@@ -19,6 +19,30 @@ final staffClientOrderProvider = FutureProvider.autoDispose
       .getOrder(ids.clientId, ids.orderId);
 });
 
+const _orderFlow = [
+  'created',
+  'confirmed',
+  'assembling',
+  'shipping',
+  'delivered',
+];
+
+const _orderLabels = {
+  'created': 'Оформлен',
+  'confirmed': 'Согласован',
+  'assembling': 'Собирается',
+  'shipping': 'В пути',
+  'delivered': 'Доставлен',
+};
+
+String? _nextOrderStatus(String status) {
+  final index = _orderFlow.indexOf(status);
+  if (index < 0 || index >= _orderFlow.length - 1) return null;
+  return _orderFlow[index + 1];
+}
+
+String _orderStatusLabel(String status) => _orderLabels[status] ?? status;
+
 class StaffOrderDetailScreen extends ConsumerWidget {
   const StaffOrderDetailScreen({
     super.key,
@@ -28,6 +52,28 @@ class StaffOrderDetailScreen extends ConsumerWidget {
 
   final String clientId;
   final String orderId;
+
+  Future<void> _advanceOrder(
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
+    try {
+      await ref.read(staffRepositoryProvider).updateOrderStatus(
+            clientId,
+            orderId,
+            status,
+          );
+      ref.invalidate(
+        staffClientOrderProvider((clientId: clientId, orderId: orderId)),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось сменить статус')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -65,6 +111,13 @@ class StaffOrderDetailScreen extends ConsumerWidget {
                 label: order.statusLabel,
                 highlighted: order.status == 'created',
               ),
+              if (_nextOrderStatus(order.status) case final next?) ...[
+                const SizedBox(height: AppSpacing.md),
+                PrimaryButton(
+                  label: 'Дальше: ${_orderStatusLabel(next)}',
+                  onPressed: () => _advanceOrder(context, ref, next),
+                ),
+              ],
               const SizedBox(height: AppSpacing.md),
               Text(
                 '№ ${order.id.substring(0, 8)}',

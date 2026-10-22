@@ -30,6 +30,8 @@ class OrderDetailScreen extends ConsumerWidget {
         ),
       ),
       body: orderAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => ErrorState(
           message: 'Не удалось загрузить заказ',

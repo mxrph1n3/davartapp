@@ -56,7 +56,11 @@ function resolveCategoryKey(categorySlug?: string | null): string {
   if (slug.includes('oboi') || slug.includes('wall')) return 'oboi';
   if (slug.includes('santeh') || slug.includes('bath')) return 'santehnika';
   if (slug.includes('keramo')) return 'keramogranit';
-  if (slug.includes('mebel') || slug.includes('sofa') || slug.includes('divan')) {
+  if (
+    slug.includes('mebel') ||
+    slug.includes('sofa') ||
+    slug.includes('divan')
+  ) {
     return 'mebel';
   }
   return 'mebel';

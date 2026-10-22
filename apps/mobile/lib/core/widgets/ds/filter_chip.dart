@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../../theme/app_radius.dart';
+import '../../theme/app_spacing.dart';
 
 class CategoryChip extends StatelessWidget {
   const CategoryChip({
@@ -18,29 +19,41 @@ class CategoryChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    return GestureDetector(
-      onTap: () => onSelected(!selected),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: selected ? colors.textPrimary : Colors.transparent,
-          borderRadius: AppRadius.pillRadius,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          maxLines: 1,
-          softWrap: false,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? colors.background : colors.textSecondary,
-          ),
-        ),
+    // Flutter 3.44 does not apply ChipTheme.secondaryLabelStyle to a selected
+    // FilterChip, so the label color has to be set on this chip itself.
+    final labelStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      color: selected ? AppColors.textOnAccent : colors.textSecondary,
+    );
+    return FilterChip(
+      label: Text(
+        label,
+        maxLines: 1,
+        softWrap: false,
+        style: labelStyle,
       ),
+      labelStyle: labelStyle,
+      selected: selected,
+      showCheckmark: false,
+      onSelected: onSelected,
+      selectedColor: colors.accent,
+      backgroundColor: Colors.transparent,
+      disabledColor: Colors.transparent,
+      shadowColor: Colors.transparent,
+      selectedShadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      pressElevation: 0,
+      side: BorderSide(color: colors.border),
+      shape: const RoundedRectangleBorder(borderRadius: AppRadius.pillRadius),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: AppSpacing.xxs,
+      ),
+      labelPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
     );
   }
 }
@@ -60,7 +73,7 @@ class ActiveFilterChip extends StatelessWidget {
     final colors = AppColors.of(context);
     return Container(
       height: 36,
-      padding: const EdgeInsets.only(left: 14, right: 4),
+      padding: const EdgeInsets.only(left: AppSpacing.md, right: AppSpacing.xxs),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
         borderRadius: AppRadius.pillRadius,

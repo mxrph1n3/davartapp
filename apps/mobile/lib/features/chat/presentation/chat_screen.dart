@@ -12,6 +12,7 @@ import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/chat_models.dart';
+import '../data/chat_repository.dart';
 import 'chat_notifier.dart';
 
 const _weekdaysRu = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
@@ -54,9 +55,10 @@ class ChatScreen extends ConsumerWidget {
                       onRetry: () => ref.invalidate(chatsListProvider),
                     ),
                     data: (chats) {
-                      final sorted = [...chats]..sort(
-                          (a, b) => b.updatedAt.compareTo(a.updatedAt),
-                        );
+                      final sorted = [...chats]..sort((a, b) {
+                          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+                          return b.updatedAt.compareTo(a.updatedAt);
+                        });
 
                       return RefreshIndicator(
                         onRefresh: () async {
@@ -119,6 +121,8 @@ class ChatScreen extends ConsumerWidget {
                                     child: _TelegramChatTile(
                                       chat: chat,
                                       onTap: () => _openChat(context, chat),
+                                      onLongPress: () =>
+                                          _showChatMenu(context, ref, chat),
                                     ),
                                   );
                                 },
@@ -162,6 +166,73 @@ class ChatScreen extends ConsumerWidget {
     return ok == true;
   }
 
+  Future<void> _showChatMenu(
+    BuildContext context,
+    WidgetRef ref,
+    ChatSummary chat,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  chat.pinned ? Icons.push_pin : Icons.push_pin_outlined,
+                ),
+                title: Text(chat.pinned ? 'Открепить' : 'Закрепить'),
+                onTap: () => Navigator.pop(context, 'pin'),
+              ),
+              ListTile(
+                leading: Icon(
+                  chat.muted
+                      ? Icons.notifications_outlined
+                      : Icons.notifications_off_outlined,
+                ),
+                title: Text(chat.muted ? 'Включить звук' : 'Выключить звук'),
+                onTap: () => Navigator.pop(context, 'mute'),
+              ),
+              if (chat.type != 'support')
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline,
+                    color: AppColors.of(context).error,
+                  ),
+                  title: const Text('Удалить'),
+                  onTap: () => Navigator.pop(context, 'delete'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == null || !context.mounted) return;
+    try {
+      if (action == 'pin') {
+        await ref
+            .read(chatRepositoryProvider)
+            .setPinned(chat.id, pinned: !chat.pinned);
+      } else if (action == 'mute') {
+        await ref
+            .read(chatRepositoryProvider)
+            .setMuted(chat.id, muted: !chat.muted);
+      } else if (action == 'delete') {
+        final ok = await _confirmDeleteChat(context, chat);
+        if (!ok || !context.mounted) return;
+        await ref.read(chatsListProvider.notifier).deleteChat(chat.id);
+        return;
+      }
+      await ref.read(chatsListProvider.notifier).refreshSilently();
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить чат')),
+      );
+    }
+  }
+
   void _openChat(BuildContext context, ChatSummary chat) {
     final params = <String, String>{
       'title': chat.title,
@@ -176,10 +247,15 @@ class ChatScreen extends ConsumerWidget {
 }
 
 class _TelegramChatTile extends StatelessWidget {
-  const _TelegramChatTile({required this.chat, required this.onTap});
+  const _TelegramChatTile({
+    required this.chat,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final ChatSummary chat;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +268,7 @@ class _TelegramChatTile extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.screenPadding,
@@ -208,15 +285,39 @@ class _TelegramChatTile extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          chat.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                chat.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
+                              ),
+                            ),
+                            if (chat.muted) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.notifications_off_outlined,
+                                size: 14,
+                                color: colors.textSecondary,
+                              ),
+                            ],
+                            if (chat.pinned) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.push_pin,
+                                size: 14,
+                                color: colors.textSecondary,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       const SizedBox(width: 8),

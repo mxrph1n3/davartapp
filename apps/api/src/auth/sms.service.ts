@@ -210,18 +210,15 @@ export class SmsService {
     method: string,
     body: Record<string, unknown>,
   ): Promise<Record<string, unknown>> {
-    const response = await fetch(
-      `https://gatewayapi.telegram.org/${method}`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          accept: 'application/json',
-        },
-        body: JSON.stringify(body),
+    const response = await fetch(`https://gatewayapi.telegram.org/${method}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        accept: 'application/json',
       },
-    );
+      body: JSON.stringify(body),
+    });
 
     const payload = (await response.json().catch(() => ({}))) as {
       ok?: boolean;
@@ -238,7 +235,7 @@ export class SmsService {
       );
     }
 
-    return (payload.result ?? {}) as Record<string, unknown>;
+    return payload.result ?? {};
   }
 
   private async sendViaP1Sms(
@@ -391,7 +388,9 @@ export class SmsService {
 
     const raw = await response.text();
     if (!response.ok) {
-      this.logger.error(`TargetSMS HTTP ${response.status}: ${raw.slice(0, 300)}`);
+      this.logger.error(
+        `TargetSMS HTTP ${response.status}: ${raw.slice(0, 300)}`,
+      );
       throw new ServiceUnavailableException('Failed to send SMS via TargetSMS');
     }
 
@@ -403,7 +402,9 @@ export class SmsService {
       payload = JSON.parse(raw) as typeof payload;
     } catch {
       this.logger.error(`TargetSMS non-JSON: ${raw.slice(0, 300)}`);
-      throw new ServiceUnavailableException('TargetSMS returned invalid response');
+      throw new ServiceUnavailableException(
+        'TargetSMS returned invalid response',
+      );
     }
 
     if (payload.error) {
@@ -411,9 +412,7 @@ export class SmsService {
       throw new ServiceUnavailableException(payload.error);
     }
 
-    const first = payload.sms?.[0] as
-      | { action?: string; id_sms?: string | number; error?: string }
-      | undefined;
+    const first = payload.sms?.[0];
     if (first?.error) {
       this.logger.error(`TargetSMS reject: ${first.error}`);
       throw new ServiceUnavailableException(first.error);

@@ -11,12 +11,13 @@ import '../data/commerce_models.dart';
 import '../data/commerce_repository.dart';
 import 'cart_selection_provider.dart';
 import 'commerce_notifier.dart';
-import 'project_picker_sheet.dart';
 
 final _priceFormat = NumberFormat.currency(locale: 'ru_RU', symbol: '₽');
 
 class CheckoutScreen extends ConsumerStatefulWidget {
-  const CheckoutScreen({super.key});
+  const CheckoutScreen({super.key, this.projectId});
+
+  final String? projectId;
 
   @override
   ConsumerState<CheckoutScreen> createState() => _CheckoutScreenState();
@@ -40,11 +41,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (!mounted) return;
     if (!_formKey.currentState!.validate()) return;
 
-    final projectId = await ensureActiveProject(context, ref);
+    final projectId = widget.projectId;
     if (projectId == null) return;
 
-    final cart = ref.read(cartProvider).cart;
-    final selection = ref.read(cartSelectionProvider);
+    final cart = _projectCart(ref.read(cartProvider).projectCarts);
+    final selection = ref.read(cartSelectionProvider('project:$projectId'));
     final unlockedIds =
         cart?.items.where((i) => !i.locked).map((i) => i.id).toSet() ?? {};
     final cartItemIds = selection.intersection(unlockedIds).toList();
@@ -76,7 +77,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
       return;
     }
 
-    ref.read(cartSelectionProvider.notifier).state = {};
+    ref.read(cartSelectionProvider('project:$projectId').notifier).state = {};
     ref.invalidate(ordersProvider);
     await ref.read(cartProvider.notifier).loadCart();
 
@@ -84,10 +85,33 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     context.pushReplacement(AppRoutes.orderDetail(order.id));
   }
 
+  Cart? _projectCart(List<Cart> carts) {
+    final projectId = widget.projectId;
+    if (projectId == null) return null;
+    for (final cart in carts) {
+      if (cart.projectId == projectId) return cart;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cart = ref.watch(cartProvider).cart;
-    final selection = ref.watch(cartSelectionProvider);
+    final projectId = widget.projectId;
+    if (projectId == null) {
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: AppBackButton(fallback: AppRoutes.cart),
+          title: const Text('Оформление заказа'),
+        ),
+        body: const Center(
+          child: Text('Сначала добавьте товары в проект'),
+        ),
+      );
+    }
+
+    final cart = _projectCart(ref.watch(cartProvider).projectCarts);
+    final selection = ref.watch(cartSelectionProvider('project:$projectId'));
     final selected = cart?.items
             .where((i) => !i.locked && selection.contains(i.id))
             .toList() ??

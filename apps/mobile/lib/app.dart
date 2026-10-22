@@ -13,6 +13,7 @@ import 'core/push/push_service.dart';
 import 'features/auth/presentation/auth_notifier.dart';
 import 'features/chat/presentation/chat_notifier.dart';
 import 'features/chat/presentation/in_app_message_notice.dart';
+import 'features/live/live_sync.dart';
 
 class DavartApp extends ConsumerStatefulWidget {
   const DavartApp({super.key});
@@ -38,6 +39,7 @@ class _DavartAppState extends ConsumerState<DavartApp>
     if (!ref.read(authProvider).isAuthenticated) return;
     unawaited(ref.read(pushServiceProvider).initialize());
     unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
+    refreshSharedData(ref);
   }
 
   Future<void> _listenDeepLinks() async {
@@ -71,6 +73,7 @@ class _DavartAppState extends ConsumerState<DavartApp>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(liveSyncProvider);
     final router = ref.watch(routerProvider);
     final themeModeAsync = ref.watch(themeModeProvider);
 

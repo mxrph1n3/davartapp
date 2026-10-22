@@ -227,6 +227,14 @@ class _AdminUserEditorSheetState extends ConsumerState<_AdminUserEditorSheet> {
                 FilterChip(
                   label: Text(adminRoleLabel(role)),
                   selected: _roles.contains(role),
+                  showCheckmark: true,
+                  checkmarkColor: AppColors.of(context).textOnAccent,
+                  selectedColor: AppColors.of(context).accent,
+                  labelStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: _roles.contains(role)
+                            ? AppColors.of(context).textOnAccent
+                            : AppColors.of(context).textPrimary,
+                      ),
                   onSelected: (selected) {
                     setState(() {
                       if (selected) {

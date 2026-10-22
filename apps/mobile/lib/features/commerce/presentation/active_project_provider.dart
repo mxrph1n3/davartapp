@@ -16,3 +16,7 @@ class ActiveProject {
 
 final activeProjectProvider =
     StateProvider<ActiveProject?>((ref) => null);
+
+/// Last project the buyer sent a personal cart into, for this app session.
+final lastCartProjectProvider =
+    StateProvider<ActiveProject?>((ref) => null);

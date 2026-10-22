@@ -27,13 +27,14 @@ class StaffProjectCartScreen extends ConsumerStatefulWidget {
 class _StaffProjectCartScreenState
     extends ConsumerState<StaffProjectCartScreen> {
   void _syncSelection(List<String> unlockedIds) {
+    final scope = 'staff:${widget.projectId}';
     final unlocked = unlockedIds.toSet();
-    final current = ref.read(cartSelectionProvider);
+    final current = ref.read(cartSelectionProvider(scope));
     final next = current.intersection(unlocked);
     if (next.isEmpty && unlocked.isNotEmpty) {
-      ref.read(cartSelectionProvider.notifier).state = unlocked;
+      ref.read(cartSelectionProvider(scope).notifier).state = unlocked;
     } else if (next.length != current.length) {
-      ref.read(cartSelectionProvider.notifier).state = next;
+      ref.read(cartSelectionProvider(scope).notifier).state = next;
     }
   }
 
@@ -43,7 +44,7 @@ class _StaffProjectCartScreenState
     final cartAsync = ref.watch(staffProjectCartProvider(projectId));
     final project = ref.watch(activeProjectProvider);
     final working = ref.watch(workingClientProvider);
-    final selection = ref.watch(cartSelectionProvider);
+    final selection = ref.watch(cartSelectionProvider('staff:$projectId'));
     final title = project?.id == projectId
         ? 'Корзина · ${project!.name}'
         : (working != null
@@ -67,13 +68,16 @@ class _StaffProjectCartScreenState
         ],
       ),
       body: cartAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => ErrorState(
           message: 'Не удалось загрузить корзину',
           onRetry: () => ref.invalidate(staffProjectCartProvider(projectId)),
         ),
         data: (cart) {
-          if (cart.items.isEmpty) {
+          final unlocked = cart.items.where((i) => !i.locked).toList();
+          if (unlocked.isEmpty) {
             return EmptyState(
               icon: Icons.shopping_bag_outlined,
               title: 'Корзина пуста',
@@ -83,7 +87,6 @@ class _StaffProjectCartScreenState
             );
           }
 
-          final unlocked = cart.items.where((i) => !i.locked).toList();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
               _syncSelection(unlocked.map((i) => i.id).toList());
@@ -100,10 +103,10 @@ class _StaffProjectCartScreenState
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                  itemCount: cart.items.length,
+                  itemCount: unlocked.length,
                   separatorBuilder: (_, _) => const Divider(height: 24),
                   itemBuilder: (context, index) {
-                    final item = cart.items[index];
+                    final item = unlocked[index];
                     final selected = selection.contains(item.id);
                     return Opacity(
                       opacity: item.locked ? 0.55 : 1,
@@ -122,7 +125,7 @@ class _StaffProjectCartScreenState
                                       next.remove(item.id);
                                     }
                                     ref
-                                        .read(cartSelectionProvider.notifier)
+                                        .read(cartSelectionProvider('staff:$projectId').notifier)
                                         .state = next;
                                   },
                           ),

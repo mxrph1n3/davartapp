@@ -43,26 +43,21 @@ Future<String?> ensureActiveProject(
     }
   }
 
-  var projects = await _loadProjects(ref, staffClientId: staffClientId);
+  final projects = (await _loadProjects(ref, staffClientId: staffClientId))
+      .where((project) => !project.isDraft)
+      .toList();
   if (projects.isEmpty) {
-    try {
-      final created = staffClientId != null
-          ? await ref.read(staffRepositoryProvider).createProject(staffClientId)
-          : await ref.read(projectsRepositoryProvider).createProject();
-      projects = [created];
-    } catch (_) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Не удалось создать проект для корзины'),
-          ),
-        );
-      }
-      return null;
+    if (!silent && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Сначала заполните анкету в разделе «Дизайн»'),
+        ),
+      );
     }
+    return null;
   }
 
-  if (!forcePicker && (silent || projects.length == 1)) {
+  if (!forcePicker && projects.length == 1) {
     final p = projects.first;
     final active = ActiveProject(
       id: p.id,
@@ -153,11 +148,15 @@ class _ProjectPickerSheetState extends ConsumerState<_ProjectPickerSheet> {
                     child: Text('Не удалось загрузить проекты'),
                   );
                 }
-                final projects = snapshot.data ?? const [];
+                final projects = (snapshot.data ?? const <Project>[])
+                    .where((project) => !project.isDraft)
+                    .toList();
                 if (projects.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.all(24),
-                    child: Text('Нет проектов'),
+                    child: Text(
+                      'Сначала заполните анкету в разделе «Дизайн»',
+                    ),
                   );
                 }
                 return ConstrainedBox(

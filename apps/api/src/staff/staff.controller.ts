@@ -24,7 +24,7 @@ import {
   Min,
 } from 'class-validator';
 import type { Response } from 'express';
-import { UserRole } from '@prisma/client';
+import { OrderStatus, ProjectStatus, UserRole } from '@prisma/client';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,6 +39,25 @@ import { CreateOrderDto } from '../commerce/dto/orders.dto';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
 import { CreateAddressDto } from '../users/dto/users.dto';
 import { StaffService } from './staff.service';
+
+class UpdateOrderStatusDto {
+  @IsIn(['created', 'confirmed', 'assembling', 'shipping', 'delivered'])
+  status!: OrderStatus;
+}
+
+class AdvanceProjectStatusDto {
+  @IsIn([
+    'brief_filling',
+    'measurement',
+    'in_progress',
+    'materials',
+    'visualization',
+    'final_assembly',
+    'completed',
+    'archived',
+  ])
+  status!: ProjectStatus;
+}
 
 class ClientsQueryDto {
   @IsOptional()
@@ -333,6 +352,31 @@ export class StaffController {
     @Param('orderId', ParseUUIDPipe) orderId: string,
   ) {
     return this.staffService.getOrder(user, clientId, orderId);
+  }
+
+  @Patch('clients/:clientId/orders/:orderId/status')
+  updateOrderStatus(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: UpdateOrderStatusDto,
+  ) {
+    return this.staffService.updateOrderStatus(
+      user,
+      clientId,
+      orderId,
+      dto.status,
+    );
+  }
+
+  @Post('projects/:projectId/status')
+  @HttpCode(200)
+  advanceProjectStatus(
+    @CurrentUser() user: JwtPayload,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AdvanceProjectStatusDto,
+  ) {
+    return this.staffService.advanceProjectStatus(user, projectId, dto.status);
   }
 
   @Post('projects/:projectId/orders')

@@ -47,10 +47,10 @@ export function actorProjectAccessWhere(
   roles: UserRole[],
 ): Prisma.ProjectWhereInput {
   if (canAccessAnyClientProject(roles)) {
-    return { isShowcase: false };
+    return { isShowcase: false, isDraft: false };
   }
   if (hasStudioRole(roles)) {
-    return staffAssignedToProjectWhere(userId);
+    return { AND: [staffAssignedToProjectWhere(userId), { isDraft: false }] };
   }
   return userProjectAccessWhere(userId);
 }

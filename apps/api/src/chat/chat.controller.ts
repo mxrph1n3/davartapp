@@ -7,6 +7,7 @@ import {
   HttpCode,
   Logger,
   Param,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -31,6 +32,7 @@ import {
   ChatArchiveQueryDto,
   ChatContactsQueryDto,
   ChatIdParamDto,
+  CreateGroupChatDto,
   CreatePersonalChatDto,
   ForwardMessageDto,
   InviteChatByPhoneDto,
@@ -39,7 +41,10 @@ import {
   MessagesQueryDto,
   ProjectChatParamDto,
   SendMessageDto,
+  SetChatMutedDto,
+  SetChatPinnedDto,
   ToggleReactionDto,
+  UpdateChatDto,
 } from './dto/chat.dto';
 
 @Controller('chats')
@@ -76,6 +81,14 @@ export class ChatController {
     return this.chatService.listContacts(user.sub, query.q);
   }
 
+  @Post('group')
+  createGroup(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: CreateGroupChatDto,
+  ) {
+    return this.chatService.createGroup(user.sub, dto.title, dto.userIds);
+  }
+
   @Post('personal')
   createPersonal(
     @CurrentUser() user: JwtPayload,
@@ -95,10 +108,7 @@ export class ChatController {
 
   @Post('match-phones')
   @HttpCode(200)
-  matchPhones(
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: MatchPhonesDto,
-  ) {
+  matchPhones(@CurrentUser() user: JwtPayload, @Body() dto: MatchPhonesDto) {
     return this.chatService.matchPhones(user.sub, dto.phones ?? []);
   }
 
@@ -151,10 +161,7 @@ export class ChatController {
   }
 
   @Get(':id/pinned')
-  getPinned(
-    @CurrentUser() user: JwtPayload,
-    @Param() params: ChatIdParamDto,
-  ) {
+  getPinned(@CurrentUser() user: JwtPayload, @Param() params: ChatIdParamDto) {
     return this.chatService.getPinnedMessage(user.sub, params.id);
   }
 
@@ -272,6 +279,42 @@ export class ChatController {
     return this.chatService.getChat(user.sub, params.id);
   }
 
+  @Patch(':id')
+  updateChat(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+    @Body() dto: UpdateChatDto,
+  ) {
+    return this.chatService.updateChat(user.sub, params.id, {
+      title: dto.title,
+      alias: dto.alias,
+    });
+  }
+
+  @Patch(':id/pin')
+  setPinned(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+    @Body() dto: SetChatPinnedDto,
+  ) {
+    return this.chatService.setChatPinned(user.sub, params.id, dto.pinned);
+  }
+
+  @Patch(':id/mute')
+  setMuted(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+    @Body() dto: SetChatMutedDto,
+  ) {
+    return this.chatService.setMuted(user.sub, params.id, dto.muted);
+  }
+
+  @Post(':id/leave')
+  @HttpCode(200)
+  leaveGroup(@CurrentUser() user: JwtPayload, @Param() params: ChatIdParamDto) {
+    return this.chatService.leaveGroup(user.sub, params.id);
+  }
+
   @Delete(':id')
   @HttpCode(200)
   dismissChat(
@@ -332,7 +375,7 @@ export class ChatController {
   /**
    * Each phone may have a different chat id for the same person.
    * Send a correctly labeled copy to every such id, then return.
-   * Push and SMS run after the HTTP response.
+   * Push runs after the HTTP response. Chat text is never sent by SMS.
    */
   private async publishLive(
     actorId: string,
@@ -373,11 +416,12 @@ export class ChatController {
     }
   }
 
-  /** Push and SMS must not hold the HTTP response. The sender's app times out at 10s. */
+  /** Push must not hold the HTTP response. The sender's app times out at 10s. */
   private scheduleDelivery(
     userId: string,
     chatId: string,
     message: {
+      id?: string;
       type: string;
       content?: string | null;
       attachmentName?: string | null;
@@ -389,11 +433,12 @@ export class ChatController {
     });
   }
 
-  /** Socket if the app is open, Apple push if it is registered, SMS if neither can deliver. */
+  /** Socket if the app is open. Apple stores the same alert for a closed or powered-off phone. Never SMS. */
   private async deliverToRecipient(
     userId: string,
     chatId: string,
     message: {
+      id?: string;
       type: string;
       content?: string | null;
       attachmentName?: string | null;
@@ -402,16 +447,16 @@ export class ChatController {
   ) {
     const total = (await this.chatService.getUnreadTotal(userId)).total;
     this.chatGateway.emitUnreadUpdate(userId, total);
+    if (await this.chatService.isChatMuted(userId, chatId)) return;
     const push = this.chatService.buildPushPayload(message);
-    const delivered = await this.pushService.sendToUser(userId, {
+    const destination = await this.chatService.preferredChatId(userId, chatId);
+    await this.pushService.sendToUser(userId, {
       title: push.title,
       body: push.body,
       badge: total,
-      data: { type: 'chat', chatId },
+      collapseId: message.id,
+      data: { type: 'chat', chatId: destination, title: push.title },
     });
-    if (!delivered && !this.chatGateway.isOnline(userId)) {
-      await this.chatService.notifyOfflineBySms(userId, message);
-    }
   }
 
   @Post(':id/read')
@@ -421,11 +466,7 @@ export class ChatController {
     @Param() params: ChatIdParamDto,
   ) {
     const result = await this.chatService.markRead(user.sub, params.id);
-    this.chatGateway.server.to(`chat:${params.id}`).emit('read', {
-      chatId: params.id,
-      userId: user.sub,
-      readAt: result.readAt,
-    });
+    this.chatGateway.publishReadReceipts(result.receipts);
 
     const total = (await this.chatService.getUnreadTotal(user.sub)).total;
     this.chatGateway.emitUnreadUpdate(user.sub, total);

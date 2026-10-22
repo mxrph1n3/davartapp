@@ -38,6 +38,7 @@ enum ChatType {
   project
   personal
   support
+  group
 }
 
 enum UserRole {
@@ -85,6 +86,7 @@ model User {
   sentMessages         Message[]         @relation("SentMessages")
   messageReactions     MessageReaction[]
   addresses            Address[]
+  personalCart         Cart?
   fcmTokens            FcmToken[]
   staffAuditsAsActor   StaffAuditLog[]   @relation("StaffAuditActor")
   staffAuditsAsClient  StaffAuditLog[]   @relation("StaffAuditClient")
@@ -172,8 +174,10 @@ model ProductAttribute {
 
 model Cart {
   id        String     @id @default(uuid())
-  projectId String     @unique @map("project_id")
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String?    @unique @map("project_id")
+  userId    String?    @unique @map("user_id")
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
   items     CartItem[]
   createdAt DateTime   @default(now()) @map("created_at")
   updatedAt DateTime   @updatedAt @map("updated_at")
@@ -275,6 +279,7 @@ model Project {
   startDate  DateTime?     @map("start_date")
   status     ProjectStatus @default(brief_filling)
   isShowcase Boolean       @default(false) @map("is_showcase")
+  isDraft    Boolean       @default(false) @map("is_draft")
   projectChatDismissed Boolean @default(false) @map("project_chat_dismissed")
   user       User          @relation("ClientProjects", fields: [userId], references: [id], onDelete: Cascade)
   designer   User?         @relation("DesignerProjects", fields: [designerId], references: [id], onDelete: SetNull)
@@ -337,6 +342,7 @@ model Document {
   storageKey String       @map("storage_key")
   mimeType   String?      @map("mime_type")
   size       Int?
+  ready      Boolean      @default(true)
   uploadedAt DateTime     @default(now()) @map("uploaded_at")
   project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -366,6 +372,9 @@ model ChatParticipant {
   lastReadAt  DateTime? @map("last_read_at")
   unreadCount Int       @default(0) @map("unread_count")
   hiddenAt    DateTime? @map("hidden_at")
+  pinnedAt    DateTime? @map("pinned_at")
+  mutedAt     DateTime? @map("muted_at")
+  alias       String?
   chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 

@@ -5,24 +5,34 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { hasStudioRole } from '../auth/roles';
+import { LiveSyncService } from '../live/live-sync.service';
 import {
   canAccessAnyClientProject,
   staffAssignedToProjectWhere,
   userCanAccessProjectWhere,
+  userProjectAccessWhere,
 } from '../projects/project-access';
 import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class CartService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly liveSync: LiveSyncService,
+  ) {}
 
   async getCart(
-    projectId: string,
+    projectId: string | undefined,
     actorId: string,
     actorRole: UserRole,
     extraRoles: UserRole[] = [],
   ) {
+    if (!projectId) {
+      const cart = await this.getOrCreatePersonalCart(actorId);
+      return this.formatCart(cart.id);
+    }
     await this.assertProjectCartAccess(projectId, actorId, [
       actorRole,
       ...extraRoles,
@@ -31,14 +41,128 @@ export class CartService {
     return this.formatCart(cart.id);
   }
 
-  async addItem(
+  /** Project carts the signed-in person can see. Personal cart is separate. */
+  async listProjectCarts(actorId: string) {
+    const carts = await this.prisma.cart.findMany({
+      where: {
+        projectId: { not: null },
+        items: { some: {} },
+        project: {
+          AND: [userProjectAccessWhere(actorId), { isDraft: false }],
+        },
+      },
+      select: { id: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return Promise.all(carts.map((cart) => this.formatCart(cart.id)));
+  }
+
+  async assignPersonalCart(
+    actorId: string,
+    actorRole: UserRole,
     projectId: string,
+    extraRoles: UserRole[] = [],
+    itemIds?: string[],
+  ) {
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, isShowcase: false, isDraft: false },
+      select: { id: true },
+    });
+    if (!project) {
+      throw new BadRequestException(
+        'Сначала отправьте анкету в разделе «Дизайн»',
+      );
+    }
+
+    const personal = await this.prisma.cart.findUnique({
+      where: { userId: actorId },
+      include: { items: true },
+    });
+    const projectCart = await this.getOrCreateCart(projectId);
+    if (!personal) {
+      return this.formatCart(projectCart.id);
+    }
+
+    const chosen = itemIds == null ? null : new Set(itemIds);
+    let moved = 0;
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of personal.items) {
+        if (item.lockedAt) continue;
+        if (chosen && !chosen.has(item.id)) continue;
+        moved += 1;
+        const existing = await tx.cartItem.findUnique({
+          where: {
+            cartId_productId: {
+              cartId: projectCart.id,
+              productId: item.productId,
+            },
+          },
+        });
+        if (existing?.lockedAt) {
+          throw new BadRequestException(
+            'This product is locked in an order and cannot be changed',
+          );
+        }
+        await tx.cartItem.upsert({
+          where: {
+            cartId_productId: {
+              cartId: projectCart.id,
+              productId: item.productId,
+            },
+          },
+          update: { quantity: { increment: item.quantity } },
+          create: {
+            cartId: projectCart.id,
+            productId: item.productId,
+            quantity: item.quantity,
+          },
+        });
+        await tx.cartItem.delete({ where: { id: item.id } });
+      }
+    });
+
+    if (moved === 0) {
+      throw new BadRequestException('Выберите позиции');
+    }
+
+    const formatted = await this.formatCart(projectCart.id);
+    await this.announceProjectCart(
+      projectId,
+      actorId,
+      [actorRole, ...extraRoles],
+      'assign',
+    );
+    return formatted;
+  }
+
+  async addItem(
+    projectId: string | undefined,
     actorId: string,
     actorRole: UserRole,
     productId: string,
     quantity: number,
     extraRoles: UserRole[] = [],
   ) {
+    if (!projectId) {
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+      if (!product) {
+        throw new NotFoundException('Product not found');
+      }
+      const cart = await this.getOrCreatePersonalCart(actorId);
+      await this.prisma.cartItem.upsert({
+        where: { cartId_productId: { cartId: cart.id, productId } },
+        update: { quantity: { increment: quantity } },
+        create: { cartId: cart.id, productId, quantity },
+      });
+      return this.formatCart(cart.id);
+    }
+
     await this.assertProjectCartAccess(projectId, actorId, [
       actorRole,
       ...extraRoles,
@@ -79,22 +203,31 @@ export class CartService {
       },
     });
 
-    return this.formatCart(cart.id);
+    const formatted = await this.formatCart(cart.id);
+    await this.announceProjectCart(
+      projectId,
+      actorId,
+      [actorRole, ...extraRoles],
+      'add',
+      product.name,
+    );
+    return formatted;
   }
 
   async updateItem(
-    projectId: string,
+    projectId: string | undefined,
     actorId: string,
     actorRole: UserRole,
     itemId: string,
     quantity: number,
     extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, [
+    const cart = await this.cartForActor(
+      projectId,
+      actorId,
       actorRole,
-      ...extraRoles,
-    ]);
-    const cart = await this.getOrCreateCart(projectId);
+      extraRoles,
+    );
     const item = await this.prisma.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
     });
@@ -114,21 +247,31 @@ export class CartService {
       data: { quantity },
     });
 
-    return this.formatCart(cart.id);
+    const formatted = await this.formatCart(cart.id);
+    if (projectId) {
+      await this.announceProjectCart(
+        projectId,
+        actorId,
+        [actorRole, ...extraRoles],
+        'update',
+      );
+    }
+    return formatted;
   }
 
   async removeItem(
-    projectId: string,
+    projectId: string | undefined,
     actorId: string,
     actorRole: UserRole,
     itemId: string,
     extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, [
+    const cart = await this.cartForActor(
+      projectId,
+      actorId,
       actorRole,
-      ...extraRoles,
-    ]);
-    const cart = await this.getOrCreateCart(projectId);
+      extraRoles,
+    );
     const item = await this.prisma.cartItem.findFirst({
       where: { id: itemId, cartId: cart.id },
     });
@@ -144,24 +287,43 @@ export class CartService {
     }
 
     await this.prisma.cartItem.delete({ where: { id: itemId } });
-    return this.formatCart(cart.id);
+    const formatted = await this.formatCart(cart.id);
+    if (projectId) {
+      await this.announceProjectCart(
+        projectId,
+        actorId,
+        [actorRole, ...extraRoles],
+        'remove',
+      );
+    }
+    return formatted;
   }
 
   async clearCart(
-    projectId: string,
+    projectId: string | undefined,
     actorId: string,
     actorRole: UserRole,
     extraRoles: UserRole[] = [],
   ) {
-    await this.assertProjectCartAccess(projectId, actorId, [
+    const cart = await this.cartForActor(
+      projectId,
+      actorId,
       actorRole,
-      ...extraRoles,
-    ]);
-    const cart = await this.getOrCreateCart(projectId);
+      extraRoles,
+    );
     await this.prisma.cartItem.deleteMany({
       where: { cartId: cart.id, lockedAt: null },
     });
-    return this.formatCart(cart.id);
+    const formatted = await this.formatCart(cart.id);
+    if (projectId) {
+      await this.announceProjectCart(
+        projectId,
+        actorId,
+        [actorRole, ...extraRoles],
+        'clear',
+      );
+    }
+    return formatted;
   }
 
   /** Used by OrdersService inside a transaction-friendly flow. */
@@ -204,6 +366,62 @@ export class CartService {
     throw new ForbiddenException('No access to this project cart');
   }
 
+  private async cartForActor(
+    projectId: string | undefined,
+    actorId: string,
+    actorRole: UserRole,
+    extraRoles: UserRole[],
+  ) {
+    if (!projectId) {
+      return this.getOrCreatePersonalCart(actorId);
+    }
+    await this.assertProjectCartAccess(projectId, actorId, [
+      actorRole,
+      ...extraRoles,
+    ]);
+    return this.getOrCreateCart(projectId);
+  }
+
+  private async announceProjectCart(
+    projectId: string,
+    actorId: string,
+    roles: UserRole[],
+    kind: 'add' | 'update' | 'remove' | 'clear' | 'assign',
+    productName?: string,
+  ) {
+    await this.liveSync.publish(projectId, 'cart');
+    if (!hasStudioRole(roles)) return;
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { userId: true },
+    });
+    if (!project || project.userId === actorId) return;
+
+    const body =
+      kind === 'add' && productName
+        ? `Команда DAVart добавила «${productName}» в корзину проекта`
+        : kind === 'remove'
+          ? 'Команда DAVart убрала товар из корзины проекта'
+          : kind === 'clear'
+            ? 'Команда DAVart очистила корзину проекта'
+            : 'Команда DAVart обновила корзину проекта';
+
+    await this.liveSync.pushOwner(projectId, {
+      title: 'Корзина обновлена',
+      body,
+      collapseId: `cart-${projectId}`,
+      data: { type: 'cart', projectId },
+    });
+  }
+
+  private async getOrCreatePersonalCart(userId: string) {
+    return this.prisma.cart.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+  }
+
   private async getOrCreateCart(projectId: string) {
     return this.prisma.cart.upsert({
       where: { projectId },
@@ -213,11 +431,19 @@ export class CartService {
   }
 
   private async formatCart(cartId: string) {
+    await this.prisma.cartItem.deleteMany({
+      where: {
+        cartId,
+        OR: [{ lockedAt: { not: null } }, { lockedByOrderId: { not: null } }],
+      },
+    });
+
     const cart = await this.prisma.cart.findUnique({
       where: { id: cartId },
       include: {
         project: { select: { id: true, name: true, userId: true } },
         items: {
+          where: { lockedAt: null, lockedByOrderId: null },
           include: {
             product: {
               select: {
@@ -270,12 +496,16 @@ export class CartService {
     const unlocked = items.filter((item) => !item.locked);
     const total = unlocked.reduce((sum, item) => sum + item.subtotal, 0);
     const itemCount = unlocked.reduce((sum, item) => sum + item.quantity, 0);
+    const ownerUserId = cart.project?.userId ?? cart.userId;
+    if (!ownerUserId) {
+      throw new NotFoundException('Cart owner not found');
+    }
 
     return {
       projectId: cart.projectId,
-      projectName: cart.project.name,
-      ownerUserId: cart.project.userId,
-      items,
+      projectName: cart.project?.name ?? '',
+      ownerUserId,
+      items: unlocked,
       total,
       itemCount,
     };

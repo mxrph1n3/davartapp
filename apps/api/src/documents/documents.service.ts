@@ -11,6 +11,7 @@ import {
   userCanAccessProjectWhere,
 } from '../projects/project-access';
 import { isStudioRole } from '../auth/roles';
+import { LiveSyncService } from '../live/live-sync.service';
 import { PushService } from '../push/push.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -26,13 +27,14 @@ export class DocumentsService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly pushService: PushService,
+    private readonly liveSync: LiveSyncService,
   ) {}
 
   async listForProject(userId: string, projectId: string) {
     await this.ensureUserProject(userId, projectId);
 
     const documents = await this.prisma.document.findMany({
-      where: { projectId },
+      where: { projectId, ready: true },
       orderBy: { uploadedAt: 'desc' },
     });
 
@@ -63,6 +65,7 @@ export class DocumentsService {
         storageKey,
         mimeType: dto.contentType,
         size: dto.size,
+        ready: false,
       },
     });
 
@@ -78,13 +81,49 @@ export class DocumentsService {
     };
   }
 
+  /** The row stays hidden until the file is actually in storage. */
+  async confirmUpload(userId: string, documentId: string) {
+    const document = await this.prisma.document.findUnique({
+      where: { id: documentId },
+    });
+    if (!document) {
+      throw new NotFoundException('Document not found');
+    }
+
+    await this.ensureUserProject(userId, document.projectId);
+    if (document.ready) {
+      return this.formatDocument(document);
+    }
+
+    const updated = await this.prisma.document.update({
+      where: { id: documentId },
+      data: { ready: true, uploadedAt: new Date() },
+    });
+
+    void this.liveSync.publish(document.projectId, 'document');
+    const project = await this.prisma.project.findUnique({
+      where: { id: document.projectId },
+      select: { userId: true, name: true },
+    });
+    if (project && project.userId !== userId) {
+      void this.liveSync.pushOwner(document.projectId, {
+        title: 'Новый документ',
+        body: `В проекте «${project.name}» появился документ «${document.name}»`,
+        collapseId: `document-${document.projectId}`,
+        data: { type: 'document', projectId: document.projectId },
+      });
+    }
+
+    return this.formatDocument(updated);
+  }
+
   async getDownloadUrl(userId: string, documentId: string) {
     const document = await this.prisma.document.findUnique({
       where: { id: documentId },
       include: { project: { select: { id: true, userId: true } } },
     });
 
-    if (!document) {
+    if (!document || !document.ready) {
       throw new NotFoundException('Document not found');
     }
 
@@ -181,6 +220,7 @@ export class DocumentsService {
     });
 
     if (project) {
+      void this.liveSync.publish(projectId, 'document');
       await this.pushService.sendToUser(project.userId, {
         title: 'Новый документ',
         body: `В проекте «${project.name}» появились новые документы`,

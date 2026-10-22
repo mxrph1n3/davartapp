@@ -74,7 +74,6 @@ Future<Cart?> addProductToActiveCart(
         context,
         ref,
         staffClientId: working.id,
-        silent: true,
       );
       if (projectId == null) return null;
 
@@ -89,16 +88,8 @@ Future<Cart?> addProductToActiveCart(
       return cart;
     }
 
-    if (context == null || !context.mounted) {
-      await ref.read(cartProvider.notifier).addProduct(productId);
-      return ref.read(cartProvider).cart;
-    }
-
-    final projectId = await ensureActiveProject(context, ref, silent: true);
-    if (projectId == null) return null;
-
     await ref.read(cartProvider.notifier).addProduct(productId);
-    if (context.mounted) {
+    if (context != null && context.mounted) {
       _showSnack(context, 'Добавлено в корзину');
     }
     return ref.read(cartProvider).cart;

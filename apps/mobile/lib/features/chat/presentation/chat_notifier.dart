@@ -187,7 +187,9 @@ class ChatMessagesNotifier
   @override
   Future<ChatMessagesState> build(String chatId) async {
     final socket = ref.watch(chatSocketServiceProvider);
-    await socket.connect();
+    // Messages must not wait on the socket. A slow handshake was holding
+    // the thread behind a spinner for up to 12 seconds.
+    unawaited(socket.connect());
     socket.joinChat(chatId);
 
     void onMessage(ChatMessage message) {
@@ -198,7 +200,23 @@ class ChatMessagesNotifier
         return;
       }
       final current = state.value?.messages ?? [];
-      if (current.any((item) => item.id == message.id)) return;
+      if (current.any((item) => item.id == message.id)) {
+        final next = current
+            .map((item) {
+              if (item.id == message.id) return message;
+              if (message.isPinned && item.isPinned) {
+                return item.copyWith(isPinned: false);
+              }
+              return item;
+            })
+            .toList();
+        state = AsyncData(
+          (state.value ?? const ChatMessagesState(messages: [])).copyWith(
+            messages: next,
+          ),
+        );
+        return;
+      }
       _total += 1;
       state = AsyncData(
         (state.value ?? const ChatMessagesState(messages: [])).copyWith(
@@ -207,8 +225,8 @@ class ChatMessagesNotifier
         ),
       );
       if (!message.isMine) {
-        ref.read(chatRepositoryProvider).markRead(chatId);
-        ref.read(unreadTotalProvider.notifier).refresh();
+        unawaited(ref.read(chatRepositoryProvider).markRead(chatId));
+        unawaited(ref.read(unreadTotalProvider.notifier).refresh());
       }
       unawaited(ref.read(chatsListProvider.notifier).refreshSilently());
     }
@@ -217,11 +235,31 @@ class ChatMessagesNotifier
       unawaited(refreshLatest());
     }
 
+    void onRead(List<String> chatIds, DateTime readAt) {
+      if (!chatIds.contains(chatId)) return;
+      final current = state.value;
+      if (current == null) return;
+      final next = current.messages
+          .map((item) {
+            if (!item.isMine || item.isRead || item.isPending) return item;
+            if (item.createdAt.toUtc().isAfter(readAt.toUtc())) return item;
+            return item.copyWith(isRead: true);
+          })
+          .toList();
+      state = AsyncData(current.copyWith(messages: next));
+    }
+
+    void onInvalidate() {
+      unawaited(refreshLatest());
+    }
+
     socket.addMessageListener(onMessage);
+    socket.addReadListener(onRead);
+    socket.addChatsInvalidateListener(onInvalidate);
     socket.addReconnectListener(onReconnect);
 
-    // Keep the open thread live even when a socket frame is missed.
-    final poll = Timer.periodic(const Duration(seconds: 2), (_) {
+    // Socket delivers new messages. This only fills gaps.
+    final poll = Timer.periodic(const Duration(seconds: 12), (_) {
       if (!socket.isConnected) {
         unawaited(socket.connect(force: true));
       }
@@ -232,19 +270,21 @@ class ChatMessagesNotifier
     ref.onDispose(() {
       poll.cancel();
       socket.removeMessageListener(onMessage);
+      socket.removeReadListener(onRead);
+      socket.removeChatsInvalidateListener(onInvalidate);
       socket.removeReconnectListener(onReconnect);
       socket.leaveChat(chatId);
     });
 
-    final page = await ref.watch(chatRepositoryProvider).getMessages(chatId);
+    final page = await ref.read(chatRepositoryProvider).getMessages(chatId);
     _page = page.page;
     _total = page.total;
-    await ref.read(chatRepositoryProvider).markRead(chatId);
-    ref.read(unreadTotalProvider.notifier).refresh();
+    unawaited(ref.read(chatRepositoryProvider).markRead(chatId));
+    unawaited(ref.read(unreadTotalProvider.notifier).refresh());
     socket.sendRead(chatId);
     return ChatMessagesState(
       messages: page.items.map(_owned).toList(),
-      hasMore: page.items.length < page.total,
+      hasMore: page.hasMore,
     );
   }
 
@@ -262,10 +302,11 @@ class ChatMessagesNotifier
       }
       final merged = byId.values.toList()
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      final hadOlder = current.length > page.items.length;
       state = AsyncData(
         (state.value ?? const ChatMessagesState(messages: [])).copyWith(
           messages: merged,
-          hasMore: merged.length < _total,
+          hasMore: hadOlder ? (state.value?.hasMore ?? false) : page.hasMore,
         ),
       );
     } catch (_) {
@@ -300,7 +341,7 @@ class ChatMessagesNotifier
       state = AsyncData(
         ChatMessagesState(
           messages: merged,
-          hasMore: merged.length < _total,
+          hasMore: page.hasMore,
           loadingOlder: false,
         ),
       );

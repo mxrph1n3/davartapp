@@ -34,9 +34,14 @@ class BriefAnswersView extends StatelessWidget {
     final theme = Theme.of(context);
     final answers = brief.answers;
 
+    final members = briefParseFamilyMembers(answers.general['householdMembers']);
+    final hasPet = members.any((member) => member.role == 'pet');
     final generalItems = <Widget>[
+      if (members.isNotEmpty) _FamilyMembersAnswer(members: members),
       for (final field in briefGeneralFields)
         if (field.id != 'householdMembers')
+          if (field.id != 'household' || members.isEmpty)
+            if (field.id != 'pets' || !hasPet)
           if (_filled(field.id, answers.general[field.id]))
           if (field.id == 'likedColors')
             _ColorAnswer(label: field.label, raw: answers.general[field.id])
@@ -48,7 +53,7 @@ class BriefAnswersView extends StatelessWidget {
     ];
 
     final roomItems = <Widget>[
-      for (final section in briefRoomSections)
+      for (final section in briefRoomsForObject(answers.general['objectType']))
         ..._roomBlock(theme, answers, section),
     ];
 
@@ -174,6 +179,46 @@ class _ColorAnswer extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FamilyMembersAnswer extends StatelessWidget {
+  const _FamilyMembersAnswer({required this.members});
+
+  final List<BriefFamilyMember> members;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Состав семьи', style: theme.textTheme.bodySmall),
+          const SizedBox(height: 4),
+          for (final member in members)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                _memberLine(member),
+                style: theme.textTheme.bodyLarge,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+String _memberLine(BriefFamilyMember member) {
+  final who = member.role == 'pet' ? 'Питомец' : member.roleLabel;
+  final name = member.name.trim();
+  final age = member.age.trim();
+  return [
+    if (who.isNotEmpty) who,
+    if (name.isNotEmpty) name,
+    if (age.isNotEmpty) age,
+  ].join(', ');
 }
 
 class _Answer extends StatelessWidget {

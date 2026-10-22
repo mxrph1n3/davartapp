@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/ru_phone_input_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
@@ -23,6 +24,7 @@ import '../data/chat_models.dart';
 import '../data/chat_repository.dart';
 import '../data/open_remote_attachment.dart';
 import 'chat_image_viewer.dart';
+import 'chat_notifier.dart';
 import 'voice_message_player.dart';
 
 final chatDetailsProvider =
@@ -39,9 +41,13 @@ final chatArchiveProvider = FutureProvider.autoDispose
 });
 
 class ChatInfoScreen extends ConsumerStatefulWidget {
-  const ChatInfoScreen({super.key, required this.chatId});
+  const ChatInfoScreen({super.key, required this.chatId, this.onClose});
 
   final String chatId;
+
+  /// Closes the profile without touching the navigator. A route push locks
+  /// the chat screen because go_router reuses the `/chat/:id` page key.
+  final void Function([String? result])? onClose;
 
   @override
   ConsumerState<ChatInfoScreen> createState() => _ChatInfoScreenState();
@@ -66,23 +72,23 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
   @override
   Widget build(BuildContext context) {
     final detailsAsync = ref.watch(chatDetailsProvider(widget.chatId));
+    final opened = detailsAsync.asData?.value;
+    final telegram = opened?.type == 'personal' || opened?.type == 'group';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('О чате'),
+        title: Text(telegram ? '' : (opened?.isProject == true ? 'Проект' : 'Чат')),
+        actions: [
+          if (telegram)
+            TextButton(
+              onPressed: opened == null ? null : () => _rename(opened),
+              child: const Text('Изм.'),
+            ),
+        ],
         leading: IconButton(
           tooltip: 'Назад',
           icon: const Icon(Icons.arrow_back_ios_new, size: 20),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-              return;
-            }
-            popOrGo(
-              context,
-              chatPathForRole(ref.watch(authProvider).user?.role),
-            );
-          },
+          onPressed: () => _close(),
         ),
       ),
       body: detailsAsync.when(
@@ -107,17 +113,28 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                 child: ListView(
                   padding: const EdgeInsets.all(AppSpacing.screenPadding),
                   children: [
-                    Text(chat.title, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 4),
-                    Text(
-                      summary ??
-                          (chat.type == 'project'
-                              ? 'Проектный чат'
-                              : chat.type),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
+                    if (chat.type == 'personal' || chat.type == 'group')
+                      _TelegramProfile(
+                        chat: chat,
+                        onMessage: () => _close('message'),
+                        onSound: () => _toggleMute(chat),
+                        onSearch: () => _close('search'),
+                        onMore: () => _more(chat),
+                      )
+                    else ...[
+                      Text(
+                        chat.title,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        summary ??
+                            (chat.type == 'project' ? 'Проектный чат' : 'Чат'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                     if (chat.isProject) ...[
                       const SizedBox(height: AppSpacing.md),
                       PrimaryButton(
@@ -125,7 +142,9 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                         onPressed: () => _openCart(chat),
                       ),
                     ],
-                    if (isStaff) ...[
+                    if (isStaff &&
+                        chat.type != 'personal' &&
+                        chat.type != 'group') ...[
                       const SizedBox(height: AppSpacing.xl),
                       Row(
                         children: [
@@ -185,35 +204,29 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                           ),
                         ),
                     ],
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      'Архив',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    TabBar(
-                      controller: _tabs,
-                      isScrollable: true,
-                      tabAlignment: TabAlignment.start,
-                      tabs: const [
-                        Tab(text: 'Медиа'),
-                        Tab(text: 'Файлы'),
-                        Tab(text: 'Голосовые'),
-                        Tab(text: 'Ссылки'),
-                      ],
-                    ),
-                    SizedBox(
-                      height: 320,
-                      child: TabBarView(
-                        controller: _tabs,
-                        children: [
-                          _ArchiveList(chatId: widget.chatId, kind: 'media'),
-                          _ArchiveList(chatId: widget.chatId, kind: 'files'),
-                          _ArchiveList(chatId: widget.chatId, kind: 'voice'),
-                          _ArchiveList(chatId: widget.chatId, kind: 'links'),
-                        ],
-                      ),
-                    ),
+                  ],
+                ),
+              ),
+              TabBar(
+                controller: _tabs,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: const [
+                  Tab(text: 'Медиа'),
+                  Tab(text: 'Файлы'),
+                  Tab(text: 'Голосовые'),
+                  Tab(text: 'Ссылки'),
+                ],
+              ),
+              SizedBox(
+                height: 280,
+                child: TabBarView(
+                  controller: _tabs,
+                  children: [
+                    _ArchiveList(chatId: widget.chatId, kind: 'media'),
+                    _ArchiveList(chatId: widget.chatId, kind: 'files'),
+                    _ArchiveList(chatId: widget.chatId, kind: 'voice'),
+                    _ArchiveList(chatId: widget.chatId, kind: 'links'),
                   ],
                 ),
               ),
@@ -224,10 +237,136 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
     );
   }
 
+  void _close([String? result]) {
+    final close = widget.onClose;
+    if (close != null) {
+      close(result);
+      return;
+    }
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop(result);
+      return;
+    }
+    popOrGo(
+      context,
+      chatPathForRole(ref.read(authProvider).user?.role),
+    );
+  }
+
+  Future<void> _rename(ChatDetails chat) async {
+    final controller = TextEditingController(text: chat.title);
+    final value = await showDialog<String>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(chat.type == 'group' ? 'Название группы' : 'Имя в чате'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+    if (value == null || value.isEmpty || !mounted) return;
+    try {
+      await ref.read(chatRepositoryProvider).updateChat(
+            chat.id,
+            title: chat.type == 'group' ? value : null,
+            alias: chat.type == 'personal' ? value : null,
+          );
+      ref.invalidate(chatDetailsProvider(widget.chatId));
+      ref.invalidate(chatsListProvider);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось переименовать')),
+      );
+    }
+  }
+
+  Future<void> _toggleMute(ChatDetails chat) async {
+    try {
+      await ref.read(chatRepositoryProvider).setMuted(
+            chat.id,
+            muted: !chat.muted,
+          );
+      ref.invalidate(chatDetailsProvider(widget.chatId));
+      ref.invalidate(chatsListProvider);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить звук')),
+      );
+    }
+  }
+
+  Future<void> _more(ChatDetails chat) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useRootNavigator: false,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (chat.type == 'group')
+                ListTile(
+                  leading: const Icon(Icons.logout),
+                  title: const Text('Выйти из группы'),
+                  onTap: () => Navigator.pop(context, 'leave'),
+                ),
+              if (chat.type != 'support')
+                ListTile(
+                  leading: Icon(
+                    Icons.delete_outline,
+                    color: AppColors.of(context).error,
+                  ),
+                  title: const Text('Удалить чат'),
+                  onTap: () => Navigator.pop(context, 'delete'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == null || !mounted) return;
+    try {
+      if (action == 'leave') {
+        await ref.read(chatRepositoryProvider).leaveGroup(chat.id);
+      } else if (action == 'delete') {
+        await ref.read(chatsListProvider.notifier).deleteChat(chat.id);
+      }
+      if (!mounted) return;
+      final router = GoRouter.of(context);
+      final path = chatPathForRole(ref.read(authProvider).user?.role);
+      widget.onClose?.call();
+      router.go(path);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось изменить чат')),
+      );
+    }
+  }
+
   Future<void> _onParticipantTap(ChatParticipant person) async {
     final roles = <UserRole>{UserRole.fromJson(person.role)};
     await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModal) {
@@ -256,6 +395,15 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                           FilterChip(
                             label: Text(adminRoleLabel(role)),
                             selected: roles.contains(role),
+                            showCheckmark: true,
+                            checkmarkColor: AppColors.of(context).textOnAccent,
+                            selectedColor: AppColors.of(context).accent,
+                            labelStyle: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: roles.contains(role)
+                                      ? AppColors.of(context).textOnAccent
+                                      : AppColors.of(context).textPrimary,
+                                ),
                             onSelected: (selected) {
                               setModal(() {
                                 if (selected) {
@@ -329,6 +477,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
     var relation = 'relative';
     final result = await showDialog<({String phone, String name, String relation})>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setLocal) {
@@ -451,6 +600,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
   Future<void> _addSupportStaff(ChatDetails chat) async {
     final role = await showModalBottomSheet<String>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) {
         return SafeArea(
           child: Column(
@@ -501,6 +651,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
     final already = chat.participants.map((p) => p.id).toSet();
     final pick = await showModalBottomSheet<StaffRosterMember>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) {
         return SafeArea(
           child: ListView(
@@ -569,6 +720,37 @@ class _ArchiveList extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (_, _) => const Center(child: Text('Не удалось загрузить')),
       data: (items) {
+        if (kind == 'media') {
+          final photos = items
+              .where((item) => item.attachmentUrl != null)
+              .toList();
+          if (photos.isEmpty) {
+            return const Center(child: Text('Медиа пока нет'));
+          }
+          return GridView.builder(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: 2,
+              crossAxisSpacing: 2,
+            ),
+            itemCount: photos.length,
+            itemBuilder: (context, index) {
+              final item = photos[index];
+              return GestureDetector(
+                onTap: () => ChatImageViewer.open(
+                  context,
+                  url: item.attachmentUrl!,
+                ),
+                child: Image.network(
+                  item.attachmentUrl!,
+                  fit: BoxFit.cover,
+                ),
+              );
+            },
+          );
+        }
+
         if (items.isEmpty) {
           return Center(
             child: Text(
@@ -588,27 +770,6 @@ class _ArchiveList extends ConsumerWidget {
           itemCount: items.length,
           itemBuilder: (context, index) {
             final item = items[index];
-            if (kind == 'media' && item.attachmentUrl != null) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: GestureDetector(
-                  onTap: () => ChatImageViewer.open(
-                    context,
-                    url: item.attachmentUrl!,
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      item.attachmentUrl!,
-                      height: 140,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              );
-            }
-
             if (kind == 'links') {
               return Column(
                 children: item.urls
@@ -678,6 +839,155 @@ class _ArchiveList extends ConsumerWidget {
       },
     );
   }
+}
+
+class _TelegramProfile extends StatelessWidget {
+  const _TelegramProfile({
+    required this.chat,
+    required this.onMessage,
+    required this.onSound,
+    required this.onSearch,
+    required this.onMore,
+  });
+
+  final ChatDetails chat;
+  final VoidCallback onMessage;
+  final VoidCallback onSound;
+  final VoidCallback onSearch;
+  final VoidCallback onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final phone = chat.peerPhone?.trim() ?? '';
+    return Column(
+      children: [
+        const SizedBox(height: 8),
+        AppAvatar(label: chat.title, size: 96),
+        const SizedBox(height: 12),
+        Text(
+          chat.title,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            _ProfileAction(
+              icon: Icons.chat_bubble_outline,
+              label: 'Сообщение',
+              onTap: onMessage,
+            ),
+            _ProfileAction(
+              icon: chat.muted
+                  ? Icons.notifications_off_outlined
+                  : Icons.notifications_outlined,
+              label: 'Звук',
+              onTap: onSound,
+            ),
+            _ProfileAction(
+              icon: Icons.search,
+              label: 'Поиск',
+              onTap: onSearch,
+            ),
+            _ProfileAction(
+              icon: Icons.more_horiz,
+              label: 'Ещё',
+              onTap: onMore,
+            ),
+          ],
+        ),
+        if (chat.type == 'personal' && phone.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: colors.surfaceMuted,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'мобильный',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatPhone(phone),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: colors.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ProfileAction extends StatelessWidget {
+  const _ProfileAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Material(
+          color: colors.surfaceMuted,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                children: [
+                  Icon(icon, size: 22, color: colors.accent),
+                  const SizedBox(height: 6),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+String _formatPhone(String raw) {
+  var digits = raw.replaceAll(RegExp(r'\D'), '');
+  if (digits.length == 11 && digits.startsWith('8')) {
+    digits = '7${digits.substring(1)}';
+  }
+  if (digits.length == 11 && digits.startsWith('7')) {
+    return '+7 ${digits.substring(1, 4)} ${digits.substring(4, 7)} ${digits.substring(7, 9)} ${digits.substring(9)}';
+  }
+  return raw;
 }
 
 String _chatRoleLabel(String role) {

@@ -4,13 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Prisma, UserRole } from '@prisma/client';
-import { SmsService } from '../auth/sms.service';
+import { OrderStatus, Prisma, ProjectStatus, UserRole } from '@prisma/client';
 import { canSeeContactPhone } from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
 import { CartService } from '../commerce/cart.service';
 import { OrdersService } from '../commerce/orders.service';
+import { LiveSyncService } from '../live/live-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProjectsService } from '../projects/projects.service';
 import { clientLinkedToStaffWhere } from '../projects/project-access';
@@ -39,8 +38,7 @@ export class StaffService {
     private readonly ordersService: OrdersService,
     private readonly pushService: PushService,
     private readonly chatService: ChatService,
-    private readonly smsService: SmsService,
-    private readonly configService: ConfigService,
+    private readonly liveSync: LiveSyncService,
   ) {}
 
   async listClients(params: {
@@ -113,8 +111,12 @@ export class StaffService {
       this.prisma.user.count({ where }),
     ]);
 
+    const counts = await this.projectCartCounts(items.map((user) => user.id));
+
     return {
-      items: items.map((user) => this.formatClientSummary(user)),
+      items: items.map((user) =>
+        this.formatClientSummary(user, counts.get(user.id) ?? 0),
+      ),
       total,
       page: params.page,
       limit: params.limit,
@@ -211,9 +213,7 @@ export class StaffService {
 
   async getBrief(actor: JwtPayload, clientId: string, projectId: string) {
     await this.assertClientAccess(actor, clientId);
-    const brief = await this.projectsService.getBrief(clientId, projectId);
-    // Staff always sees brief as locked (read-only contract for 13B).
-    return { ...brief, isLocked: true };
+    return this.projectsService.getBrief(clientId, projectId);
   }
 
   async getBriefPdf(actor: JwtPayload, clientId: string, projectId: string) {
@@ -257,14 +257,6 @@ export class StaffService {
       quantity,
       productName: product?.name ?? null,
       projectId,
-    });
-
-    await this.pushService.sendToUser(clientId, {
-      title: 'Корзина обновлена',
-      body: product?.name
-        ? `Команда DAVart добавила «${product.name}» в корзину проекта`
-        : 'Команда DAVart добавила товар в корзину проекта',
-      data: { type: 'cart', clientId, projectId },
     });
 
     return cart;
@@ -372,6 +364,44 @@ export class StaffService {
   async getOrder(actor: JwtPayload, clientId: string, orderId: string) {
     await this.assertClientAccess(actor, clientId);
     return this.ordersService.getById(clientId, orderId);
+  }
+
+  async updateOrderStatus(
+    actor: JwtPayload,
+    clientId: string,
+    orderId: string,
+    status: OrderStatus,
+  ) {
+    const current = await this.getOrder(actor, clientId, orderId);
+    const flow: OrderStatus[] = [
+      OrderStatus.created,
+      OrderStatus.confirmed,
+      OrderStatus.assembling,
+      OrderStatus.shipping,
+      OrderStatus.delivered,
+    ];
+    const from = flow.indexOf(current.status);
+    const to = flow.indexOf(status);
+    if (to !== from + 1) {
+      throw new BadRequestException('Можно перейти только на следующий статус');
+    }
+    return this.ordersService.updateStatus(orderId, status);
+  }
+
+  async advanceProjectStatus(
+    actor: JwtPayload,
+    projectId: string,
+    status: ProjectStatus,
+  ) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, isShowcase: false },
+      select: { userId: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    await this.assertClientAccess(actor, project.userId);
+    return this.projectsService.advanceStatus(projectId, status);
   }
 
   async createAddress(
@@ -497,15 +527,57 @@ export class StaffService {
     return user;
   }
 
-  private formatClientSummary(user: {
-    id: string;
-    phone: string;
-    name: string | null;
-    email: string | null;
-    birthDate: Date | null;
-    createdAt: Date;
-    _count: { clientProjects: number; orders: number };
-  }) {
+  private async projectCartCounts(userIds: string[]) {
+    const counts = new Map<string, number>();
+    if (userIds.length === 0) return counts;
+    const wanted = new Set(userIds);
+    const carts = await this.prisma.cart.findMany({
+      where: {
+        project: {
+          isShowcase: false,
+          OR: [
+            { userId: { in: userIds } },
+            { members: { some: { userId: { in: userIds } } } },
+          ],
+        },
+      },
+      select: {
+        project: {
+          select: {
+            userId: true,
+            members: { select: { userId: true } },
+          },
+        },
+        _count: { select: { items: true } },
+      },
+    });
+    for (const cart of carts) {
+      const project = cart.project;
+      if (!project) continue;
+      const targets = new Set<string>();
+      if (wanted.has(project.userId)) targets.add(project.userId);
+      for (const member of project.members) {
+        if (wanted.has(member.userId)) targets.add(member.userId);
+      }
+      for (const userId of targets) {
+        counts.set(userId, (counts.get(userId) ?? 0) + cart._count.items);
+      }
+    }
+    return counts;
+  }
+
+  private formatClientSummary(
+    user: {
+      id: string;
+      phone: string;
+      name: string | null;
+      email: string | null;
+      birthDate: Date | null;
+      createdAt: Date;
+      _count: { clientProjects: number; orders: number };
+    },
+    cartItemsCount: number,
+  ) {
     return {
       id: user.id,
       phone: user.phone,
@@ -514,7 +586,7 @@ export class StaffService {
       createdAt: user.createdAt,
       projectsCount: user._count.clientProjects,
       ordersCount: user._count.orders,
-      cartItemsCount: 0,
+      cartItemsCount,
     };
   }
 
@@ -561,12 +633,14 @@ export class StaffService {
 
     await this.assertClientAccess(actor, project.userId);
 
-    return this.chatService.assignToClientProject({
+    const assigned = await this.chatService.assignToClientProject({
       actorId: actor.sub,
       projectId,
       designerId: dto.designerId,
       surveyorId: dto.surveyorId,
     });
+    void this.liveSync.publish(projectId, 'project');
+    return assigned;
   }
 
   async inviteByPhone(
@@ -602,14 +676,6 @@ export class StaffService {
     });
 
     await this.chatService.ensureDavartChat(user.id);
-
-    const appUrl =
-      this.configService.get<string>('APP_DOWNLOAD_URL') ??
-      'https://davart.ru/app';
-    await this.smsService.sendText(
-      phone,
-      `Вас пригласили в DAVart. Скачать приложение: ${appUrl}`,
-    );
 
     return { id: user.id, phone: user.phone, invited: true };
   }

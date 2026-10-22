@@ -194,6 +194,26 @@ class StaffRepository {
     return Order.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<Order> updateOrderStatus(
+    String clientId,
+    String orderId,
+    String status,
+  ) async {
+    final response = await _dio.patch(
+      '/staff/clients/$clientId/orders/$orderId/status',
+      data: {'status': status},
+    );
+    return Order.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<Project> advanceProjectStatus(String projectId, String status) async {
+    final response = await _dio.post(
+      '/staff/projects/$projectId/status',
+      data: {'status': status},
+    );
+    return Project.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<List<Order>> listOrders(String clientId) async {
     final response = await _dio.get('/staff/clients/$clientId/orders');
     return (response.data as List<dynamic>)

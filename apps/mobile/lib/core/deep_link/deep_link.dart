@@ -38,6 +38,28 @@ String? locationFromDeepLink(Uri uri) {
     return path;
   }
 
+  if (segments.isNotEmpty && segments.first == 'chat' && segments.length >= 2) {
+    return '/chat/${segments[1]}';
+  }
+
+  if (segments.length == 1 && segments.first == 'cart') {
+    return '/cart';
+  }
+
+  if (segments.length >= 2 &&
+      (segments.first == 'project' || segments.first == 'projects')) {
+    return '/projects/${segments[1]}';
+  }
+
+  if (segments.length >= 2 &&
+      (segments.first == 'document' || segments.first == 'documents')) {
+    return '/projects/${segments[1]}';
+  }
+
+  if (path == '/cart' || path.startsWith('/chat/') || path.startsWith('/projects/')) {
+    return path;
+  }
+
   return null;
 }
 

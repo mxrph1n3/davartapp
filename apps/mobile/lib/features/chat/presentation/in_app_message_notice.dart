@@ -69,13 +69,15 @@ class _InAppMessageNoticeState extends ConsumerState<InAppMessageNotice> {
     final previousById = {for (final chat in before) chat.id: chat};
     for (final chat in after) {
       final last = chat.lastMessage;
+      if (chat.muted) continue;
       if (last == null || chat.unreadCount <= 0) continue;
       final old = previousById[chat.id];
       if (old != null && old.lastMessage?.id == last.id) continue;
       if (old != null && chat.unreadCount <= old.unreadCount) continue;
+      final sender = last.senderName.trim();
       _present(
         chatId: chat.id,
-        title: chat.title,
+        title: sender.isEmpty ? chat.title : sender,
         body: last.preview,
         messageId: last.id,
       );
@@ -91,7 +93,10 @@ class _InAppMessageNoticeState extends ConsumerState<InAppMessageNotice> {
     if (!mounted || messageId == _lastMessageId) return;
     final prefs = ref.read(notificationPrefsProvider).valueOrNull;
     if (prefs != null && !prefs.messages) return;
-    if (_isViewingChat(chatId)) return;
+    final inForeground =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (inForeground && _isViewingChat(chatId)) return;
+    if (_isMuted(chatId)) return;
 
     _lastMessageId = messageId;
     unawaited(
@@ -102,6 +107,15 @@ class _InAppMessageNoticeState extends ConsumerState<InAppMessageNotice> {
             chatId: chatId,
           ),
     );
+  }
+
+  bool _isMuted(String chatId) {
+    final chats = ref.read(chatsListProvider).valueOrNull;
+    if (chats == null) return false;
+    for (final chat in chats) {
+      if (chat.id == chatId && chat.muted) return true;
+    }
+    return false;
   }
 
   bool _isViewingChat(String chatId) {

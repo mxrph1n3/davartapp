@@ -38,13 +38,19 @@ Future<void> toggleFavoriteWithLogin(
 }
 
 void finishEmbeddedLogin(BuildContext context) {
+  if (!context.mounted) return;
+  final router = GoRouter.of(context);
   var pops = 0;
-  while (context.canPop() && pops < 2) {
-    context.pop();
+  while (pops < 2 && router.canPop()) {
+    try {
+      router.pop();
+    } catch (_) {
+      break;
+    }
     pops += 1;
   }
   if (pops == 0 && context.mounted) {
-    context.go(AppRoutes.catalog);
+    router.go(AppRoutes.catalog);
   }
 }
 

@@ -31,7 +31,7 @@ class VoiceWaveform extends StatelessWidget {
             },
       child: SizedBox(
         height: height,
-        width: double.infinity,
+        width: 168,
         child: CustomPaint(
           painter: _WaveformPainter(
             bars: bars.isEmpty ? const [0.2, 0.4, 0.3] : bars,

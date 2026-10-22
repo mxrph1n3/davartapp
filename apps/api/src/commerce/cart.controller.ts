@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -17,6 +16,7 @@ import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { CartService } from './cart.service';
 import {
   AddCartItemDto,
+  AssignCartDto,
   CartItemIdParamDto,
   CartProjectQueryDto,
   UpdateCartItemDto,
@@ -26,6 +26,11 @@ import {
 @UseGuards(JwtAuthGuard)
 export class CartController {
   constructor(private readonly cartService: CartService) {}
+
+  @Get('projects')
+  listProjectCarts(@CurrentUser() user: JwtPayload) {
+    return this.cartService.listProjectCarts(user.sub);
+  }
 
   @Get()
   getCart(
@@ -40,11 +45,20 @@ export class CartController {
     );
   }
 
+  @Post('assign')
+  @HttpCode(200)
+  assign(@CurrentUser() user: JwtPayload, @Body() dto: AssignCartDto) {
+    return this.cartService.assignPersonalCart(
+      user.sub,
+      user.role,
+      dto.projectId,
+      user.extraRoles ?? [],
+      dto.itemIds,
+    );
+  }
+
   @Post('items')
   addItem(@CurrentUser() user: JwtPayload, @Body() dto: AddCartItemDto) {
-    if (!dto.projectId) {
-      throw new BadRequestException('projectId is required');
-    }
     return this.cartService.addItem(
       dto.projectId,
       user.sub,

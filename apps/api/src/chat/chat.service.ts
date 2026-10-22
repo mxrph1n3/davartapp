@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ChatType, MessageType, Prisma, UserRole } from '@prisma/client';
 import {
   canSeeContactPhone,
@@ -15,7 +16,6 @@ import {
   allRolesOf,
   SUPPORT_DUTY_ROLES,
 } from '../auth/roles';
-import { SmsService } from '../auth/sms.service';
 import { actorProjectAccessWhere } from '../projects/project-access';
 import { randomUUID } from 'crypto';
 import { resolveProductImageUrl } from '../catalog/demo-product-image';
@@ -23,6 +23,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
 import { StorageService } from '../storage/storage.service';
 import { PushService } from '../push/push.service';
+import { ChatGateway } from './chat.gateway';
 import {
   AttachmentUploadUrlDto,
   CHAT_TYPE_LABELS,
@@ -105,8 +106,8 @@ export class ChatService {
     private readonly storage: StorageService,
     private readonly redis: RedisService,
     private readonly pushService: PushService,
-    private readonly smsService: SmsService,
-    private readonly configService: ConfigService,
+    @Inject(forwardRef(() => ChatGateway))
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   async listChats(userId: string) {
@@ -117,25 +118,28 @@ export class ChatService {
     const viewerRoles = viewer ? [viewer.role, ...viewer.extraRoles] : [];
     const viewerRole =
       viewerRoles.find((role) => isStudioRole(role)) ?? viewer?.role;
+    if (viewerRole && isStudioRole(viewerRole)) {
+      await this.attachViewerToProjectChats(userId);
+    }
 
     const participants = await this.prisma.chatParticipant.findMany({
       where: { userId, hiddenAt: null },
-      include: {
+      select: {
+        unreadCount: true,
+        pinnedAt: true,
+        mutedAt: true,
+        alias: true,
         chat: {
-          include: {
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            projectId: true,
+            updatedAt: true,
             project: { select: { id: true, name: true, userId: true } },
             participants: {
-              include: {
+              select: {
                 user: {
-                  select: { id: true, name: true, phone: true, role: true },
-                },
-              },
-            },
-            messages: {
-              orderBy: { createdAt: 'desc' },
-              take: 1,
-              include: {
-                sender: {
                   select: { id: true, name: true, phone: true, role: true },
                 },
               },
@@ -143,8 +147,10 @@ export class ChatService {
           },
         },
       },
-      orderBy: { chat: { updatedAt: 'desc' } },
     });
+    const lastByChat = await this.loadLastMessages(
+      participants.map((row) => row.chat.id),
+    );
 
     const buckets = new Map<string, typeof participants>();
     for (const participant of participants) {
@@ -157,21 +163,31 @@ export class ChatService {
     const items = [...buckets.values()].map((bucket) => {
       const participant = bucket.reduce((best, row) => {
         const bestAt =
-          best.chat.messages[0]?.createdAt ?? best.chat.updatedAt;
-        const rowAt = row.chat.messages[0]?.createdAt ?? row.chat.updatedAt;
+          lastByChat.get(best.chat.id)?.createdAt ?? best.chat.updatedAt;
+        const rowAt =
+          lastByChat.get(row.chat.id)?.createdAt ?? row.chat.updatedAt;
         return rowAt > bestAt ? row : best;
       });
       const lastMessage = bucket
-        .map((row) => row.chat.messages[0])
+        .map((row) => lastByChat.get(row.chat.id))
         .filter((message) => message != null)
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      const alias =
+        bucket.find((row) => row.alias?.trim())?.alias ?? participant.alias;
       return {
         id: participant.chat.id,
         type: participant.chat.type,
         typeLabel: CHAT_TYPE_LABELS[participant.chat.type],
-        title: this.resolveChatTitle(participant.chat, viewerRole, userId),
+        title: this.resolveChatTitle(
+          participant.chat,
+          viewerRole,
+          userId,
+          alias,
+        ),
         clientId: this.resolveClientId(participant.chat, viewerRole),
         projectId: participant.chat.projectId,
+        pinned: bucket.some((row) => row.pinnedAt != null),
+        muted: bucket.some((row) => row.mutedAt != null),
         unreadCount: bucket.reduce((sum, row) => sum + row.unreadCount, 0),
         updatedAt: lastMessage?.createdAt ?? participant.chat.updatedAt,
         lastMessage: lastMessage
@@ -179,28 +195,100 @@ export class ChatService {
               id: lastMessage.id,
               type: lastMessage.type,
               preview: this.messagePreview(lastMessage),
-              senderName: this.publicDisplayName(lastMessage.sender),
+              senderName: this.senderLabel(lastMessage.sender),
               createdAt: lastMessage.createdAt,
             }
           : null,
       };
     });
 
-    if (viewerRole === UserRole.client) {
-      items.sort((a, b) => {
+    items.sort((a, b) => {
+      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+      if (viewerRole === UserRole.client) {
         if (a.type === ChatType.support && b.type !== ChatType.support) {
           return -1;
         }
         if (b.type === ChatType.support && a.type !== ChatType.support) {
           return 1;
         }
-        return (
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-        );
-      });
-    }
+      }
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
     return items;
+  }
+
+  /** One indexed lookup for the newest message in each chat. Does not scan history. */
+  private async loadLastMessages(chatIds: string[]) {
+    const unique = [...new Set(chatIds)];
+    const map = new Map<
+      string,
+      {
+        id: string;
+        type: MessageType;
+        content: string | null;
+        attachmentName: string | null;
+        createdAt: Date;
+        sender: {
+          id: string;
+          name: string | null;
+          phone: string;
+          role: UserRole;
+        };
+      }
+    >();
+    if (unique.length === 0) return map;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        chat_id: string;
+        type: MessageType;
+        content: string | null;
+        attachment_name: string | null;
+        created_at: Date;
+        sender_id: string;
+        sender_name: string | null;
+        sender_phone: string;
+        sender_role: UserRole;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT ON (m.chat_id)
+        m.id,
+        m.chat_id,
+        m.type,
+        m.content,
+        m.attachment_name,
+        m.created_at,
+        u.id AS sender_id,
+        u.name AS sender_name,
+        u.phone AS sender_phone,
+        u.role AS sender_role
+      FROM messages m
+      JOIN users u ON u.id = m.sender_id
+      WHERE m.chat_id IN (${Prisma.join(unique)})
+      ORDER BY m.chat_id, m.created_at DESC
+    `);
+
+    for (const row of rows) {
+      map.set(row.chat_id, {
+        id: row.id,
+        type: row.type,
+        content: row.content,
+        attachmentName: row.attachment_name,
+        createdAt:
+          row.created_at instanceof Date
+            ? row.created_at
+            : new Date(row.created_at),
+        sender: {
+          id: row.sender_id,
+          name: row.sender_name,
+          phone: row.sender_phone,
+          role: row.sender_role,
+        },
+      });
+    }
+    return map;
   }
 
   async getUnreadTotal(userId: string) {
@@ -343,8 +431,8 @@ export class ChatService {
   }
 
   /**
-   * Match normalized RU phones to existing users (for device contacts UI).
-   * Does not create accounts — unregistered numbers stay invite-via-SMS.
+   * Match normalized RU phones to existing users (for the contacts list).
+   * Does not create accounts and does not send SMS.
    */
   async matchPhones(actorId: string, phonesRaw: string[]) {
     const normalized = [
@@ -367,16 +455,16 @@ export class ChatService {
       };
     }
 
-    const last10Set = new Set(normalized.map((p) => p.slice(-10)));
     const requestPhoneByLast10 = new Map(
       normalized.map((p) => [p.slice(-10), p] as const),
     );
 
-    // In-memory last-10 match: reliable across +7 / 8 / 7 / formatting quirks.
     const users = await this.prisma.user.findMany({
-      where: { id: { not: actorId } },
+      where: {
+        id: { not: actorId },
+        phone: { in: normalized },
+      },
       select: { id: true, name: true, phone: true, role: true },
-      take: 5000,
     });
 
     const matches: Array<{
@@ -390,10 +478,10 @@ export class ChatService {
 
     for (const user of users) {
       const digits = (user.phone ?? '').replace(/\D/g, '').slice(-10);
-      if (digits.length !== 10 || !last10Set.has(digits)) continue;
+      if (digits.length !== 10) continue;
       if (seenIds.has(user.id)) continue;
       seenIds.add(user.id);
-      const requestPhone = requestPhoneByLast10.get(digits) ?? `+7${digits}`;
+      const requestPhone = requestPhoneByLast10.get(digits) ?? user.phone;
       matches.push({
         phone: requestPhone,
         id: user.id,
@@ -406,7 +494,7 @@ export class ChatService {
     return { matches };
   }
 
-  /** Start personal chat by phone; create user if needed and send SMS invite. */
+  /** Start personal chat by phone. Creates the account if needed. No SMS. */
   async inviteByPhone(actorId: string, phoneRaw: string, name?: string) {
     const phone = this.normalizeRuPhone(phoneRaw);
     if (!phone) {
@@ -440,18 +528,6 @@ export class ChatService {
     });
 
     const chat = await this.getOrCreatePersonalChat(actorId, invitee.id);
-
-    // SMS invite only for brand-new accounts — existing users just get a DM.
-    if (isNew) {
-      const appUrl =
-        this.configService.get<string>('APP_DOWNLOAD_URL') ??
-        'https://davart.ru/app';
-      const from = actor.name?.trim() || actor.phone || 'пользователь DAVart';
-      await this.smsService.sendText(
-        phone,
-        `${from} приглашает вас в чат DAVart. Скачать: ${appUrl}`,
-      );
-    }
 
     return { ...chat, invited: isNew, phone: invitee.phone };
   }
@@ -496,30 +572,46 @@ export class ChatService {
   }
 
   async getMessages(userId: string, chatId: string, page = 1, limit = 30) {
-    await this.ensureParticipant(userId, chatId);
-    const chatIds = await this.personalThreadChatIds(userId, chatId);
-
-    const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([
-      this.prisma.message.findMany({
-        where: { chatId: { in: chatIds } },
-        include: messageInclude,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limit,
-      }),
-      this.prisma.message.count({ where: { chatId: { in: chatIds } } }),
+    const safeLimit = Math.min(Math.max(limit, 1), 50);
+    const [, chatIds] = await Promise.all([
+      this.ensureParticipant(userId, chatId),
+      this.personalThreadChatIds(userId, chatId),
     ]);
 
+    const skip = (page - 1) * safeLimit;
+    // One extra row tells us there is older history, without counting the thread.
+    const rows = await this.prisma.message.findMany({
+      where: { chatId: { in: chatIds } },
+      include: messageInclude,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: safeLimit + 1,
+    });
+    const hasMore = rows.length > safeLimit;
+    const items = hasMore ? rows.slice(0, safeLimit) : rows;
+    const readRows = await this.prisma.chatParticipant.findMany({
+      where: { chatId: { in: chatIds } },
+      select: { userId: true, chatId: true, lastReadAt: true },
+    });
+    const fullyReadAt = this.fullyReadAtFromRows(readRows, userId);
+
     const formatted = await Promise.all(
-      items.map((message) => this.formatMessage(message, userId)),
+      items.map((message) =>
+        this.formatMessage(message, userId, {
+          read:
+            message.senderId === userId &&
+            fullyReadAt != null &&
+            message.createdAt.getTime() <= fullyReadAt.getTime(),
+        }),
+      ),
     );
 
     return {
       items: formatted.reverse(),
       page,
-      limit,
-      total,
+      limit: safeLimit,
+      total: skip + formatted.length + (hasMore ? 1 : 0),
+      hasMore,
     };
   }
 
@@ -657,23 +749,37 @@ export class ChatService {
       viewer && hasSupportDutyRole(viewerRoles)
         ? UserRole.complectator
         : viewer?.role;
+    const mine = refreshed.participants.find((p) => p.user.id === userId);
+    const revealPersonalPhone = refreshed.type === ChatType.personal;
 
     const visibleParticipants = viewerIsStudio
       ? refreshed.participants
       : refreshed.participants.filter((p) => p.user.id === userId);
+    const other = refreshed.participants.find((p) => p.user.id !== userId);
 
     return {
       id: refreshed.id,
       type: refreshed.type,
       typeLabel: CHAT_TYPE_LABELS[refreshed.type],
-      title: this.resolveChatTitle(refreshed, viewerRole, userId),
+      title: this.resolveChatTitle(refreshed, viewerRole, userId, mine?.alias),
       projectId: refreshed.projectId,
       projectName: refreshed.project?.name ?? null,
       clientId: this.resolveClientId(refreshed, viewerRole),
+      pinned: mine?.pinnedAt != null,
+      muted: mine?.mutedAt != null,
+      alias: mine?.alias ?? null,
+      peerPhone: revealPersonalPhone && other ? other.user.phone : null,
+      peerName:
+        revealPersonalPhone && other
+          ? this.publicDisplayName(other.user, { revealPhone: true })
+          : null,
       participants: visibleParticipants.map((participant) => ({
         id: participant.user.id,
         name: this.publicDisplayName(participant.user),
-        phone: canSeeContactPhone(viewerRoles) ? participant.user.phone : '',
+        phone:
+          revealPersonalPhone || canSeeContactPhone(viewerRoles)
+            ? participant.user.phone
+            : '',
         role: participant.user.role,
       })),
     };
@@ -727,7 +833,7 @@ export class ChatService {
         attachmentUrl,
         attachmentName: message.attachmentName,
         urls,
-        senderName: this.publicDisplayName(message.sender),
+        senderName: this.senderLabel(message.sender),
         createdAt: message.createdAt,
       });
     }
@@ -743,13 +849,60 @@ export class ChatService {
   async markRead(userId: string, chatId: string) {
     await this.ensureParticipant(userId, chatId);
     const chatIds = await this.personalThreadChatIds(userId, chatId);
+    const readAt = new Date();
 
     await this.prisma.chatParticipant.updateMany({
       where: { userId, chatId: { in: chatIds } },
-      data: { lastReadAt: new Date(), unreadCount: 0 },
+      data: { lastReadAt: readAt, unreadCount: 0 },
     });
 
-    return { chatId, readAt: new Date() };
+    const receipts = await this.readReceiptsForOthers(userId, chatIds);
+    return { chatId, readAt, receipts };
+  }
+
+  /** Double-check cursor for each other member: everyone else has read up to this time. */
+  private async readReceiptsForOthers(readerId: string, chatIds: string[]) {
+    const rows = await this.prisma.chatParticipant.findMany({
+      where: { chatId: { in: chatIds } },
+      select: { userId: true, chatId: true, lastReadAt: true },
+    });
+    const others = [
+      ...new Set(rows.map((row) => row.userId).filter((id) => id !== readerId)),
+    ];
+    return others.map((userId) => ({
+      userId,
+      chatIds: [
+        ...new Set(
+          rows.filter((row) => row.userId === userId).map((row) => row.chatId),
+        ),
+      ],
+      readAt: this.fullyReadAtFromRows(rows, userId),
+    }));
+  }
+
+  private fullyReadAtFromRows(
+    rows: Array<{ userId: string; lastReadAt: Date | null }>,
+    viewerId: string,
+  ): Date | null {
+    const byUser = new Map<string, Date | null>();
+    for (const row of rows) {
+      if (row.userId === viewerId) continue;
+      const prev = byUser.get(row.userId);
+      if (prev === undefined) {
+        byUser.set(row.userId, row.lastReadAt);
+        continue;
+      }
+      if (row.lastReadAt && (!prev || row.lastReadAt > prev)) {
+        byUser.set(row.userId, row.lastReadAt);
+      }
+    }
+    if (byUser.size === 0) return null;
+    let min: Date | null = null;
+    for (const value of byUser.values()) {
+      if (!value) return null;
+      if (!min || value < min) min = value;
+    }
+    return min;
   }
 
   async createAttachmentUploadUrl(userId: string, dto: AttachmentUploadUrlDto) {
@@ -1311,6 +1464,7 @@ export class ChatService {
         name: true,
         userId: true,
         isShowcase: true,
+        isDraft: true,
         projectChatDismissed: true,
         designerId: true,
         managerId: true,
@@ -1321,7 +1475,7 @@ export class ChatService {
     if (!project) {
       throw new NotFoundException('Project not found');
     }
-    if (project.isShowcase || project.projectChatDismissed) {
+    if (project.isShowcase || project.isDraft || project.projectChatDismissed) {
       return null;
     }
 
@@ -1336,6 +1490,10 @@ export class ChatService {
         designerId: project.designerId,
         managerId: project.managerId,
       });
+      this.chatGateway.publishChatList(
+        this.collectProjectParticipantIds(project),
+        existing.id,
+      );
       return existing;
     }
 
@@ -1352,8 +1510,36 @@ export class ChatService {
       designerId: project.designerId,
       managerId: project.managerId,
     });
+    this.chatGateway.publishChatList(userIds, chat.id);
 
     return chat;
+  }
+
+  /** Duty staff missing from their own project chat get that chat. */
+  private async attachViewerToProjectChats(staffId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: {
+        isDraft: false,
+        isShowcase: false,
+        projectChatDismissed: false,
+        OR: [
+          { designerId: staffId },
+          { managerId: staffId },
+          { surveyorId: staffId },
+          { members: { some: { userId: staffId } } },
+        ],
+        chats: {
+          none: {
+            type: ChatType.project,
+            participants: { some: { userId: staffId } },
+          },
+        },
+      },
+      select: { id: true },
+    });
+    for (const project of projects) {
+      await this.ensureProjectChat(project.id);
+    }
   }
 
   /** First system greeting for the client when a project chat appears. */
@@ -1557,7 +1743,7 @@ export class ChatService {
               id: lastMessage.id,
               type: lastMessage.type,
               preview: this.messagePreview(lastMessage),
-              senderName: this.publicDisplayName(lastMessage.sender),
+              senderName: this.senderLabel(lastMessage.sender),
               createdAt: lastMessage.createdAt,
             }
           : null,
@@ -1779,6 +1965,128 @@ export class ChatService {
     });
   }
 
+  async createGroup(userId: string, title: string, userIds: string[]) {
+    const name = title.trim();
+    if (!name) throw new BadRequestException('Title is required');
+    const members = [...new Set(userIds.filter((id) => id && id !== userId))];
+    if (members.length === 0) {
+      throw new BadRequestException('Add at least one person');
+    }
+    const found = await this.prisma.user.findMany({
+      where: { id: { in: members } },
+      select: { id: true },
+    });
+    if (found.length !== members.length) {
+      throw new NotFoundException('User not found');
+    }
+    const chat = await this.createChatWithParticipants({
+      type: ChatType.group,
+      title: name,
+      userIds: [userId, ...members],
+    });
+    return this.getChat(userId, chat.id);
+  }
+
+  async updateChat(
+    userId: string,
+    chatId: string,
+    input: { title?: string; alias?: string },
+  ) {
+    await this.ensureParticipant(userId, chatId);
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { type: true },
+    });
+    if (!chat) throw new NotFoundException('Chat not found');
+
+    if (input.title !== undefined) {
+      if (chat.type !== ChatType.group) {
+        throw new BadRequestException('Only a group can be renamed');
+      }
+      const title = input.title.trim();
+      if (!title) throw new BadRequestException('Title is required');
+      await this.prisma.chat.update({
+        where: { id: chatId },
+        data: { title },
+      });
+    }
+
+    if (input.alias !== undefined) {
+      if (chat.type !== ChatType.personal) {
+        throw new BadRequestException(
+          'Only a personal chat has a private name',
+        );
+      }
+      const alias = input.alias.trim();
+      const chatIds = await this.personalThreadChatIds(userId, chatId);
+      await this.prisma.chatParticipant.updateMany({
+        where: { userId, chatId: { in: chatIds } },
+        data: { alias: alias || null },
+      });
+    }
+
+    return this.getChat(userId, chatId);
+  }
+
+  async setChatPinned(userId: string, chatId: string, pinned: boolean) {
+    await this.ensureParticipant(userId, chatId);
+    const chatIds = await this.personalThreadChatIds(userId, chatId);
+    await this.prisma.chatParticipant.updateMany({
+      where: { userId, chatId: { in: chatIds } },
+      data: { pinnedAt: pinned ? new Date() : null },
+    });
+    return { chatId, pinned };
+  }
+
+  async setMuted(userId: string, chatId: string, muted: boolean) {
+    await this.ensureParticipant(userId, chatId);
+    const chatIds = await this.personalThreadChatIds(userId, chatId);
+    await this.prisma.chatParticipant.updateMany({
+      where: { userId, chatId: { in: chatIds } },
+      data: { mutedAt: muted ? new Date() : null },
+    });
+    return { chatId, muted };
+  }
+
+  async preferredChatId(userId: string, chatId: string) {
+    const ids = await this.personalThreadChatIds(userId, chatId);
+    if (ids.length <= 1) return ids[0] ?? chatId;
+    const rows = await this.prisma.chat.findMany({
+      where: { id: { in: ids } },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true },
+    });
+    return rows[0]?.id ?? chatId;
+  }
+
+  async isChatMuted(userId: string, chatId: string) {
+    const chatIds = await this.personalThreadChatIds(userId, chatId);
+    const row = await this.prisma.chatParticipant.findFirst({
+      where: {
+        userId,
+        chatId: { in: chatIds },
+        mutedAt: { not: null },
+      },
+      select: { id: true },
+    });
+    return row != null;
+  }
+
+  async leaveGroup(userId: string, chatId: string) {
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { type: true },
+    });
+    if (!chat || chat.type !== ChatType.group) {
+      throw new BadRequestException('Only a group can be left');
+    }
+    await this.ensureParticipant(userId, chatId);
+    await this.prisma.chatParticipant.delete({
+      where: { chatId_userId: { chatId, userId } },
+    });
+    return { message: 'Left the group' };
+  }
+
   private async createChatWithParticipants(params: {
     type: ChatType;
     title?: string;
@@ -1988,7 +2296,14 @@ export class ChatService {
     },
     viewerRole?: UserRole,
     viewerId?: string,
+    alias?: string | null,
   ) {
+    if (chat.type === ChatType.personal && alias?.trim()) {
+      return alias.trim();
+    }
+    if (chat.type === ChatType.group && chat.title?.trim()) {
+      return chat.title.trim();
+    }
     if (chat.type === ChatType.support) {
       if (isStudioRole(viewerRole) && chat.participants && viewerId) {
         const client = chat.participants.find(
@@ -2013,6 +2328,15 @@ export class ChatService {
     if (chat.title) return chat.title;
     if (chat.project) return chat.project.name;
     return CHAT_TYPE_LABELS[chat.type];
+  }
+
+  /** Name on a message and in a notification: the person, not the chat title. */
+  private senderLabel(user: { name?: string | null; phone?: string | null }) {
+    const name = user.name?.trim();
+    if (name) return name;
+    const phone = user.phone?.trim();
+    if (phone) return phone;
+    return 'Участник';
   }
 
   private publicDisplayName(
@@ -2054,34 +2378,6 @@ export class ChatService {
     }
   }
 
-  /**
-   * Phone is closed and push did not go out: deliver the text by SMS
-   * so the message still reaches the person.
-   */
-  async notifyOfflineBySms(
-    userId: string,
-    message: {
-      type: string;
-      content?: string | null;
-      attachmentName?: string | null;
-      sender?: { name?: string | null };
-    },
-  ) {
-    try {
-      const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { phone: true },
-      });
-      const phone = user?.phone?.trim();
-      if (!phone || phone.startsWith('+7000')) return;
-      const push = this.buildPushPayload(message);
-      const text = `${push.title}: ${push.body}`.slice(0, 280);
-      await this.smsService.sendText(phone, text);
-    } catch (error) {
-      this.logger.warn(`Offline SMS failed for ${userId}: ${error}`);
-    }
-  }
-
   buildPushPayload(message: {
     type: string;
     content?: string | null;
@@ -2112,13 +2408,20 @@ export class ChatService {
     };
   }
 
-  private async formatMessage(message: MessageWithRelations, viewerId: string) {
+  private async formatMessage(
+    message: MessageWithRelations,
+    viewerId: string,
+    options?: { read?: boolean },
+  ) {
     let attachmentUrl: string | null = null;
     if (message.attachmentKey && this.storage.isAvailable()) {
       attachmentUrl = await this.storage.getDownloadUrl(message.attachmentKey);
     }
 
-    const reactionMap = new Map<string, { emoji: string; count: number; mine: boolean }>();
+    const reactionMap = new Map<
+      string,
+      { emoji: string; count: number; mine: boolean }
+    >();
     for (const reaction of message.reactions ?? []) {
       const current = reactionMap.get(reaction.emoji) ?? {
         emoji: reaction.emoji,
@@ -2156,16 +2459,17 @@ export class ChatService {
             type: message.replyTo.type,
             content: message.replyTo.content,
             attachmentName: message.replyTo.attachmentName,
-            senderName: this.publicDisplayName(message.replyTo.sender),
+            senderName: this.senderLabel(message.replyTo.sender),
           }
         : null,
       reactions: [...reactionMap.values()],
       isPinned: message.isPinned,
       sender: {
         id: message.sender.id,
-        name: this.publicDisplayName(message.sender),
+        name: this.senderLabel(message.sender),
       },
       isMine: message.senderId === viewerId,
+      read: options?.read ?? false,
       createdAt: message.createdAt,
     };
   }

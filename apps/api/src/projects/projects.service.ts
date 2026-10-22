@@ -12,8 +12,9 @@ import {
   ProjectStatus,
   UserRole,
 } from '@prisma/client';
-import { canSeeContactPhone, isStudioRole } from '../auth/roles';
+import { canSeeContactPhone, hasStudioRole, isStudioRole } from '../auth/roles';
 import { ChatService } from '../chat/chat.service';
+import { LiveSyncService } from '../live/live-sync.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   BriefPdfService,
@@ -65,18 +66,22 @@ export class ProjectsService {
     private readonly briefPdf: BriefPdfService,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
+    private readonly liveSync: LiveSyncService,
   ) {}
 
-  async listForUser(userId: string) {
+  async listForUser(userId: string, options?: { includeDrafts?: boolean }) {
     const actor = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true, extraRoles: true },
     });
     const roles = actor ? [actor.role, ...actor.extraRoles] : [];
     const hidePhones = !canSeeContactPhone(roles);
+    const access = actorProjectAccessWhere(userId, roles);
 
     const projects = await this.prisma.project.findMany({
-      where: actorProjectAccessWhere(userId, roles),
+      where: options?.includeDrafts
+        ? access
+        : { AND: [access, { isDraft: false }] },
       include: projectInclude,
       orderBy: { createdAt: 'asc' },
     });
@@ -118,8 +123,15 @@ export class ProjectsService {
     return this.formatProject(project);
   }
 
-  async create(userId: string, dto: CreateProjectDto) {
-    const name = dto.name?.trim() || (await this.nextProjectName());
+  async create(
+    userId: string,
+    dto: CreateProjectDto,
+    options?: { draft?: boolean },
+  ) {
+    const draft = options?.draft === true;
+    const name = draft
+      ? 'Черновик'
+      : dto.name?.trim() || (await this.nextProjectName());
     const project = await this.prisma.project.create({
       data: {
         userId,
@@ -129,6 +141,7 @@ export class ProjectsService {
         style: dto.style?.trim() || null,
         objectType: dto.objectType?.trim() || null,
         status: ProjectStatus.brief_filling,
+        isDraft: draft,
         brief: {
           create: {
             style: dto.style?.trim() || null,
@@ -145,9 +158,56 @@ export class ProjectsService {
       include: projectInclude,
     });
 
-    await this.chatService.ensureProjectChat(project.id);
+    if (draft) {
+      return this.formatProject(project);
+    }
 
-    return this.formatProject(project);
+    await this.assignDutyTeam(project.id);
+    await this.chatService.ensureProjectChat(project.id);
+    const ready = await this.findUserProject(userId, project.id);
+    return this.formatProject(ready);
+  }
+
+  /** Buyer finished the questionnaire: number, duty team, welcome chat. */
+  async submit(userId: string, projectId: string) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, userId, isShowcase: false },
+      include: { brief: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    if (!project.isDraft) {
+      throw new BadRequestException('Анкета уже отправлена');
+    }
+
+    const answers = project.brief?.answers;
+    const filled =
+      answers != null &&
+      typeof answers === 'object' &&
+      !Array.isArray(answers) &&
+      Object.keys(answers).length > 0;
+    if (!filled) {
+      throw new BadRequestException('Сначала заполните анкету');
+    }
+
+    const name = await this.nextProjectName();
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        isDraft: false,
+        name,
+        status: ProjectStatus.brief_filling,
+      },
+    });
+    await this.assignDutyTeam(projectId);
+    const chat = await this.chatService.ensureProjectChat(projectId);
+    const ready = await this.findUserProject(userId, projectId);
+    void this.liveSync.publish(projectId, 'project');
+    return {
+      project: this.formatProject(ready),
+      chatId: chat?.id ?? null,
+    };
   }
 
   async delete(userId: string, projectId: string) {
@@ -167,6 +227,56 @@ export class ProjectsService {
     await this.prisma.chat.deleteMany({ where: { projectId: project.id } });
     await this.prisma.project.delete({ where: { id: project.id } });
     return { message: 'Project deleted' };
+  }
+
+  /** Designer, complectator and surveyor on duty. The rest of the studio stays out. */
+  private async assignDutyTeam(projectId: string) {
+    const [designer, manager, surveyor, owner] = await Promise.all([
+      this.pickDutyUser(UserRole.designer),
+      this.pickDutyUser(UserRole.complectator),
+      this.pickDutyUser(UserRole.surveyor),
+      this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { userId: true },
+      }),
+    ]);
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        designerId: designer?.id,
+        managerId: manager?.id,
+        surveyorId: surveyor?.id,
+      },
+    });
+
+    const staffIds = new Set(
+      [designer?.id, manager?.id, surveyor?.id].filter(
+        (id): id is string => Boolean(id) && id !== owner?.userId,
+      ),
+    );
+    for (const staffId of staffIds) {
+      await this.prisma.projectMember.upsert({
+        where: { projectId_userId: { projectId, userId: staffId } },
+        update: {},
+        create: {
+          projectId,
+          userId: staffId,
+          role: ProjectMemberRole.member,
+        },
+      });
+    }
+  }
+
+  /** First account on that role stands in until a real shift roster exists. */
+  private pickDutyUser(role: UserRole) {
+    return this.prisma.user.findFirst({
+      where: {
+        OR: [{ role }, { extraRoles: { has: role } }],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
   }
 
   /** Human project number: «Проект №12» — client never picks the name. */
@@ -200,13 +310,36 @@ export class ProjectsService {
     const members = await this.prisma.projectMember.findMany({
       where: { projectId },
       include: {
-        user: { select: { id: true, phone: true, name: true, role: true } },
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            name: true,
+            role: true,
+            extraRoles: true,
+          },
+        },
       },
       orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
     });
 
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { designerId: true, managerId: true, surveyorId: true },
+    });
+    const duty = new Set(
+      [project?.designerId, project?.managerId, project?.surveyorId].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    const visible = members.filter((member) => {
+      const roles = [member.user.role, ...member.user.extraRoles];
+      if (!hasStudioRole(roles)) return true;
+      return duty.has(member.user.id);
+    });
+
     return {
-      items: members.map((m) => ({
+      items: visible.map((m) => ({
         id: m.id,
         role: m.role,
         relation: m.relation,
@@ -282,6 +415,7 @@ export class ProjectsService {
     });
 
     await this.addMemberToProjectChats(projectId, invitee.id);
+    void this.liveSync.publish(projectId, 'project');
 
     return {
       id: member.id,
@@ -330,6 +464,7 @@ export class ProjectsService {
     }
 
     await this.prisma.projectMember.delete({ where: { id: member.id } });
+    void this.liveSync.publish(projectId, 'project');
     return { removed: true };
   }
 
@@ -364,10 +499,6 @@ export class ProjectsService {
     }
 
     if (!BRIEF_EDITABLE_STATUSES.includes(project.status)) {
-      throw new ForbiddenException('Brief is locked');
-    }
-
-    if (project.brief?.isLocked) {
       throw new ForbiddenException('Brief is locked');
     }
 
@@ -429,6 +560,9 @@ export class ProjectsService {
         'Showcase portfolio has no surveyor request',
       );
     }
+    if (project.isDraft) {
+      throw new BadRequestException('Сначала отправьте анкету');
+    }
 
     if (
       project.status !== ProjectStatus.brief_filling &&
@@ -452,6 +586,7 @@ export class ProjectsService {
     );
 
     const updated = await this.findUserProject(userId, projectId);
+    void this.liveSync.publish(projectId, 'project');
     return this.formatProject(updated);
   }
 
@@ -479,6 +614,44 @@ export class ProjectsService {
       rooms,
       answers: (project.brief.answers as BriefAnswers | null) ?? null,
     });
+  }
+
+  async advanceStatus(projectId: string, status: ProjectStatus) {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, isShowcase: false },
+      select: { id: true, status: true },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    const flow: ProjectStatus[] = [
+      ProjectStatus.brief_filling,
+      ProjectStatus.measurement,
+      ProjectStatus.in_progress,
+      ProjectStatus.materials,
+      ProjectStatus.visualization,
+      ProjectStatus.final_assembly,
+      ProjectStatus.completed,
+      ProjectStatus.archived,
+    ];
+    const current = flow.indexOf(project.status);
+    const target = flow.indexOf(status);
+    if (target !== current + 1) {
+      throw new BadRequestException('Можно перейти только на следующий этап');
+    }
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { status },
+    });
+    void this.liveSync.publish(projectId, 'project');
+
+    const updated = await this.prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      include: projectInclude,
+    });
+    return this.formatProject(updated);
   }
 
   async startWork(projectId: string) {
@@ -855,6 +1028,7 @@ export class ProjectsService {
       status: project.status,
       statusLabel: PROJECT_STATUS_LABELS[project.status],
       isShowcase: project.isShowcase,
+      isDraft: project.isDraft,
       designer: this.formatStaff(project.designer, hidePhones),
       manager: this.formatStaff(project.manager, hidePhones),
       surveyor: this.formatStaff(project.surveyor, hidePhones),
@@ -918,8 +1092,7 @@ export class ProjectsService {
     },
     project: { status: ProjectStatus },
   ) {
-    const locked =
-      brief.isLocked || !BRIEF_EDITABLE_STATUSES.includes(project.status);
+    const locked = !BRIEF_EDITABLE_STATUSES.includes(project.status);
 
     return {
       id: brief.id,

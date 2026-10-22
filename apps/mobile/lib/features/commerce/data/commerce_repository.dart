@@ -13,23 +13,40 @@ class CommerceRepository {
 
   final Dio _dio;
 
-  Future<Cart> getCart(String projectId) async {
+  Future<Cart> getCart({String? projectId}) async {
     final response = await _dio.get(
       '/cart',
-      queryParameters: {'projectId': projectId},
+      queryParameters: {
+        'projectId': ?projectId,
+      },
     );
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Null when the server does not have the bundled route yet.
+  Future<List<Cart>?> getProjectCarts() async {
+    try {
+      final response = await _dio.get('/cart/projects');
+      final data = response.data;
+      if (data is! List) return const [];
+      return data
+          .map((item) => Cart.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
   Future<Cart> addToCart({
-    required String projectId,
+    String? projectId,
     required String productId,
     int quantity = 1,
   }) async {
     final response = await _dio.post(
       '/cart/items',
       data: {
-        'projectId': projectId,
+        'projectId': ?projectId,
         'productId': productId,
         'quantity': quantity,
       },
@@ -37,26 +54,44 @@ class CommerceRepository {
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
+  Future<Cart> assignToProject(
+    String projectId,
+    List<String> itemIds,
+  ) async {
+    final response = await _dio.post(
+      '/cart/assign',
+      data: {
+        'projectId': projectId,
+        'itemIds': itemIds,
+      },
+    );
+    return Cart.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<Cart> updateCartItem({
-    required String projectId,
+    String? projectId,
     required String itemId,
     required int quantity,
   }) async {
     final response = await _dio.patch(
       '/cart/items/$itemId',
-      queryParameters: {'projectId': projectId},
+      queryParameters: {
+        'projectId': ?projectId,
+      },
       data: {'quantity': quantity},
     );
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
   Future<Cart> removeCartItem({
-    required String projectId,
+    String? projectId,
     required String itemId,
   }) async {
     final response = await _dio.delete(
       '/cart/items/$itemId',
-      queryParameters: {'projectId': projectId},
+      queryParameters: {
+        'projectId': ?projectId,
+      },
     );
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }

@@ -88,7 +88,7 @@ class _StaffCheckoutScreenState extends ConsumerState<StaffCheckoutScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final cart = ref.read(staffProjectCartProvider(widget.projectId)).valueOrNull;
-    final selection = ref.read(cartSelectionProvider);
+    final selection = ref.read(cartSelectionProvider('staff:${widget.projectId}'));
     final unlockedIds =
         cart?.items.where((i) => !i.locked).map((i) => i.id).toSet() ?? {};
     final cartItemIds = selection.intersection(unlockedIds).toList();
@@ -119,7 +119,7 @@ class _StaffCheckoutScreenState extends ConsumerState<StaffCheckoutScreen> {
       return;
     }
 
-    ref.read(cartSelectionProvider.notifier).state = {};
+    ref.read(cartSelectionProvider('staff:${widget.projectId}').notifier).state = {};
     ref.invalidate(staffProjectCartProvider(widget.projectId));
     final clientId = _clientId ?? order.userId;
     if (clientId != null) {
@@ -170,7 +170,7 @@ class _StaffCheckoutScreenState extends ConsumerState<StaffCheckoutScreen> {
               ref.invalidate(staffProjectCartProvider(widget.projectId)),
         ),
         data: (cart) {
-          final selection = ref.watch(cartSelectionProvider);
+          final selection = ref.watch(cartSelectionProvider('staff:${widget.projectId}'));
           final selected = cart.items
               .where((i) => !i.locked && selection.contains(i.id))
               .toList();

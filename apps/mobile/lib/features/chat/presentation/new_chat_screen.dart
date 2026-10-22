@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,6 +14,7 @@ import '../data/chat_models.dart';
 import '../data/chat_repository.dart';
 import 'chat_notifier.dart';
 import 'invite_share.dart';
+import 'phone_book.dart';
 
 class _BookContact {
   const _BookContact({
@@ -44,6 +44,8 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
   var _permissionDenied = false;
   var _matchError = false;
   var _openingKey = '';
+  var _groupMode = false;
+  final _selectedIds = <String>{};
   List<_BookContact> _registered = const [];
   List<_BookContact> _toInvite = const [];
 
@@ -82,71 +84,64 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     return digits;
   }
 
+  Future<void> _openContactsSettings() async {
+    final opened = await PhoneBook.openSettings() || await openDavartSystemSettings();
+    if (opened || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Откройте Настройки и разрешите доступ к контактам'),
+      ),
+    );
+  }
+
   Future<void> _loadContacts() async {
+    final retryAfterDenial = _permissionDenied;
     setState(() {
       _loading = true;
       _permissionDenied = false;
       _matchError = false;
     });
 
-    // Directory of everyone already in DAVart (works even without contacts).
-    List<ChatContact> directory = const [];
+    late final PhoneBookPage book;
     try {
-      directory = await ref.read(chatRepositoryProvider).getContacts();
+      book = await PhoneBook.load();
     } catch (_) {
-      directory = const [];
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _registered = [
-        for (final u in directory)
-          _BookContact(
-            name: u.name,
-            phone: u.phone ?? '',
-            user: u,
-          ),
-      ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-      _loading = false;
-    });
-
-    final granted = await FlutterContacts.requestPermission(readonly: true);
-    if (!granted) {
-      final fromDir = [
-        for (final u in directory)
-          _BookContact(
-            name: u.name,
-            phone: u.phone ?? '',
-            user: u,
-          ),
-      ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
       if (!mounted) return;
       setState(() {
         _loading = false;
         _permissionDenied = true;
-        _registered = fromDir;
+        _registered = const [];
         _toInvite = const [];
       });
       return;
     }
+    if (!book.granted) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _permissionDenied = true;
+        _registered = const [];
+        _toInvite = const [];
+      });
+      if (retryAfterDenial || !book.prompted) await _openContactsSettings();
+      return;
+    }
 
     try {
-      final raw = await FlutterContacts.getContacts(
-        withProperties: true,
-        withPhoto: false,
-      );
+      final myPhone = ref.read(authProvider).user?.phone;
+      final myLast10 = myPhone == null ? '' : _last10(myPhone);
 
       final byPhone = <String, _BookContact>{};
-      for (final contact in raw) {
-        final displayName = contact.displayName.trim();
-        for (final phone in contact.phones) {
-          final rawNumber = phone.number.trim();
-          if (rawNumber.isEmpty) continue;
-          final digits = rawNumber.replaceAll(RegExp(r'\D'), '');
+      for (final contact in book.entries) {
+        final displayName = contact.name.trim();
+        for (final rawNumber in contact.phones) {
+          final trimmed = rawNumber.trim();
+          if (trimmed.isEmpty) continue;
+          final digits = trimmed.replaceAll(RegExp(r'\D'), '');
           if (digits.length < 7) continue;
-          final normalized = _normalizePhone(rawNumber);
-          final shown = normalized ?? rawNumber;
+          final normalized = _normalizePhone(trimmed);
+          final shown = normalized ?? trimmed;
+          if (myLast10.isNotEmpty && _last10(shown) == myLast10) continue;
           final key = normalized ?? digits;
           byPhone.putIfAbsent(
             key,
@@ -171,37 +166,14 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
         matchError = true;
       }
 
-      final matchByLast10 = <String, ChatContact>{};
-      for (final entry in matches.entries) {
-        matchByLast10[_last10(entry.key)] = entry.value;
-        final p = entry.value.phone;
-        if (p != null) matchByLast10[_last10(p)] = entry.value;
-      }
-      for (final u in directory) {
-        if (u.phone == null) continue;
-        matchByLast10.putIfAbsent(_last10(u.phone!), () => u);
-      }
-
       final registeredById = <String, _BookContact>{};
-
-      // 1) Address-book people who are registered — keep phonebook names.
       for (final item in bookItems) {
-        final user = matchByLast10[_last10(item.phone)] ?? matches[item.phone];
+        final user = matches[_last10(item.phone)] ?? matches[item.phone];
         if (user == null) continue;
         registeredById[user.id] = _BookContact(
           name: item.name,
           phone: item.phone,
           user: user,
-        );
-      }
-
-      // 2) Other DAVart users not in the phone book.
-      for (final u in directory) {
-        if (registeredById.containsKey(u.id)) continue;
-        registeredById[u.id] = _BookContact(
-          name: u.name,
-          phone: u.phone ?? '',
-          user: u,
         );
       }
 
@@ -228,12 +200,10 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _registered = [
-          for (final u in directory)
-            _BookContact(name: u.name, phone: u.phone ?? '', user: u),
-        ];
+        _registered = const [];
         _toInvite = const [];
         _loading = false;
+        _matchError = true;
       });
     }
   }
@@ -283,31 +253,75 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     }
   }
 
+  Future<void> _askGroupTitle() async {
+    final controller = TextEditingController();
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Название группы'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.sentences,
+            decoration: const InputDecoration(hintText: 'Например, Кухня'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Создать'),
+            ),
+          ],
+        );
+      },
+    );
+    if (title == null || title.isEmpty || !mounted) return;
+    setState(() => _openingKey = 'group');
+    try {
+      final chat = await ref.read(chatRepositoryProvider).createGroup(
+            title: title,
+            userIds: _selectedIds.toList(),
+          );
+      if (!mounted) return;
+      final params = <String, String>{'title': chat.title};
+      final query = params.entries
+          .map((e) => '${e.key}=${Uri.encodeComponent(e.value)}')
+          .join('&');
+      context.pushReplacement('${AppRoutes.chatDetail(chat.id)}?$query');
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось создать группу')),
+      );
+    } finally {
+      if (mounted) setState(() => _openingKey = '');
+    }
+  }
+
   Future<void> _onTapInvite(_BookContact contact) async {
     if (_openingKey.isNotEmpty) return;
     setState(() => _openingKey = contact.phone);
 
     try {
-      try {
-        final matches = await ref
-            .read(chatRepositoryProvider)
-            .matchPhones([contact.phone]);
-        final hit =
-            matches[contact.phone] ?? matches[_last10(contact.phone)];
-        if (hit != null) {
-          final chat = await ref
-              .read(chatRepositoryProvider)
-              .createPersonalChat(hit.id);
-          await _openChat(chat);
-          return;
-        }
-      } catch (_) {}
-
-      final ok = await openDavartInviteSms(phone: contact.phone);
+      final matches = await ref
+          .read(chatRepositoryProvider)
+          .matchPhones([contact.phone]);
+      final hit = matches[contact.phone] ?? matches[_last10(contact.phone)];
+      if (hit != null) {
+        final chat =
+            await ref.read(chatRepositoryProvider).createPersonalChat(hit.id);
+        await _openChat(chat);
+        return;
+      }
       if (!mounted) return;
-      if (!ok) {
+      final opened = await openDavartInviteSms(phone: contact.phone);
+      if (!opened && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось открыть Сообщения')),
+          const SnackBar(content: Text('Не удалось открыть сообщения')),
         );
       }
     } catch (_) {
@@ -330,10 +344,26 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
       backgroundColor: colors.background,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        leading: AppBackButton(
-          fallback: chatPathForRole(ref.watch(authProvider).user?.role),
-        ),
-        title: const Text('Новый чат'),
+        leading: _groupMode
+            ? IconButton(
+                tooltip: 'Назад',
+                icon: const Icon(Icons.arrow_back_ios_new, size: 20),
+                onPressed: () => setState(() {
+                  _groupMode = false;
+                  _selectedIds.clear();
+                }),
+              )
+            : AppBackButton(
+                fallback: chatPathForRole(ref.watch(authProvider).user?.role),
+              ),
+        title: Text(_groupMode ? 'Новая группа' : 'Новый чат'),
+        actions: [
+          if (_groupMode)
+            TextButton(
+              onPressed: _selectedIds.isEmpty ? null : _askGroupTitle,
+              child: const Text('Далее'),
+            ),
+        ],
       ),
       body: Column(
         children: [
@@ -389,9 +419,9 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                 ? 'Нужен доступ к контактам'
                 : (_query.isEmpty ? 'Пока никого нет' : 'Не найдено'),
             subtitle: _permissionDenied
-                ? 'Разрешите доступ, чтобы видеть, кто из телефонной книги уже в DAVart.'
+                ? 'Разрешите доступ, чтобы написать тем, кто уже в DAVart, или отправить ссылку остальным.'
                 : (_query.isEmpty
-                    ? 'Когда кто-то зарегистрируется — появится здесь.'
+                    ? 'В телефонной книге нет номеров, которым можно написать.'
                     : 'Попробуйте другое имя или номер'),
             actionLabel: _permissionDenied ? 'Разрешить' : 'Обновить',
             onAction: _loadContacts,
@@ -401,18 +431,36 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
     }
 
     final rows = <Object>[
+      if (!_groupMode && registered.isNotEmpty) 'create-group',
       if (_matchError) 'match-error',
       if (_permissionDenied) 'permission',
       if (registered.isNotEmpty) 'В приложении',
       ...registered,
-      if (invite.isNotEmpty) 'Все номера',
-      ...invite,
+      if (!_groupMode && invite.isNotEmpty) 'Пригласить',
+      if (!_groupMode) ...invite,
     ];
 
     return ListView.builder(
       itemCount: rows.length,
       itemBuilder: (context, index) {
         final row = rows[index];
+        if (row == 'create-group') {
+          return ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenPadding,
+            ),
+            leading: CircleAvatar(
+              backgroundColor: colors.accent,
+              child: Icon(Icons.group_outlined, color: colors.textOnAccent),
+            ),
+            title: const Text('Создать группу'),
+            subtitle: const Text('Несколько человек из DAVart'),
+            onTap: () => setState(() {
+              _groupMode = true;
+              _selectedIds.clear();
+            }),
+          );
+        }
         if (row == 'match-error') {
           return Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -422,7 +470,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               0,
             ),
             child: Text(
-              'Не удалось сверить телефонную книгу. Показаны пользователи DAVart.',
+              'Не удалось проверить, кто уже в DAVart. Нажатие всё равно откроет чат или приглашение.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: colors.textSecondary,
                   ),
@@ -441,7 +489,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Разрешите доступ к контактам, чтобы видеть все номера телефона.',
+                    'Без доступа к контактам список пустой. Разрешите его, чтобы писать своим номерам.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: colors.textSecondary,
                         ),
@@ -509,21 +557,50 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: colors.accent,
+              color: colors.textPrimary,
             ),
       ),
-      trailing: opening
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+      trailing: _groupMode
+          ? Icon(
+              _selectedIds.contains(contact.user?.id)
+                  ? Icons.check_circle
+                  : Icons.circle_outlined,
+              color: _selectedIds.contains(contact.user?.id)
+                  ? colors.accent
+                  : colors.textSecondary,
             )
-          : Icon(
-              Icons.chat_bubble_outline,
-              size: 20,
-              color: colors.textSecondary,
-            ),
-      onTap: opening ? null : () => _openDm(contact),
+          : opening
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : CircleAvatar(
+                  radius: 16,
+                  backgroundColor: colors.accent,
+                  child: Icon(
+                    Icons.chat_bubble_outline,
+                    size: 16,
+                    color: colors.textOnAccent,
+                  ),
+                ),
+      onTap: opening
+          ? null
+          : () {
+              if (_groupMode) {
+                final id = contact.user?.id;
+                if (id == null || id.isEmpty) return;
+                setState(() {
+                  if (_selectedIds.contains(id)) {
+                    _selectedIds.remove(id);
+                  } else {
+                    _selectedIds.add(id);
+                  }
+                });
+                return;
+              }
+              _openDm(contact);
+            },
     );
   }
 
@@ -557,10 +634,14 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
               height: 20,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(
-              Icons.sms_outlined,
-              size: 20,
-              color: colors.textSecondary,
+          : CircleAvatar(
+              radius: 16,
+              backgroundColor: colors.accent,
+              child: Icon(
+                Icons.sms_outlined,
+                size: 16,
+                color: colors.textOnAccent,
+              ),
             ),
       onTap: opening ? null : () => _onTapInvite(contact),
     );

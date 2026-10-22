@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Selected unlocked cart line IDs for partial checkout.
-final cartSelectionProvider = StateProvider<Set<String>>((ref) => {});
+/// Selected unlocked cart line ids.
+/// Scope is `personal`, `project:$projectId`, or `staff:$projectId`.
+final cartSelectionProvider =
+    StateProvider.family<Set<String>, String>((ref, scope) => {});

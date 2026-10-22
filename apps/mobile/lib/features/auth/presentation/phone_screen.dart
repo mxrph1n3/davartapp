@@ -87,7 +87,10 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
           finishEmbeddedLogin(context);
         } else {
           context.go(
-            AppRoutes.homeForRole(next.user?.role ?? UserRole.client),
+            AppRoutes.homeForRole(
+              next.user?.role ?? UserRole.client,
+              isStaff: next.user?.isStaff ?? false,
+            ),
           );
         }
       }

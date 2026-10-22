@@ -15,6 +15,7 @@ build/
 infra/.env.staging
 !infra/.env.example
 !infra/.env.staging.example
+infra/apns/*.p8
 
 # Firebase (download from console, do not commit)
 apps/mobile/android/app/google-services.json
@@ -63,4 +64,11 @@ apps/mobile/android/key.properties
 apps/mobile/android/upload-keystore.jks
 apps/mobile/store_assets/play/UPLOAD_KEY_CREDENTIALS.txt
 apps/mobile/store_assets/play/*.aab
+apps/mobile/android/local-maven/
+META-INF/
+org/
+repomix-output.xml
+build-receipt.properties
+gradle-*-classpath.properties
+scripts/_tmp_launch_shot.sh
 

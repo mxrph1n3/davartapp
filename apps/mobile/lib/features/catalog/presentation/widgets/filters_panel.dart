@@ -171,30 +171,15 @@ class _FiltersPanelState extends ConsumerState<FiltersPanel> {
                     context,
                     title: 'Цвет',
                     child: Wrap(
-                      spacing: 10,
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
                       children: options.colors.take(6).map((color) {
                         final selected = _color == color;
-                        return GestureDetector(
-                          onTap: () =>
-                              setState(() => _color = selected ? null : color),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.surfaceMuted,
-                              border: Border.all(
-                                color: selected
-                                    ? colors.textPrimary
-                                    : colors.border,
-                                width: selected ? 2 : 1,
-                              ),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              color.characters.first,
-                              style: const TextStyle(fontSize: 10),
-                            ),
+                        return CategoryChip(
+                          label: color,
+                          selected: selected,
+                          onSelected: (_) => setState(
+                            () => _color = selected ? null : color,
                           ),
                         );
                       }).toList(),

@@ -2,23 +2,40 @@ import { createSign } from 'crypto';
 import { readFileSync } from 'fs';
 import * as http2 from 'http2';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface PushPayload {
   title: string;
   body: string;
   badge?: number;
+  /** Same id replaces a stored notification instead of stacking duplicates. */
+  collapseId?: string;
   data?: Record<string, string>;
 }
 
 @Injectable()
-export class PushService {
+export class PushService implements OnModuleInit {
   private readonly logger = new Logger(PushService.name);
   private apnsJwtCache?: { token: string; exp: number };
   private apnsKeyCache?: string | null;
+  private readonly retryQueue: PendingPush[] = [];
+  private retryTimer?: ReturnType<typeof setInterval>;
+  private drainingRetries = false;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  onModuleInit() {
+    const key = this.apnsPrivateKey();
+    const keyId = process.env.APNS_KEY_ID?.trim();
+    if (key && keyId) {
+      this.logger.log('APNs key loaded');
+      return;
+    }
+    this.logger.warn(
+      'APNs key is not loaded; notifications will not arrive while the app is closed',
+    );
+  }
 
   /** True only when a push provider accepted the notification. */
   async sendToUser(userId: string, payload: PushPayload): Promise<boolean> {
@@ -58,7 +75,22 @@ export class PushService {
     payload: PushPayload,
   ): Promise<boolean> {
     if (this.isApnsToken(token, platform)) {
-      return this.sendApns(token, platform, payload);
+      const delivered = await this.sendApns(token, platform, payload);
+      if (
+        !delivered &&
+        this.apnsPrivateKey() &&
+        process.env.APNS_KEY_ID?.trim()
+      ) {
+        this.enqueueRetry(token, platform, payload);
+      }
+      return delivered;
+    }
+
+    if (token.startsWith('davart-')) {
+      this.logger.warn(
+        `[PUSH] ${token.slice(0, 16)}… is not a device token, notification was not sent`,
+      );
+      return false;
     }
 
     const serverKey = process.env.FCM_SERVER_KEY;
@@ -156,10 +188,6 @@ export class PushService {
       return false;
     }
 
-    const sandbox = platform === 'ios-sandbox';
-    const host = sandbox
-      ? 'api.sandbox.push.apple.com'
-      : 'api.push.apple.com';
     const jwt = this.apnsJwt(key, keyId, teamId);
     const body = JSON.stringify({
       aps: {
@@ -169,33 +197,92 @@ export class PushService {
       },
       ...(payload.data ?? {}),
     });
+    const hosts =
+      platform === 'ios-sandbox'
+        ? ['api.sandbox.push.apple.com', 'api.push.apple.com']
+        : ['api.push.apple.com', 'api.sandbox.push.apple.com'];
 
-    return new Promise<boolean>((resolve) => {
+    let sawDeadToken = false;
+    for (const host of hosts) {
+      const result = await this.postApns(
+        host,
+        token,
+        topic,
+        jwt,
+        body,
+        payload.collapseId,
+      );
+      if (result.ok) {
+        const nextPlatform = host.includes('sandbox') ? 'ios-sandbox' : 'ios';
+        if (nextPlatform !== platform) {
+          await this.prisma.fcmToken.updateMany({
+            where: { token },
+            data: { platform: nextPlatform },
+          });
+        }
+        return true;
+      }
+      if (result.deadToken) sawDeadToken = true;
+      if (!result.deadToken && !result.retryable) break;
+    }
+
+    if (sawDeadToken) {
+      await this.prisma.fcmToken.deleteMany({ where: { token } });
+    }
+    return false;
+  }
+
+  /**
+   * Apple keeps the alert until this moment, including while the phone is off.
+   * A later retry with the same collapse id replaces that stored alert.
+   */
+  private apnsExpiration() {
+    return String(Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60);
+  }
+
+  private postApns(
+    host: string,
+    token: string,
+    topic: string,
+    jwt: string,
+    body: string,
+    collapseId?: string,
+  ): Promise<{ ok: boolean; deadToken: boolean; retryable: boolean }> {
+    return new Promise((resolve) => {
       const client = http2.connect(`https://${host}`);
       let settled = false;
       let timer: ReturnType<typeof setTimeout>;
-      const finish = (ok: boolean) => {
+      const finish = (value: {
+        ok: boolean;
+        deadToken: boolean;
+        retryable: boolean;
+      }) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         client.close();
-        resolve(ok);
+        resolve(value);
       };
       timer = setTimeout(() => {
-        this.logger.warn(`APNs timed out for ${token.slice(0, 8)}…`);
-        finish(false);
-      }, 4000);
+        this.logger.warn(
+          `APNs timed out for ${token.slice(0, 8)}… via ${host}`,
+        );
+        finish({ ok: false, deadToken: false, retryable: true });
+      }, 12_000);
       client.on('error', (error) => {
-        this.logger.warn(`APNs connection failed: ${error}`);
-        finish(false);
+        this.logger.warn(`APNs connection failed (${host}): ${error}`);
+        finish({ ok: false, deadToken: false, retryable: true });
       });
       const req = client.request({
         ':method': 'POST',
         ':path': `/3/device/${token}`,
+        ':authority': host,
         authorization: `bearer ${jwt}`,
         'apns-topic': topic,
         'apns-push-type': 'alert',
         'apns-priority': '10',
+        'apns-expiration': this.apnsExpiration(),
+        ...(collapseId ? { 'apns-collapse-id': collapseId.slice(0, 64) } : {}),
       });
       let status = 0;
       let response = '';
@@ -207,23 +294,82 @@ export class PushService {
         response += chunk;
       });
       req.on('end', () => {
-        if (status !== 200) {
-          this.logger.warn(`APNs ${status} for ${token.slice(0, 8)}…: ${response}`);
-          if (
-            status === 410 ||
-            response.includes('Unregistered') ||
-            response.includes('BadDeviceToken')
-          ) {
-            void this.prisma.fcmToken.deleteMany({ where: { token } });
-          }
+        if (status === 200) {
+          finish({ ok: true, deadToken: false, retryable: false });
+          return;
         }
-        finish(status === 200);
+        this.logger.warn(
+          `APNs ${status} for ${token.slice(0, 8)}… via ${host}: ${response}`,
+        );
+        const deadToken =
+          status === 410 ||
+          response.includes('Unregistered') ||
+          response.includes('BadDeviceToken');
+        const retryable = status === 429 || status >= 500 || status === 0;
+        finish({ ok: false, deadToken, retryable });
       });
       req.on('error', (error) => {
-        this.logger.warn(`APNs request failed: ${error}`);
-        finish(false);
+        this.logger.warn(`APNs request failed (${host}): ${error}`);
+        finish({ ok: false, deadToken: false, retryable: true });
       });
       req.end(body);
     });
   }
+
+  private enqueueRetry(
+    token: string,
+    platform: string | null,
+    payload: PushPayload,
+  ) {
+    if (this.retryQueue.length >= 200) this.retryQueue.shift();
+    this.retryQueue.push({
+      token,
+      platform,
+      payload,
+      attempt: 1,
+      notBefore: Date.now() + 30_000,
+    });
+    if (this.retryTimer) return;
+    this.retryTimer = setInterval(() => {
+      void this.drainRetries();
+    }, 15_000);
+    this.retryTimer.unref?.();
+  }
+
+  private async drainRetries() {
+    if (this.drainingRetries) return;
+    this.drainingRetries = true;
+    try {
+      const now = Date.now();
+      const due = this.retryQueue.filter((item) => item.notBefore <= now);
+      for (const item of due) {
+        const index = this.retryQueue.indexOf(item);
+        if (index >= 0) this.retryQueue.splice(index, 1);
+        const delivered = await this.sendApns(
+          item.token,
+          item.platform,
+          item.payload,
+        );
+        if (delivered || item.attempt >= 6) continue;
+        item.attempt += 1;
+        item.notBefore =
+          now + Math.min(30 * 60_000, 30_000 * 2 ** item.attempt);
+        this.retryQueue.push(item);
+      }
+      if (this.retryQueue.length === 0 && this.retryTimer) {
+        clearInterval(this.retryTimer);
+        this.retryTimer = undefined;
+      }
+    } finally {
+      this.drainingRetries = false;
+    }
+  }
+}
+
+interface PendingPush {
+  token: string;
+  platform: string | null;
+  payload: PushPayload;
+  attempt: number;
+  notBefore: number;
 }

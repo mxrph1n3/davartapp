@@ -1,9 +1,21 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { IsArray, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 
 export class CartProjectQueryDto {
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+}
+
+export class AssignCartDto {
   @IsUUID()
   projectId!: string;
+
+  /** When set, only these personal lines move. Omitted means every unlocked line. */
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  itemIds?: string[];
 }
 
 export class AddCartItemDto {

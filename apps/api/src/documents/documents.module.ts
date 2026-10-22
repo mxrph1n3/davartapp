@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LiveSyncModule } from '../live/live-sync.module';
 import {
   DocumentsController,
   ProjectDocumentsController,

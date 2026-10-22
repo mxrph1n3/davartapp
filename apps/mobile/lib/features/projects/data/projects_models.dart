@@ -192,6 +192,7 @@ class Project {
     required this.status,
     required this.statusLabel,
     this.isShowcase = false,
+    this.isDraft = false,
     this.designer,
     this.manager,
     this.surveyor,
@@ -211,6 +212,7 @@ class Project {
   final String status;
   final String statusLabel;
   final bool isShowcase;
+  final bool isDraft;
   final ProjectStaff? designer;
   final ProjectStaff? manager;
   final ProjectStaff? surveyor;
@@ -239,6 +241,7 @@ class Project {
       status: json['status'] as String,
       statusLabel: json['statusLabel'] as String,
       isShowcase: json['isShowcase'] as bool? ?? false,
+      isDraft: json['isDraft'] as bool? ?? false,
       designer: staff('designer'),
       manager: staff('manager'),
       surveyor: staff('surveyor'),

@@ -33,12 +33,12 @@ export class ProjectsController {
 
   @Get()
   list(@CurrentUser() user: JwtPayload) {
-    return this.projectsService.listForUser(user.sub);
+    return this.projectsService.listForUser(user.sub, { includeDrafts: true });
   }
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateProjectDto) {
-    return this.projectsService.create(user.sub, dto);
+    return this.projectsService.create(user.sub, dto, { draft: true });
   }
 
   @Delete(':id')
@@ -105,6 +105,12 @@ export class ProjectsController {
     @Param() params: ProjectIdParamDto,
   ) {
     return this.projectsService.getBrief(user.sub, params.id);
+  }
+
+  @Post(':id/submit')
+  @HttpCode(200)
+  submit(@CurrentUser() user: JwtPayload, @Param() params: ProjectIdParamDto) {
+    return this.projectsService.submit(user.sub, params.id);
   }
 
   @Put(':id/brief')

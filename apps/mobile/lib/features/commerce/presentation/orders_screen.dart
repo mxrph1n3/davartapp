@@ -44,6 +44,8 @@ class OrdersScreen extends ConsumerWidget {
         title: const Text('Мои заказы'),
       ),
       body: ordersAsync.when(
+        skipLoadingOnReload: true,
+        skipLoadingOnRefresh: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (_, _) => ErrorState(
           message: 'Не удалось загрузить заказы',

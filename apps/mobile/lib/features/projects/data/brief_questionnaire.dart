@@ -107,11 +107,6 @@ const briefStyleOptions = <BriefVisualOption>[
     asset: 'assets/brief/styles/classic.jpg',
   ),
   BriefVisualOption(
-    id: 'travans',
-    label: 'Траванс',
-    asset: 'assets/brief/styles/classic.jpg',
-  ),
-  BriefVisualOption(
     id: 'provence',
     label: 'Прованс',
     asset: 'assets/brief/styles/mediterranean.jpg',
@@ -172,6 +167,7 @@ const briefFamilyRoleChoices = <BriefChoice>[
   BriefChoice(id: 'child', label: 'Ребёнок'),
   BriefChoice(id: 'parent', label: 'Родитель'),
   BriefChoice(id: 'relative', label: 'Родственник'),
+  BriefChoice(id: 'pet', label: 'Питомец'),
   BriefChoice(id: 'other', label: 'Другой'),
 ];
 
@@ -298,7 +294,7 @@ const briefRadiatorChoices = <BriefChoice>[
 const briefDefaultRoomsByObject = <String, List<String>>{
   'apartment': ['hallway', 'kitchen_living', 'bedroom', 'bathroom', 'loggia'],
   'house': ['hallway', 'kitchen_living', 'bedroom', 'bathroom', 'kids'],
-  'office': ['hallway', 'kitchen_living', 'bathroom'],
+  'office': ['hallway', 'kitchen', 'bathroom'],
   'commercial': ['hallway', 'kitchen_living', 'bathroom'],
   'townhouse': [
     'hallway',
@@ -309,6 +305,16 @@ const briefDefaultRoomsByObject = <String, List<String>>{
     'loggia',
   ],
 };
+
+const _officeHiddenRooms = {'bedroom', 'kitchen_living'};
+
+List<BriefRoomSection> briefRoomsForObject(String? objectType) {
+  if (objectType != 'office') return briefRoomSections;
+  return [
+    for (final section in briefRoomSections)
+      if (!_officeHiddenRooms.contains(section.id)) section,
+  ];
+}
 
 const briefGeneralFields = <BriefField>[
   BriefField(
@@ -341,6 +347,7 @@ const briefGeneralFields = <BriefField>[
   BriefField(id: 'likedStyles', label: 'Стили, которые нравятся', lines: 1),
   BriefField(id: 'likedStylesCustom', label: 'Свой стиль', lines: 1),
   BriefField(id: 'disliked', label: 'Что категорически не нравится', lines: 2),
+  BriefField(id: 'dislikedNote', label: 'Комментарий', lines: 3),
   BriefField(id: 'budget', label: 'Бюджет на ремонт', lines: 1),
   BriefField(
     id: 'replan',
@@ -624,7 +631,9 @@ const briefAttachments = [
 
 final briefValueLabels = <String, Map<String, String>>{
   'likedColors': {for (final item in briefColorSwatches) item.id: item.label},
-  'likedStyles': {for (final item in briefStyleOptions) item.id: item.label},
+  'likedStyles': {
+    for (final item in briefStyleOptions) item.id: item.label,
+  },
   'objectType': {for (final item in briefObjectOptions) item.id: item.label},
   'commercialType': {
     for (final item in briefCommercialTypeChoices) item.id: item.label
@@ -690,7 +699,11 @@ String briefDisplayValue(String fieldId, String? raw) {
   if (raw == null || raw.trim().isEmpty) return '';
   final map = briefValueLabels[fieldId];
   if (map == null) return raw.trim();
-  return briefSelectedIds(raw).map((id) => map[id] ?? id).join(', ');
+  return briefSelectedIds(raw)
+      .where((id) => id != 'travans')
+      .map((id) => map[id] ?? id)
+      .where((label) => label != 'travans')
+      .join(', ');
 }
 
 class BriefFamilyMember {
@@ -774,9 +787,11 @@ String briefFamilyMembersSummary(List<BriefFamilyMember> members) {
             m.role.isNotEmpty || m.customRole.isNotEmpty || m.age.isNotEmpty,
       )
       .map((m) {
-        final who = m.name.trim().isNotEmpty
-            ? m.name.trim()
-            : (m.roleLabel.isEmpty ? 'Участник' : m.roleLabel);
+        final bits = <String>[
+          if (m.roleLabel.isNotEmpty) m.roleLabel,
+          if (m.name.trim().isNotEmpty) m.name.trim(),
+        ];
+        final who = bits.isEmpty ? 'Участник' : bits.join(', ');
         final age = m.age.trim();
         return age.isEmpty ? who : '$who, $age';
       })

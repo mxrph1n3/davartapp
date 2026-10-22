@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { LiveSyncModule } from '../live/live-sync.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { CartController } from './cart.controller';
 import { CartService } from './cart.service';
@@ -8,7 +9,7 @@ import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
-  imports: [TelegramModule],
+  imports: [TelegramModule, LiveSyncModule],
   controllers: [CartController, FavoritesController, OrdersController],
   providers: [CartService, FavoritesService, OrdersService],
   exports: [CartService, FavoritesService, OrdersService],

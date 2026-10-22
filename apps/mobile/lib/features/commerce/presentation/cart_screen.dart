@@ -12,6 +12,7 @@ import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
+import '../../projects/data/projects_repository.dart';
 import '../data/commerce_models.dart';
 import 'active_project_provider.dart';
 import 'cart_selection_provider.dart';
@@ -30,24 +31,86 @@ class _CartScreenState extends ConsumerState<CartScreen> {
   @override
   void initState() {
     super.initState();
-    Future<void>.delayed(Duration.zero, () async {
+    Future<void>.delayed(Duration.zero, () {
       if (!mounted) return;
-      if (ref.read(authProvider).isAuthenticated) {
-        await ensureActiveProject(context, ref, silent: true);
-      }
-      if (mounted) ref.read(cartProvider.notifier).loadCart();
+      ref.read(cartProvider.notifier).loadCart();
     });
   }
 
-  void _syncSelection(Cart cart) {
+  Future<void> _assignToProject() async {
+    final projects = (await ref.read(projectsRepositoryProvider).getProjects())
+        .where((project) => !project.isDraft && !project.isShowcase)
+        .toList();
+    if (!mounted) return;
+    if (projects.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Сначала заполните анкету в разделе «Дизайн»'),
+        ),
+      );
+      return;
+    }
+
+    late final String projectId;
+    late final String projectName;
+    if (projects.length == 1) {
+      projectId = projects.first.id;
+      projectName = projects.first.name;
+    } else {
+      final last = ref.read(lastCartProjectProvider);
+      if (last != null && projects.any((project) => project.id == last.id)) {
+        ref.read(activeProjectProvider.notifier).state = last;
+      }
+      final picked = await showProjectPickerSheet(
+        context,
+        ref,
+        title: 'В какой проект добавить?',
+      );
+      if (picked == null || !mounted) return;
+      projectId = picked.id;
+      projectName = picked.name;
+    }
+
+    final selected = ref
+            .read(cartProvider)
+            .cart
+            ?.items
+            .where(
+              (item) =>
+                  !item.locked &&
+                  ref.read(cartSelectionProvider('personal')).contains(item.id),
+            )
+            .toList() ??
+        const <CartItem>[];
+    if (selected.isEmpty) return;
+
+    try {
+      await ref.read(cartProvider.notifier).assignToProject(projectId, selected);
+      ref.read(lastCartProjectProvider.notifier).state = ActiveProject(
+        id: projectId,
+        name: projectName,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Добавлено в $projectName')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось добавить в проект')),
+      );
+    }
+  }
+
+  void _syncSelection(String scope, Cart cart) {
     final unlockedIds =
         cart.items.where((i) => !i.locked).map((i) => i.id).toSet();
-    final current = ref.read(cartSelectionProvider);
+    final current = ref.read(cartSelectionProvider(scope));
     final next = current.intersection(unlockedIds);
     if (next.isEmpty && unlockedIds.isNotEmpty) {
-      ref.read(cartSelectionProvider.notifier).state = unlockedIds;
+      ref.read(cartSelectionProvider(scope).notifier).state = unlockedIds;
     } else if (next.length != current.length) {
-      ref.read(cartSelectionProvider.notifier).state = next;
+      ref.read(cartSelectionProvider(scope).notifier).state = next;
     }
   }
 
@@ -56,17 +119,48 @@ class _CartScreenState extends ConsumerState<CartScreen> {
     final colors = AppColors.of(context);
     final state = ref.watch(cartProvider);
     final cart = state.cart;
-    final selection = ref.watch(cartSelectionProvider);
-    final hasItems = cart != null && cart.items.isNotEmpty;
+    final selection = ref.watch(cartSelectionProvider('personal'));
+    final personalItems =
+        cart?.items.where((item) => !item.locked).toList() ??
+            const <CartItem>[];
+    final projectCarts = state.projectCarts
+        .map(
+          (project) => Cart(
+            items: project.items.where((item) => !item.locked).toList(),
+            total: project.total,
+            itemCount: project.itemCount,
+            projectId: project.projectId,
+            projectName: project.projectName,
+            ownerUserId: project.ownerUserId,
+          ),
+        )
+        .where((item) => item.items.isNotEmpty)
+        .toList();
+    final projectSelections = {
+      for (final project in projectCarts)
+        if (project.projectId != null)
+          project.projectId!: ref.watch(
+            cartSelectionProvider('project:${project.projectId}'),
+          ),
+    };
+    final hasPersonal = personalItems.isNotEmpty;
+    final hasAnything = hasPersonal || projectCarts.isNotEmpty;
     final unlocked = cart?.items.where((i) => !i.locked).toList() ?? const [];
     final selectedItems =
         unlocked.where((i) => selection.contains(i.id)).toList();
     final selectedTotal =
         selectedItems.fold<double>(0, (sum, i) => sum + i.subtotal);
 
-    if (cart != null) {
+    if (cart != null || projectCarts.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _syncSelection(cart);
+        if (!mounted) return;
+        if (cart != null) _syncSelection('personal', cart);
+        for (final project in projectCarts) {
+          final projectId = project.projectId;
+          if (projectId != null) {
+            _syncSelection('project:$projectId', project);
+          }
+        }
       });
     }
 
@@ -85,26 +179,12 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                           onRetry: () =>
                               ref.read(cartProvider.notifier).loadCart(),
                         )
-                      : ref.watch(activeProjectProvider) == null
-                          ? ref.watch(authProvider).isAuthenticated
-                              ? EmptyState(
-                                  icon: Icons.folder_outlined,
-                                  title: 'Выберите проект',
-                                  subtitle:
-                                      'Корзина привязана к проекту — выберите его',
-                                  actionLabel: 'Выбрать проект',
-                                  onAction: () => ensureActiveProject(
-                                    context,
-                                    ref,
-                                    forcePicker: true,
-                                  ),
-                                )
-                              : const LoginRequiredView(
-                                  title: 'Войдите по номеру',
-                                  subtitle:
-                                      'Товары сохранятся в корзине вашего проекта',
-                                )
-                          : !hasItems
+                      : !ref.watch(authProvider).isAuthenticated
+                          ? const LoginRequiredView(
+                              title: 'Войдите по номеру',
+                              subtitle: 'Товары сохранятся в вашей корзине',
+                            )
+                          : !hasAnything
                               ? EmptyState(
                                   icon: Icons.shopping_bag_outlined,
                                   title: 'Корзина пуста',
@@ -112,88 +192,198 @@ class _CartScreenState extends ConsumerState<CartScreen> {
                                   actionLabel: 'В каталог',
                                   onAction: () => context.go(AppRoutes.catalog),
                                 )
-                              : ListView.separated(
+                              : ListView(
                                   padding: const EdgeInsets.fromLTRB(
                                     AppSpacing.screenPadding,
                                     0,
                                     AppSpacing.screenPadding,
                                     AppSpacing.md,
                                   ),
-                                  itemCount: cart.items.length,
-                                  separatorBuilder: (_, _) => Divider(
-                                    height: 24,
-                                    color: colors.divider,
-                                  ),
-                                  itemBuilder: (context, index) {
-                                    final item = cart.items[index];
-                                    final selected =
-                                        selection.contains(item.id);
-                                    return _CartLineItem(
-                                      item: item,
-                                      selected: selected,
-                                      onSelected: item.locked
-                                          ? null
-                                          : (value) {
-                                              final next =
-                                                  Set<String>.from(selection);
-                                              if (value == true) {
-                                                next.add(item.id);
-                                              } else {
-                                                next.remove(item.id);
-                                              }
-                                              ref
-                                                  .read(
-                                                    cartSelectionProvider
-                                                        .notifier,
-                                                  )
-                                                  .state = next;
-                                            },
-                                      onTap: () => context.push(
-                                        productPathForRole(
-                                          ref.read(authProvider).user?.role,
-                                          item.product.id,
+                                  children: [
+                                    if (hasPersonal && projectCarts.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: AppSpacing.md,
+                                        ),
+                                        child: Text(
+                                          'Личная корзина',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
                                         ),
                                       ),
-                                      onIncrement: item.locked
-                                          ? null
-                                          : () => ref
-                                              .read(cartProvider.notifier)
-                                              .updateQuantity(
-                                                item.id,
-                                                item.quantity + 1,
-                                              ),
-                                      onDecrement: item.locked
-                                          ? null
-                                          : item.quantity > 1
-                                              ? () => ref
-                                                  .read(cartProvider.notifier)
-                                                  .updateQuantity(
-                                                    item.id,
-                                                    item.quantity - 1,
-                                                  )
-                                              : () => ref
-                                                  .read(cartProvider.notifier)
-                                                  .removeItem(item.id),
-                                      onRemove: item.locked
-                                          ? null
-                                          : () => ref
-                                              .read(cartProvider.notifier)
-                                              .removeItem(item.id),
-                                    );
-                                  },
+                                    for (var index = 0;
+                                        index < personalItems.length;
+                                        index++) ...[
+                                      _personalLine(
+                                        context,
+                                        personalItems[index],
+                                        selection,
+                                      ),
+                                      if (index != personalItems.length - 1)
+                                        Divider(
+                                          height: 24,
+                                          color: colors.divider,
+                                        ),
+                                    ],
+                                    for (final project in projectCarts) ...[
+                                      Padding(
+                                        padding: EdgeInsets.only(
+                                          top: hasPersonal
+                                              ? AppSpacing.xl
+                                              : 0,
+                                          bottom: AppSpacing.md,
+                                        ),
+                                        child: Text(
+                                          (project.projectName ?? '').isEmpty
+                                              ? 'Проект'
+                                              : project.projectName!,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleMedium,
+                                        ),
+                                      ),
+                                      for (var index = 0;
+                                          index < project.items.length;
+                                          index++) ...[
+                                        _projectLine(
+                                          context,
+                                          project,
+                                          project.items[index],
+                                          projectSelections[project.projectId] ??
+                                              const {},
+                                        ),
+                                        if (index != project.items.length - 1)
+                                          Divider(
+                                            height: 24,
+                                            color: colors.divider,
+                                          ),
+                                      ],
+                                      if (project.projectId != null) ...[
+                                        const SizedBox(height: AppSpacing.md),
+                                        PrimaryButton(
+                                          label: 'Оформить заявку',
+                                          onPressed: (projectSelections[
+                                                          project.projectId] ??
+                                                      const <String>{})
+                                                  .isEmpty
+                                              ? null
+                                              : () => context.push(
+                                                    '${AppRoutes.checkout}?projectId=${project.projectId}',
+                                                  ),
+                                        ),
+                                      ],
+                                    ],
+                                  ],
                                 ),
             ),
-            if (hasItems && unlocked.isNotEmpty)
+            if (hasPersonal && unlocked.isNotEmpty)
               _CartSummary(
                 total: selectedTotal,
                 selectedCount: selectedItems.length,
-                onCheckout: selectedItems.isEmpty
-                    ? null
-                    : () => context.push(AppRoutes.checkout),
+                onCheckout: selectedItems.isEmpty ? null : _assignToProject,
               ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _personalLine(
+    BuildContext context,
+    CartItem item,
+    Set<String> selection,
+  ) {
+    return _CartLineItem(
+      item: item,
+      selected: selection.contains(item.id),
+      onSelected: item.locked
+          ? null
+          : (value) {
+              final next = Set<String>.from(selection);
+              if (value == true) {
+                next.add(item.id);
+              } else {
+                next.remove(item.id);
+              }
+              ref.read(cartSelectionProvider('personal').notifier).state =
+                  next;
+            },
+      onTap: () => context.push(
+        productPathForRole(
+          ref.read(authProvider).user?.role,
+          item.product.id,
+        ),
+      ),
+      onIncrement: item.locked
+          ? null
+          : () => ref
+              .read(cartProvider.notifier)
+              .updateQuantity(item.id, item.quantity + 1),
+      onDecrement: item.locked
+          ? null
+          : item.quantity > 1
+              ? () => ref
+                  .read(cartProvider.notifier)
+                  .updateQuantity(item.id, item.quantity - 1)
+              : () => ref.read(cartProvider.notifier).removeItem(item.id),
+      onRemove: item.locked
+          ? null
+          : () => ref.read(cartProvider.notifier).removeItem(item.id),
+    );
+  }
+
+  Widget _projectLine(
+    BuildContext context,
+    Cart project,
+    CartItem item,
+    Set<String> selection,
+  ) {
+    final projectId = project.projectId;
+    final scope = projectId == null ? null : 'project:$projectId';
+    return _CartLineItem(
+      item: item,
+      selected: selection.contains(item.id),
+      onSelected: item.locked || scope == null
+          ? null
+          : (value) {
+              final next = Set<String>.from(selection);
+              if (value == true) {
+                next.add(item.id);
+              } else {
+                next.remove(item.id);
+              }
+              ref.read(cartSelectionProvider(scope).notifier).state = next;
+            },
+      onTap: () => context.push(
+        productPathForRole(
+          ref.read(authProvider).user?.role,
+          item.product.id,
+        ),
+      ),
+      onIncrement: item.locked || projectId == null
+          ? null
+          : () => ref.read(cartProvider.notifier).updateProjectQuantity(
+                projectId,
+                item.id,
+                item.quantity + 1,
+              ),
+      onDecrement: item.locked || projectId == null
+          ? null
+          : item.quantity > 1
+              ? () => ref.read(cartProvider.notifier).updateProjectQuantity(
+                    projectId,
+                    item.id,
+                    item.quantity - 1,
+                  )
+              : () => ref
+                  .read(cartProvider.notifier)
+                  .removeProjectItem(projectId, item.id),
+      onRemove: item.locked || projectId == null
+          ? null
+          : () => ref
+              .read(cartProvider.notifier)
+              .removeProjectItem(projectId, item.id),
     );
   }
 }
@@ -227,10 +417,13 @@ class _CartLineItem extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Checkbox(
-            value: locked ? false : selected,
-            onChanged: onSelected,
-          ),
+          if (onSelected != null || locked)
+            Checkbox(
+              value: locked ? false : selected,
+              onChanged: onSelected,
+            )
+          else
+            const SizedBox(width: 8),
           GestureDetector(
             onTap: onTap,
             child: ClipRRect(
@@ -355,7 +548,7 @@ class _CartSummary extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             PrimaryButton(
-              label: 'Оформить заказ',
+              label: 'Добавить в проект',
               onPressed: onCheckout,
             ),
           ],
