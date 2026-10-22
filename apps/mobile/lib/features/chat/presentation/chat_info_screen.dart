@@ -188,7 +188,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                                     p.phone.isNotEmpty
                                 ? p.phone
                                 : _chatRoleLabel(p.role),
-                            leading: AppAvatar(label: p.name, size: 40),
+                            leading: AppAvatar(label: p.name, imageUrl: p.avatarUrl, size: 40),
                             showChevron: ref
                                     .watch(authProvider)
                                     .user

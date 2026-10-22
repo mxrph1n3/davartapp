@@ -123,6 +123,13 @@ export class StorageService implements OnModuleInit {
     );
   }
 
+  /** Public URL for objects meant to be readable without signing (avatars, catalog). */
+  publicUrl(storageKey: string): string {
+    const base = this.config.get<string>('S3_PUBLIC_BASE_URL')?.replace(/\/$/, '');
+    if (!base) throw new Error('S3_PUBLIC_BASE_URL is not set');
+    return `${base}/${storageKey}`;
+  }
+
   private ensureAvailable() {
     if (!this.isAvailable()) {
       throw new Error('S3 storage is not available');

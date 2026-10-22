@@ -77,6 +77,7 @@ class ChatContact {
     this.phone,
     required this.role,
     required this.roleLabel,
+    this.avatarUrl,
   });
 
   final String id;
@@ -84,6 +85,7 @@ class ChatContact {
   final String? phone;
   final String role;
   final String roleLabel;
+  final String? avatarUrl;
 
   factory ChatContact.fromJson(Map<String, dynamic> json) {
     final id = json['id'];
@@ -95,6 +97,7 @@ class ChatContact {
       phone: phone is String && phone.isNotEmpty ? phone : null,
       role: json['role'] as String? ?? '',
       roleLabel: json['roleLabel'] as String? ?? '',
+      avatarUrl: json['avatarUrl'] as String?,
     );
   }
 }
@@ -343,16 +346,18 @@ class ChatReaction {
 }
 
 class ChatSender {
-  const ChatSender({required this.id, required this.name});
+  const ChatSender({required this.id, required this.name, this.avatarUrl});
 
   final String id;
   final String name;
+  final String? avatarUrl;
 
   factory ChatSender.fromJson(Map<String, dynamic> json) {
     final name = json['name'];
     return ChatSender(
       id: json['id'] is String ? json['id'] as String : '',
       name: name is String && name.trim().isNotEmpty ? name : 'Участник',
+      avatarUrl: json['avatarUrl'] as String?,
     );
   }
 }
@@ -442,12 +447,14 @@ class ChatParticipant {
     required this.name,
     required this.phone,
     required this.role,
+    this.avatarUrl,
   });
 
   final String id;
   final String name;
   final String phone;
   final String role;
+  final String? avatarUrl;
 
   factory ChatParticipant.fromJson(Map<String, dynamic> json) {
     return ChatParticipant(
@@ -455,6 +462,7 @@ class ChatParticipant {
       name: json['name'] as String,
       phone: json['phone'] as String,
       role: json['role'] as String? ?? 'client',
+      avatarUrl: json['avatarUrl'] as String?,
     );
   }
 }

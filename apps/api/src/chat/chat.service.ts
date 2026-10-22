@@ -47,7 +47,7 @@ const PROJECT_WELCOME_MESSAGE = [
 
 type MessageWithRelations = Prisma.MessageGetPayload<{
   include: {
-    sender: { select: { id: true; name: true; phone: true; role: true } };
+    sender: { select: { id: true; name: true; phone: true; role: true; avatarUrl: true } };
     product: {
       select: {
         id: true;
@@ -63,7 +63,7 @@ type MessageWithRelations = Prisma.MessageGetPayload<{
         type: true;
         content: true;
         attachmentName: true;
-        sender: { select: { id: true; name: true; phone: true; role: true } };
+        sender: { select: { id: true; name: true; phone: true; role: true; avatarUrl: true } };
       };
     };
     reactions: {
@@ -73,7 +73,7 @@ type MessageWithRelations = Prisma.MessageGetPayload<{
 }>;
 
 const messageInclude = {
-  sender: { select: { id: true, name: true, phone: true, role: true } },
+  sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
   product: {
     select: {
       id: true,
@@ -89,7 +89,7 @@ const messageInclude = {
       type: true,
       content: true,
       attachmentName: true,
-      sender: { select: { id: true, name: true, phone: true, role: true } },
+      sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
     },
   },
   reactions: {
@@ -140,7 +140,7 @@ export class ChatService {
             participants: {
               select: {
                 user: {
-                  select: { id: true, name: true, phone: true, role: true },
+                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
                 },
               },
             },
@@ -330,7 +330,7 @@ export class ChatService {
         },
         ...(namePhoneFilter ?? {}),
       },
-      select: { id: true, name: true, phone: true, role: true },
+      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
       orderBy: [{ name: 'asc' }, { phone: 'asc' }],
       take: 200,
     });
@@ -353,6 +353,7 @@ export class ChatService {
             viewerIsStaff || user.role === UserRole.client ? user.phone : null,
           role: user.role,
           roleLabel: this.contactRoleLabel(user.role),
+          avatarUrl: user.avatarUrl ?? null,
         })),
     };
   }
@@ -364,7 +365,7 @@ export class ChatService {
 
     const other = await this.prisma.user.findUnique({
       where: { id: otherUserId },
-      select: { id: true, name: true, phone: true, role: true },
+      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
     });
     if (!other) throw new NotFoundException('User not found');
 
@@ -417,7 +418,7 @@ export class ChatService {
         participants: {
           include: {
             user: {
-              select: { id: true, name: true, phone: true, role: true },
+              select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
             },
           },
         },
@@ -471,7 +472,7 @@ export class ChatService {
         id: { not: actorId },
         phone: { in: normalized },
       },
-      select: { id: true, name: true, phone: true, role: true },
+      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
     });
 
     const matches: Array<{
@@ -703,7 +704,7 @@ export class ChatService {
         participants: {
           include: {
             user: {
-              select: { id: true, name: true, phone: true, role: true },
+              select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
             },
           },
         },
@@ -736,7 +737,7 @@ export class ChatService {
               participants: {
                 include: {
                   user: {
-                    select: { id: true, name: true, phone: true, role: true },
+                    select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
                   },
                 },
               },
@@ -790,6 +791,7 @@ export class ChatService {
             ? participant.user.phone
             : '',
         role: participant.user.role,
+        avatarUrl: participant.user.avatarUrl ?? null,
       })),
     };
   }
@@ -804,7 +806,7 @@ export class ChatService {
     const messages = await this.prisma.message.findMany({
       where: { chatId },
       include: {
-        sender: { select: { id: true, name: true, phone: true, role: true } },
+        sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -1706,7 +1708,7 @@ export class ChatService {
             participants: {
               include: {
                 user: {
-                  select: { id: true, name: true, phone: true, role: true },
+                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
                 },
               },
             },
@@ -1715,7 +1717,7 @@ export class ChatService {
               take: 1,
               include: {
                 sender: {
-                  select: { id: true, name: true, phone: true, role: true },
+                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
                 },
               },
             },
@@ -2476,6 +2478,7 @@ export class ChatService {
       sender: {
         id: message.sender.id,
         name: this.senderLabel(message.sender),
+        avatarUrl: message.sender.avatarUrl ?? null,
       },
       isMine: message.senderId === viewerId,
       read: options?.read ?? false,

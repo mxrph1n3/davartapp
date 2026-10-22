@@ -9,6 +9,7 @@ import '../../../core/widgets/ds/ds.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../auth/presentation/require_login.dart';
 import '../data/profile_repository.dart';
+import 'avatar_picker.dart';
 import 'delete_account_button.dart';
 import 'profile_notifier.dart';
 import 'settings_screen.dart';
@@ -37,8 +38,9 @@ class ProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Row(
               children: [
-                AppAvatar(
+                AvatarPicker(
                   label: name?.isNotEmpty == true ? name! : phone,
+                  imageUrl: profileAsync.value?.avatarUrl,
                   size: 72,
                 ),
                 const SizedBox(width: AppSpacing.md),

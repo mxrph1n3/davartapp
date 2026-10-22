@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import {
   CreateAddressDto,
   RegisterFcmTokenDto,
@@ -9,7 +15,35 @@ import {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
+
+  /** Profile photo for any user (client or staff); shown in chats and contacts. */
+  async setAvatar(
+    userId: string,
+    file: { mimetype: string; size: number; buffer: Buffer } | undefined,
+  ) {
+    if (!file) throw new BadRequestException('File is required');
+    const type = (file.mimetype || '').toLowerCase();
+    const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/heic': 'heic', 'image/webp': 'webp' }[type];
+    if (!ext) throw new BadRequestException('Только фото: JPG, PNG, HEIC или WEBP');
+    if (file.size > 5 * 1024 * 1024) throw new BadRequestException('Фото больше 5 МБ');
+    if (!this.storage.isAvailable()) throw new BadRequestException('Хранилище недоступно');
+    const key = `avatars/${userId}/${randomUUID()}.${ext}`;
+    await this.storage.uploadObject(key, file.buffer, type);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: this.storage.publicUrl(key) },
+    });
+    return this.getById(userId);
+  }
+
+  async removeAvatar(userId: string) {
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarUrl: null } });
+    return this.getById(userId);
+  }
 
   async getById(id: string) {
     const user = await this.prisma.user.findUnique({
@@ -18,6 +52,7 @@ export class UsersService {
         id: true,
         phone: true,
         name: true,
+        avatarUrl: true,
         email: true,
         role: true,
         extraRoles: true,
@@ -45,6 +80,7 @@ export class UsersService {
         id: true,
         phone: true,
         name: true,
+        avatarUrl: true,
         email: true,
         role: true,
         extraRoles: true,

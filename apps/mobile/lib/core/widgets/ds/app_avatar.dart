@@ -8,10 +8,14 @@ class AppAvatar extends StatelessWidget {
     super.key,
     required this.label,
     this.size = 72,
+    this.imageUrl,
   });
 
   final String label;
   final double size;
+
+  /// Profile photo; initials are shown while it loads or if it fails.
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +32,21 @@ class AppAvatar extends StatelessWidget {
         border: Border.all(color: colors.border),
       ),
       alignment: Alignment.center,
-      child: showSilhouette
+      clipBehavior: Clip.antiAlias,
+      child: imageUrl != null && imageUrl!.isNotEmpty
+          ? Image.network(
+              imageUrl!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _initials(colors, initial, showSilhouette),
+            )
+          : _initials(colors, initial, showSilhouette),
+    );
+  }
+
+  Widget _initials(DavartColors colors, String initial, bool showSilhouette) {
+    return showSilhouette
           ? Icon(
               Icons.person_outline,
               size: size * 0.5,
@@ -44,7 +62,6 @@ class AppAvatar extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: colors.textPrimary,
               ),
-            ),
-    );
+            );
   }
 }
