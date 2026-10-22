@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_notifier.dart';
@@ -140,31 +139,26 @@ class CartNotifier extends Notifier<CartState> {
     }
   }
 
-  Future<void> assignToProject(String projectId, List<CartItem> items) async {
-    if (items.isEmpty) return;
+  /// «Удалить выбранные» in the personal cart ([projectId] null) or a project cart.
+  Future<void> removeItems(String? projectId, List<String> itemIds) async {
+    if (itemIds.isEmpty) return;
     final generation = ++_loadGeneration;
     try {
-      await _repository.assignToProject(
-        projectId,
-        items.map((item) => item.id).toList(),
+      final cart = await _repository.removeCartItems(
+        projectId: projectId,
+        itemIds: itemIds,
       );
-    } on DioException catch (error) {
-      final body = '${error.response?.data}';
-      final staleServer =
-          error.response?.statusCode == 400 && body.contains('itemIds');
-      if (!staleServer) rethrow;
-      for (final item in items) {
-        if (item.locked) continue;
-        await _repository.addToCart(
-          projectId: projectId,
-          productId: item.product.id,
-          quantity: item.quantity,
-        );
-        await _repository.removeCartItem(itemId: item.id);
+      if (generation != _loadGeneration) return;
+      if (projectId == null) {
+        state = state.copyWith(cart: cart, clearError: true);
+      } else {
+        _replaceProjectCart(cart);
       }
+    } catch (_) {
+      if (generation != _loadGeneration) return;
+      state = state.copyWith(errorMessage: 'Не удалось удалить товары');
+      rethrow;
     }
-    if (generation != _loadGeneration) return;
-    await loadCart();
   }
 
   Future<void> updateQuantity(String itemId, int quantity) async {

@@ -149,6 +149,12 @@ class StaffRepository {
     return response.data ?? [];
   }
 
+  /// What the client collected for themselves (read-only for the studio).
+  Future<Cart> getClientPersonalCart(String clientId) async {
+    final response = await _dio.get('/staff/clients/$clientId/cart');
+    return Cart.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<Cart> getCart(String projectId) async {
     final response = await _dio.get('/staff/projects/$projectId/cart');
     return Cart.fromJson(response.data as Map<String, dynamic>);

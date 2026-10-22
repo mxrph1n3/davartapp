@@ -12,8 +12,9 @@ Color shopAccentLine(BuildContext context) =>
         ? AppColors.of(context).accent
         : const Color(0xFFC9A400);
 
-class _Glyph extends StatelessWidget {
-  const _Glyph({required this.plus, this.size = 20});
+/// Yellow «+» / «−» drawn with round caps (same weight in both themes).
+class AccentGlyph extends StatelessWidget {
+  const AccentGlyph({required this.plus, this.size = 20});
 
   final bool plus;
   final double size;
@@ -69,7 +70,7 @@ class QtyCounter extends ConsumerWidget {
         return _TapArea(
           size: 44,
           onTap: () => ShopCart.add(context, ref, product),
-          child: const _Glyph(plus: true, size: 28),
+          child: const AccentGlyph(plus: true, size: 28),
         );
       }
       return OutlinedButton(
@@ -103,10 +104,10 @@ class QtyCounter extends ConsumerWidget {
             mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
             mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.spaceBetween,
             children: [
-              _TapArea(onTap: () => ShopCart.remove(context, ref, product), child: const _Glyph(plus: false)),
+              _TapArea(onTap: () => ShopCart.remove(context, ref, product), child: const AccentGlyph(plus: false)),
               SizedBox(width: compact ? 22 : 0, child: compact ? Center(child: number) : null),
               if (!compact) number,
-              _TapArea(onTap: () => ShopCart.add(context, ref, product), child: const _Glyph(plus: true)),
+              _TapArea(onTap: () => ShopCart.add(context, ref, product), child: const AccentGlyph(plus: true)),
             ],
           ),
           ?amount,

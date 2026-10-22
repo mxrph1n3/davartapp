@@ -97,23 +97,14 @@ class StaffClientProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ListItem(
-                  title: 'Корзина проекта',
-                  subtitle: 'Выберите проект и откройте корзину',
+                  title: 'Личная корзина клиента',
+                  subtitle: 'Что клиент отложил сам — для подборки',
                   leading: const Icon(Icons.shopping_bag_outlined, size: 22),
-                  onTap: () async {
-                    final projectId = await ensureActiveProject(
-                      context,
-                      ref,
-                      staffClientId: clientId,
-                      forcePicker: true,
-                    );
-                    if (projectId != null && context.mounted) {
-                      context.push(AppRoutes.staffProjectCart(projectId));
-                    }
-                  },
+                  onTap: () => context.push(AppRoutes.staffClientPersonalCart(clientId)),
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 PrimaryButton(
-                  label: 'Работать с корзиной в каталоге',
+                  label: 'Наполнить корзину проекта',
                   onPressed: () async {
                     ref.read(workingClientProvider.notifier).state =
                         WorkingClient(

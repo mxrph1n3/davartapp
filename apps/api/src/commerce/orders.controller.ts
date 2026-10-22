@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -28,9 +27,6 @@ export class OrdersController {
 
   @Post()
   create(@CurrentUser() user: JwtPayload, @Body() dto: CreateOrderDto) {
-    if (!dto.projectId) {
-      throw new BadRequestException('projectId is required');
-    }
     return this.ordersService.createFromCart(
       user.sub,
       user.role,

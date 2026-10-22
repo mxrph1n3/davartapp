@@ -39,6 +39,7 @@ import '../../features/admin/presentation/admin_users_screen.dart';
 import '../../features/staff/presentation/staff_audit_screen.dart';
 import '../../features/staff/presentation/staff_brief_screen.dart';
 import '../../features/staff/presentation/staff_checkout_screen.dart';
+import '../../features/staff/presentation/staff_client_personal_cart_screen.dart';
 import '../../features/staff/presentation/staff_client_cart_screen.dart';
 import '../../features/staff/presentation/staff_client_profile_screen.dart';
 import '../../features/staff/presentation/staff_order_detail_screen.dart';
@@ -81,6 +82,7 @@ abstract final class AppRoutes {
   static const staffNewChat = '/staff/chats/new';
   static String staffChatInfo(String id) => '/staff/chats/$id/info';
   static String staffClientProfile(String id) => '/staff/clients/$id';
+  static String staffClientPersonalCart(String id) => '/staff/clients/$id/personal-cart';
   static String staffProjectWorkspace(String projectId) =>
       '/staff/projects/$projectId/workspace';
   static String staffProjectCart(String projectId) =>
@@ -490,6 +492,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                       return StaffClientProfileScreen(clientId: clientId);
                     },
                     routes: [
+                      GoRoute(
+                        path: 'personal-cart',
+                        builder: (context, state) => StaffClientPersonalCartScreen(
+                          clientId: state.pathParameters['clientId']!,
+                        ),
+                      ),
                       GoRoute(
                         path: 'orders/:orderId',
                         builder: (context, state) {

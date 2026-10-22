@@ -221,6 +221,12 @@ export class StaffService {
     return this.projectsService.generateBriefPdf(clientId, projectId);
   }
 
+  /** What the client collected for themselves — the designer uses it for the подборка. */
+  async getClientPersonalCart(actor: JwtPayload, clientId: string) {
+    await this.assertClientAccess(actor, clientId);
+    return this.cartService.getPersonalCartOf(clientId);
+  }
+
   async getCart(actor: JwtPayload, projectId: string) {
     return this.cartService.getCart(
       projectId,

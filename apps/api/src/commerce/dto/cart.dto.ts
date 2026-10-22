@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsInt,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CartProjectQueryDto {
   @IsOptional()
@@ -42,4 +50,15 @@ export class UpdateCartItemDto {
 export class CartItemIdParamDto {
   @IsUUID()
   id!: string;
+}
+
+export class RemoveCartItemsDto {
+  @IsOptional()
+  @IsUUID()
+  projectId?: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  itemIds!: string[];
 }

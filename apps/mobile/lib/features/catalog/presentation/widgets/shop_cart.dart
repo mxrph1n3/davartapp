@@ -81,15 +81,19 @@ class ShopCart {
 }
 
 /// «2,88 м²» for pack-sold goods, «3 шт.» otherwise.
-String amountLabel(ProductSummary product, int qty) {
-  if (product.sellByPack && product.packSize != null) {
-    final total = product.packSize! * qty;
+String amountLabel(ProductSummary product, int qty) =>
+    packAmountLabel(product.sellByPack ? product.packSize : null, product.unit, qty);
+
+/// Same as [amountLabel] for anything that knows its pack size (cart lines, orders).
+String packAmountLabel(double? packSize, String unit, int qty) {
+  if (packSize != null) {
+    final total = packSize * qty;
     final text = total == total.roundToDouble()
         ? total.toStringAsFixed(0)
         : total.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '').replaceAll('.', ',');
-    return '$text ${product.unit}';
+    return '$text $unit';
   }
-  return '$qty ${product.unit == 'шт' ? 'шт.' : product.unit}';
+  return '$qty ${unit == 'шт' ? 'шт.' : unit}';
 }
 
 /// Main number of the counter: packs for pack-sold goods.

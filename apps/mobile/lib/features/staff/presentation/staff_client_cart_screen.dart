@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/price_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../catalog/presentation/widgets/shop_cart.dart';
 import '../../commerce/presentation/active_project_provider.dart';
 import '../../commerce/presentation/cart_selection_provider.dart';
 import '../data/staff_repository.dart';
@@ -173,7 +174,10 @@ class _StaffProjectCartScreenState
                                   ),
                                 ],
                                 const SizedBox(height: 4),
-                                Text(formatPrice(item.product.price)),
+                                Text(
+                                  '${formatPrice(item.product.price)} / ${item.product.unit}'
+                                  '${item.product.sellByPack ? ' · ${packAmountLabel(item.product.packSize, item.product.unit, item.quantity)} в ${item.quantity} уп.' : ''}',
+                                ),
                                 const SizedBox(height: 8),
                                 if (!item.locked)
                                   QuantityStepper(
@@ -192,7 +196,9 @@ class _StaffProjectCartScreenState
                                     ),
                                   )
                                 else
-                                  Text('${item.quantity} шт.'),
+                                  Text(item.product.sellByPack
+                                      ? '${item.quantity} уп.'
+                                      : packAmountLabel(null, item.product.unit, item.quantity)),
                               ],
                             ),
                           ),

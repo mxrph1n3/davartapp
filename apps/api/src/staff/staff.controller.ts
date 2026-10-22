@@ -258,6 +258,14 @@ export class StaffController {
     res.send(pdf);
   }
 
+  @Get('clients/:clientId/cart')
+  getClientPersonalCart(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+  ) {
+    return this.staffService.getClientPersonalCart(user, clientId);
+  }
+
   @Get('projects/:projectId/cart')
   getCart(
     @CurrentUser() user: JwtPayload,
