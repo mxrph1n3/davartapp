@@ -20,8 +20,11 @@ class CatalogRepository {
         .toList();
   }
 
-  Future<FilterOptions> getFilterOptions() async {
-    final response = await _dio.get('/catalog/filters');
+  Future<FilterOptions> getFilterOptions({String? categoryId}) async {
+    final response = await _dio.get(
+      '/catalog/filters',
+      queryParameters: {if (categoryId != null) 'categoryId': categoryId},
+    );
     return FilterOptions.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -52,6 +55,7 @@ class CatalogRepository {
   }) async {
     final response = await _dio.get(
       '/catalog/search',
+      options: Options(listFormat: ListFormat.multi),
       queryParameters: <String, dynamic>{
         if (query != null && query.isNotEmpty) 'q': query,
         if (categoryId != null) 'categoryId': categoryId,
@@ -62,6 +66,12 @@ class CatalogRepository {
         if (filters.color != null) 'color': filters.color,
         if (filters.collection != null) 'collection': filters.collection,
         if (filters.inStock != null) 'inStock': filters.inStock,
+        if (filters.brandIds.isNotEmpty) 'brandIds': filters.brandIds.join(','),
+        if (filters.attrs.values.any((v) => v.isNotEmpty))
+          'attr': [
+            for (final e in filters.attrs.entries)
+              for (final v in e.value) '${e.key}:$v',
+          ],
         'sort': sort.apiValue,
         'page': page,
         'limit': limit,

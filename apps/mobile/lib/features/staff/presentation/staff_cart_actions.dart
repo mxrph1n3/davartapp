@@ -47,6 +47,7 @@ Future<Cart?> addProductToActiveCart(
   WidgetRef ref,
   String productId, {
   BuildContext? context,
+  int quantity = 1,
 }) async {
   if (!await promptLogin(context, ref)) return null;
 
@@ -79,6 +80,7 @@ Future<Cart?> addProductToActiveCart(
       final cart = await ref.read(staffRepositoryProvider).addToCart(
             projectId,
             productId: productId,
+            quantity: quantity,
           );
       ref.invalidate(staffProjectCartProvider(projectId));
       if (context.mounted) {

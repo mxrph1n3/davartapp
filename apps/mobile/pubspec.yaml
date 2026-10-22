@@ -103,6 +103,7 @@ flutter:
     - assets/brief/styles/
     - assets/brief/objects/
     - assets/brief/rooms/
+    - assets/catalog/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

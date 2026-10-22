@@ -10,9 +10,10 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/phone_screen.dart';
-import '../../features/catalog/presentation/catalog_screen.dart';
-import '../../features/catalog/presentation/product_detail_screen.dart';
+import '../../features/catalog/presentation/category_screen.dart';
+import '../../features/catalog/presentation/product_screen.dart';
 import '../../features/catalog/presentation/search_screen.dart';
+import '../../features/catalog/presentation/shop_home_screen.dart';
 import '../../features/documents/presentation/document_viewer_screen.dart';
 import '../../features/commerce/presentation/cart_screen.dart';
 import '../../features/commerce/presentation/checkout_screen.dart';
@@ -104,6 +105,10 @@ abstract final class AppRoutes {
 
 String catalogPathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffCatalog : AppRoutes.catalog;
+
+/// Shop tile: '/catalog/c/plitka-i-keramogranit'; slug 'vse' — whole catalog.
+String categoryPathForRole(UserRole? role, String slug) =>
+    '${catalogPathForRole(role)}/c/$slug';
 
 String profilePathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffProfile : AppRoutes.profile;
@@ -306,7 +311,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.catalog,
-                builder: (context, state) => const CatalogScreen(),
+                builder: (context, state) => const ShopHomeScreen(),
+              ),
+              GoRoute(
+                path: '/catalog/c/:slug',
+                builder: (context, state) =>
+                    CategoryScreen(slug: state.pathParameters['slug']!),
               ),
               GoRoute(
                 path: AppRoutes.search,
@@ -319,7 +329,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/product/:id',
                 builder: (context, state) {
                   final productId = state.pathParameters['id']!;
-                  return ProductDetailScreen(productId: productId);
+                  return ProductScreen(productId: productId);
                 },
               ),
               GoRoute(
@@ -537,7 +547,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.staffCatalog,
-                builder: (context, state) => const CatalogScreen(),
+                builder: (context, state) => const ShopHomeScreen(),
+              ),
+              GoRoute(
+                path: '/staff/catalog/c/:slug',
+                builder: (context, state) =>
+                    CategoryScreen(slug: state.pathParameters['slug']!),
               ),
               GoRoute(
                 path: '/staff/search',
@@ -550,7 +565,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/staff/product/:id',
                 builder: (context, state) {
                   final productId = state.pathParameters['id']!;
-                  return ProductDetailScreen(productId: productId);
+                  return ProductScreen(productId: productId);
                 },
               ),
               GoRoute(

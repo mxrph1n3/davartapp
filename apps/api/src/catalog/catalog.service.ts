@@ -190,8 +190,9 @@ export class CatalogService {
   }
 
   async searchProducts(query: SearchQueryDto) {
-    // Characteristic filters, several brands and category trees are only in Postgres.
-    if (query.attr?.length || query.brandIds || query.categoryId) {
+    // Browsing without text, characteristic filters, several brands and category trees go to
+    // Postgres; Meilisearch is only for text search (its index may lag behind the database).
+    if (!query.q?.trim() || query.attr?.length || query.brandIds || query.categoryId) {
       return this.searchWithPrisma(query);
     }
     const params: SearchParams = {

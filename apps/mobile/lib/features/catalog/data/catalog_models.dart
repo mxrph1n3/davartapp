@@ -30,7 +30,13 @@ class CatalogFilters {
     this.color,
     this.collection,
     this.inStock,
+    this.attrs = const {},
+    this.brandIds = const {},
   });
+
+  /// Characteristic filters: key → chosen values (OR inside a key, AND between keys).
+  final Map<String, Set<String>> attrs;
+  final Set<String> brandIds;
 
   final double? minPrice;
   final double? maxPrice;
@@ -47,7 +53,15 @@ class CatalogFilters {
       material != null ||
       color != null ||
       collection != null ||
-      inStock != null;
+      inStock != null ||
+      attrs.values.any((v) => v.isNotEmpty) ||
+      brandIds.isNotEmpty;
+
+  int get activeCount =>
+      attrs.values.where((v) => v.isNotEmpty).length +
+      (brandIds.isNotEmpty || brandId != null ? 1 : 0) +
+      (minPrice != null || maxPrice != null ? 1 : 0) +
+      (inStock == true ? 1 : 0);
 
   CatalogFilters copyWith({
     double? minPrice,
@@ -57,6 +71,8 @@ class CatalogFilters {
     String? color,
     String? collection,
     bool? inStock,
+    Map<String, Set<String>>? attrs,
+    Set<String>? brandIds,
     bool clearMinPrice = false,
     bool clearMaxPrice = false,
     bool clearBrandId = false,
@@ -73,6 +89,8 @@ class CatalogFilters {
       color: clearColor ? null : (color ?? this.color),
       collection: clearCollection ? null : (collection ?? this.collection),
       inStock: clearInStock ? null : (inStock ?? this.inStock),
+      attrs: attrs ?? this.attrs,
+      brandIds: brandIds ?? this.brandIds,
     );
   }
 
@@ -130,6 +148,7 @@ class FilterOptions {
     required this.colors,
     required this.collections,
     required this.priceRange,
+    this.attributes = const [],
   });
 
   factory FilterOptions.fromJson(Map<String, dynamic> json) {
@@ -143,14 +162,35 @@ class FilterOptions {
           .map((item) => FilterCollection.fromJson(item as Map<String, dynamic>))
           .toList(),
       priceRange: PriceRange.fromJson(json['priceRange'] as Map<String, dynamic>),
+      attributes: (json['attributes'] as List<dynamic>? ?? [])
+          .map((item) => FilterAttribute.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 
+  final List<FilterAttribute> attributes;
   final List<FilterBrand> brands;
   final List<String> materials;
   final List<String> colors;
   final List<FilterCollection> collections;
   final PriceRange priceRange;
+}
+
+class FilterAttribute {
+  const FilterAttribute({required this.key, required this.values});
+
+  factory FilterAttribute.fromJson(Map<String, dynamic> json) {
+    return FilterAttribute(
+      key: json['key'] as String,
+      values: [
+        for (final v in json['values'] as List<dynamic>? ?? [])
+          (value: (v as Map)['value'] as String, count: (v['count'] as num?)?.toInt() ?? 0),
+      ],
+    );
+  }
+
+  final String key;
+  final List<({String value, int count})> values;
 }
 
 class CatalogCategory {
@@ -160,6 +200,7 @@ class CatalogCategory {
     required this.slug,
     this.imageUrl,
     required this.productCount,
+    this.children = const [],
   });
 
   factory CatalogCategory.fromJson(Map<String, dynamic> json) {
@@ -168,10 +209,17 @@ class CatalogCategory {
       name: json['name'] as String,
       slug: json['slug'] as String,
       imageUrl: json['imageUrl'] as String?,
-      productCount: (json['_count']?['products'] as int?) ?? 0,
+      productCount: (json['productCount'] as int?) ??
+          (json['_count']?['products'] as int?) ??
+          0,
+      children: (json['children'] as List<dynamic>? ?? [])
+          .map((item) => CatalogCategory.fromJson(item as Map<String, dynamic>))
+          .toList(),
     );
   }
 
+  /// Subcategories, shown as chips inside a shop tile.
+  final List<CatalogCategory> children;
   final String id;
   final String name;
   final String slug;
@@ -217,6 +265,14 @@ class ProductSummary {
     required this.isPopular,
     required this.category,
     required this.brand,
+    this.unit = 'шт',
+    this.sellByPack = false,
+    this.packSize,
+    this.packPieces,
+    this.leadTimeMinDays,
+    this.leadTimeMaxDays,
+    this.highlights = const [],
+    this.collectionSlug,
   });
 
   factory ProductSummary.fromJson(Map<String, dynamic> json) {
@@ -241,7 +297,39 @@ class ProductSummary {
       isPopular: json['isPopular'] as bool? ?? false,
       category: category,
       brand: CatalogBrand.fromJson(json['brand'] as Map<String, dynamic>?),
+      unit: json['unit'] as String? ?? 'шт',
+      sellByPack: json['sellByPack'] as bool? ?? false,
+      packSize: (json['packSize'] as num?)?.toDouble(),
+      packPieces: (json['packPieces'] as num?)?.toInt(),
+      leadTimeMinDays: (json['leadTimeMinDays'] as num?)?.toInt(),
+      leadTimeMaxDays: (json['leadTimeMaxDays'] as num?)?.toInt(),
+      highlights: (json['highlights'] as List<dynamic>? ?? []).cast<String>(),
+      collectionSlug: json['collectionSlug'] as String?,
     );
+  }
+
+  /// Price is per [unit]; goods with [sellByPack] go to the cart in packs of [packSize] units.
+  final String unit;
+  final bool sellByPack;
+  final double? packSize;
+  final int? packPieces;
+  final int? leadTimeMinDays;
+  final int? leadTimeMaxDays;
+
+  /// Short characteristics for list rows: size, surface, material…
+  final List<String> highlights;
+  final String? collectionSlug;
+
+  /// Price of one cart unit (a pack for pack-sold goods).
+  double get cartUnitPrice =>
+      sellByPack && packSize != null ? price * packSize! : price;
+
+  /// «срок 7–10 дней» for goods not in stock.
+  String get leadTimeLabel {
+    final a = leadTimeMinDays, b = leadTimeMaxDays;
+    if (a != null && b != null && a != b) return 'срок $a–$b дней';
+    if ((a ?? b) != null) return 'срок ${a ?? b} дней';
+    return 'срок 7–10 дней';
   }
 
   final String id;
@@ -286,15 +374,43 @@ class ProductDetail extends ProductSummary {
     required super.isPopular,
     required super.category,
     required super.brand,
+    super.unit,
+    super.sellByPack,
+    super.packSize,
+    super.packPieces,
+    super.leadTimeMinDays,
+    super.leadTimeMaxDays,
+    super.highlights,
+    super.collectionSlug,
     required this.attributes,
+    this.images = const [],
+    this.collection = const [],
+    this.similar = const [],
   });
 
   factory ProductDetail.fromJson(Map<String, dynamic> json) {
-    final category = CatalogCategory.fromJson(
-      json['category'] as Map<String, dynamic>,
-    );
-    final id = json['id'] as String;
+    final summary = ProductSummary.fromJson(json);
+    final category = summary.category;
+    final id = summary.id;
+    List<ProductSummary> list(String key) => (json[key] as List<dynamic>? ?? [])
+        .map((item) => ProductSummary.fromJson(item as Map<String, dynamic>))
+        .toList();
     return ProductDetail(
+      unit: summary.unit,
+      sellByPack: summary.sellByPack,
+      packSize: summary.packSize,
+      packPieces: summary.packPieces,
+      leadTimeMinDays: summary.leadTimeMinDays,
+      leadTimeMaxDays: summary.leadTimeMaxDays,
+      highlights: summary.highlights,
+      collectionSlug: summary.collectionSlug,
+      images: [
+        if (summary.imageUrl != null) summary.imageUrl!,
+        for (final url in (json['images'] as List<dynamic>? ?? []).cast<String>())
+          if (url != summary.imageUrl) url,
+      ],
+      collection: list('collection'),
+      similar: list('similar'),
       id: id,
       name: json['name'] as String,
       slug: json['slug'] as String,
@@ -318,6 +434,9 @@ class ProductDetail extends ProductSummary {
   }
 
   final List<ProductAttribute> attributes;
+  final List<String> images;
+  final List<ProductSummary> collection;
+  final List<ProductSummary> similar;
 }
 
 class ProductsPage {
