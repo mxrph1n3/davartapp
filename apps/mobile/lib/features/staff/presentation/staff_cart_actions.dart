@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/top_notice.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/data/auth_repository.dart';
@@ -38,10 +40,7 @@ String _addToCartErrorMessage(Object error) {
   return 'Не удалось добавить в корзину';
 }
 
-void _showSnack(BuildContext? context, String message) {
-  if (context == null || !context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-}
+void _showSnack(BuildContext? context, String message) => showTopNotice(context, message);
 
 /// Adds a product to the correct cart (own project vs working project for staff).
 Future<Cart?> addProductToActiveCart(

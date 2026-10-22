@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Davart CRM',
+  title: 'DAVart CRM',
   description: 'Клиенты, проекты и заказы комплектации',
 };
 

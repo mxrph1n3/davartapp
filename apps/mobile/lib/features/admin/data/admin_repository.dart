@@ -148,7 +148,7 @@ class AdminUser {
 
 String adminRoleLabel(UserRole role) {
   return switch (role) {
-    UserRole.admin => 'Админ (бог)',
+    UserRole.admin => 'Админ (Бог)',
     UserRole.designer => 'Дизайнер',
     UserRole.complectator => 'Менеджер',
     UserRole.surveyor => 'Замерщик',

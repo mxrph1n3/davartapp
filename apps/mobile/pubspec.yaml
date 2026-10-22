@@ -72,7 +72,7 @@ flutter_launcher_icons:
   ios: true
   image_path: assets/icon/app_icon.png
   remove_alpha_ios: true
-  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_background: "#000000"
   adaptive_icon_foreground: assets/icon/app_icon_foreground.png
   # Master also used for App Store 1024 marketing icon via ios: true
   min_sdk_android: 21
