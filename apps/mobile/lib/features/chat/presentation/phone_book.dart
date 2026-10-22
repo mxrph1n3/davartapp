@@ -52,20 +52,20 @@ class PhoneBook {
       );
     }
 
-    final granted = await FlutterContacts.requestPermission(readonly: true);
-    if (!granted) {
+    final status = await FlutterContacts.permissions.request(PermissionType.read);
+    if (status != PermissionStatus.granted &&
+        status != PermissionStatus.limited) {
       return const PhoneBookPage(granted: false, entries: []);
     }
-    final raw = await FlutterContacts.getContacts(
-      withProperties: true,
-      withPhoto: false,
+    final raw = await FlutterContacts.getAll(
+      properties: {ContactProperty.name, ContactProperty.phone},
     );
     return PhoneBookPage(
       granted: true,
       entries: [
         for (final contact in raw)
           PhoneBookEntry(
-            name: contact.displayName,
+            name: contact.displayName ?? '',
             phones: [for (final phone in contact.phones) phone.number],
           ),
       ],
