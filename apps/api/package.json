@@ -25,7 +25,8 @@
     "catalog:ingest-italon": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node prisma/ingest-italon.ts",
     "catalog:ingest-kerama": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node prisma/ingest-kerama.ts",
     "prisma:refresh-images": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node prisma/refresh-product-images.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "catalog:taxonomy": "TS_NODE_COMPILER_OPTIONS='{\"module\":\"CommonJS\"}' ts-node prisma/catalog-taxonomy.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1104.0",

@@ -1,3 +1,4 @@
+import { unitLinePrice } from './pack-price';
 import {
   BadRequestException,
   Injectable,
@@ -74,7 +75,7 @@ export class OrdersService {
         },
         include: {
           product: {
-            select: { id: true, name: true, sku: true, price: true },
+            select: { id: true, name: true, sku: true, price: true, sellByPack: true, packSize: true },
           },
         },
       });
@@ -84,7 +85,7 @@ export class OrdersService {
       }
 
       const totalAmount = lines.reduce(
-        (sum, item) => sum + Number(item.product.price) * item.quantity,
+        (sum, item) => sum + unitLinePrice(item.product) * item.quantity,
         0,
       );
 
@@ -100,7 +101,8 @@ export class OrdersService {
             create: lines.map((item) => ({
               productId: item.product.id,
               quantity: item.quantity,
-              price: item.product.price,
+              // Per cart unit (a pack for goods sold in packs).
+              price: unitLinePrice(item.product),
               name: item.product.name,
               sku: item.product.sku,
             })),

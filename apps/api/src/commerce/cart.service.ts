@@ -13,6 +13,7 @@ import {
   userCanAccessProjectWhere,
   userProjectAccessWhere,
 } from '../projects/project-access';
+import { unitLinePrice } from './pack-price';
 import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -455,6 +456,12 @@ export class CartService {
                 compareAtPrice: true,
                 imageUrl: true,
                 inStock: true,
+                unit: true,
+                sellByPack: true,
+                packSize: true,
+                packPieces: true,
+                leadTimeMinDays: true,
+                leadTimeMaxDays: true,
                 category: { select: { slug: true } },
               },
             },
@@ -471,7 +478,7 @@ export class CartService {
     const items = cart.items.map((item) => ({
       id: item.id,
       quantity: item.quantity,
-      subtotal: Number(item.product.price) * item.quantity,
+      subtotal: unitLinePrice(item.product) * item.quantity,
       locked: item.lockedAt != null,
       lockedAt: item.lockedAt,
       lockedByOrderId: item.lockedByOrderId,
@@ -490,6 +497,12 @@ export class CartService {
           imageUrl: item.product.imageUrl,
         }),
         inStock: item.product.inStock,
+        unit: item.product.unit,
+        sellByPack: item.product.sellByPack,
+        packSize: item.product.packSize ? Number(item.product.packSize) : null,
+        packPieces: item.product.packPieces,
+        leadTimeMinDays: item.product.leadTimeMinDays,
+        leadTimeMaxDays: item.product.leadTimeMaxDays,
       },
     }));
 

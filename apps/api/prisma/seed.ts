@@ -1,4 +1,6 @@
 import { PrismaClient, UserRole } from '@prisma/client';
+import { applyTaxonomy } from './catalog-taxonomy';
+import { seedDemoCatalog } from './demo-catalog';
 
 const prisma = new PrismaClient();
 
@@ -159,6 +161,8 @@ async function main() {
   }
 
   const products = await prisma.product.count();
+  await applyTaxonomy(prisma);
+  await seedDemoCatalog(prisma);
   console.log(`Ready. Products in DB: ${products}. Staff phones seeded.`);
 }
 
