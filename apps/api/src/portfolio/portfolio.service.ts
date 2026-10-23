@@ -7,7 +7,7 @@ import { StorageService } from '../storage/storage.service';
 
 /** Tiles below the interior styles, after a larger gap. */
 const KIND_TILES: Array<{ kind: PortfolioKind; label: string }> = [
-  { kind: PortfolioKind.architecture, label: 'Архитектура' },
+  { kind: PortfolioKind.architecture, label: 'Архитектурный проект' },
   { kind: PortfolioKind.exterior, label: 'Экстерьер' },
   { kind: PortfolioKind.landscape, label: 'Ландшафт' },
 ];
@@ -16,9 +16,11 @@ const KIND_LABELS: Record<PortfolioKind, string> = {
   full: 'Полный',
   basic: 'Базовый',
   exterior: 'Экстерьер',
-  architecture: 'Архитектура',
+  architecture: 'Архитектурный',
   landscape: 'Ландшафт',
 };
+
+export const MOSAIC_KEY = 'portfolio/_cover/mosaic.jpg';
 
 const INTERIOR_KINDS = [PortfolioKind.full, PortfolioKind.basic];
 
@@ -88,6 +90,8 @@ export class PortfolioService {
       }),
     );
     return {
+      /** Grid of tiny renders for the «Портфолио работ» cover (prepared by the import). */
+      mosaicUrl: this.url(MOSAIC_KEY),
       collage: collage.map((image) => this.url(image.key)),
       styles: styles
         .filter((style) => withProjects.has(style.slug))

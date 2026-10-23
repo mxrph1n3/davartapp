@@ -17,9 +17,10 @@ class PortfolioTile {
 }
 
 class PortfolioTiles {
-  const PortfolioTiles({required this.collage, required this.styles, required this.kinds});
+  const PortfolioTiles({required this.collage, required this.styles, required this.kinds, this.mosaicUrl});
 
   factory PortfolioTiles.fromJson(Map<String, dynamic> json) => PortfolioTiles(
+        mosaicUrl: json['mosaicUrl'] as String?,
     collage: [
       for (final u in json['collage'] as List<dynamic>)
         if (u is String) u,
@@ -33,6 +34,9 @@ class PortfolioTiles {
         PortfolioTile(label: k['label'] as String, kind: k['kind'] as String, coverUrl: k['coverUrl'] as String?),
     ],
   );
+
+  /// Grid of tiny renders for the «Портфолио работ» cover.
+  final String? mosaicUrl;
 
   /// Renders for the «Все проекты» collage.
   final List<String> collage;
@@ -73,10 +77,15 @@ class PortfolioCard {
 }
 
 class PortfolioImage {
-  const PortfolioImage({required this.url, this.room});
+  const PortfolioImage({required this.url, this.room, this.width, this.height});
 
   final String url;
   final String? room;
+  final int? width;
+  final int? height;
+
+  /// Width / height; 4:3 when the size is unknown.
+  double get aspect => (width ?? 0) > 0 && (height ?? 0) > 0 ? width! / height! : 4 / 3;
 }
 
 class PortfolioProject {

@@ -124,18 +124,36 @@ class _PortfolioCarouselState extends State<PortfolioCarousel> {
             child: AnimatedOpacity(
               opacity: _index == 0 ? 1 : 0,
               duration: const Duration(milliseconds: 220),
-              child: DecoratedBox(
-                decoration: const BoxDecoration(
-                  gradient: RadialGradient(
-                    center: Alignment.bottomLeft,
-                    radius: 1.3,
-                    colors: [Color(0xB3000000), Color(0x00000000)],
-                  ),
-                ),
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Padding(padding: const EdgeInsets.all(14), child: widget.caption),
-                ),
+              child: Builder(
+                builder: (context) {
+                  // Dark theme — darkened corner with white text; light theme — lightened corner.
+                  final dark = Theme.of(context).brightness == Brightness.dark;
+                  final shade = dark ? Colors.black : Colors.white;
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.bottomLeft,
+                        radius: 1.25,
+                        colors: [
+                          shade.withValues(alpha: 0.82),
+                          shade.withValues(alpha: 0.35),
+                          shade.withValues(alpha: 0),
+                        ],
+                        stops: const [0, 0.45, 1],
+                      ),
+                    ),
+                    child: Align(
+                      alignment: Alignment.bottomLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: DefaultTextStyle.merge(
+                          style: TextStyle(color: dark ? Colors.white : const Color(0xFF151515)),
+                          child: widget.caption,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -233,4 +251,77 @@ class _PortfolioViewerState extends State<PortfolioViewer> {
 String portfolioArea(double area) {
   final text = area == area.roundToDouble() ? area.toStringAsFixed(0) : area.toStringAsFixed(1).replaceAll('.', ',');
   return '$text м²';
+}
+
+/// «Портфолио работ» cover: the mosaic of renders drifts slowly while a band of light
+/// runs across it.
+class PortfolioMosaic extends StatefulWidget {
+  const PortfolioMosaic({super.key, required this.url});
+
+  final String? url;
+
+  @override
+  State<PortfolioMosaic> createState() => _PortfolioMosaicState();
+}
+
+class _PortfolioMosaicState extends State<PortfolioMosaic> with TickerProviderStateMixin {
+  late final _drift = AnimationController(vsync: this, duration: const Duration(seconds: 24))..repeat(reverse: true);
+  late final _shine = AnimationController(vsync: this, duration: const Duration(milliseconds: 3800))..repeat();
+
+  @override
+  void dispose() {
+    _drift.dispose();
+    _shine.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        AnimatedBuilder(
+          animation: _drift,
+          builder: (context, child) {
+            final t = Curves.easeInOut.transform(_drift.value);
+            return Transform.scale(
+              scale: 1.12,
+              child: Transform.translate(offset: Offset(-18 + 36 * t, -6 + 12 * t), child: child),
+            );
+          },
+          child: PortfolioImageView(widget.url),
+        ),
+        IgnorePointer(
+          child: AnimatedBuilder(
+            animation: _shine,
+            builder: (context, _) => DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: const Alignment(-1, -0.6),
+                  end: const Alignment(1, 0.6),
+                  transform: _SlideGradient(_shine.value * 3 - 1.5),
+                  colors: [
+                    Colors.white.withValues(alpha: 0),
+                    Colors.white.withValues(alpha: 0.32),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                  stops: const [0.38, 0.5, 0.62],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SlideGradient extends GradientTransform {
+  const _SlideGradient(this.shift);
+
+  final double shift;
+
+  @override
+  Matrix4 transform(Rect bounds, {TextDirection? textDirection}) =>
+      Matrix4.translationValues(bounds.width * shift, 0, 0);
 }

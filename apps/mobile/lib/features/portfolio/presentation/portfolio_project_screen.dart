@@ -69,7 +69,6 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
       ),
       data: (p) {
         final favorite = _favorite ?? p.favorite;
-        final urls = [for (final i in p.images) i.url];
         final plaques = <({IconData icon, String label, String value})>[
           (icon: Icons.design_services_outlined, label: 'Дизайн-проект', value: p.kindLabel),
           if (p.styleLabel != null) (icon: Icons.palette_outlined, label: 'Стиль', value: p.styleLabel!),
@@ -91,10 +90,7 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
               SliverToBoxAdapter(
                 child: Stack(
                   children: [
-                    AspectRatio(
-                      aspectRatio: 4 / 3.4,
-                      child: _Gallery(urls: urls),
-                    ),
+                    _Gallery(images: p.images),
                     Positioned(
                       left: 0,
                       right: 0,
@@ -206,9 +202,11 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
                       ),
                     ],
                     const SizedBox(height: 28),
-                    Text(
-                      'Проект ${p.number}',
-                      style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
+                    Center(
+                      child: Text(
+                        'Проект № ${p.number}',
+                        style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
+                      ),
                     ),
                   ],
                 ),
@@ -300,10 +298,11 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
   }
 }
 
+/// Renders in their original proportions: the block takes the height of the current image.
 class _Gallery extends StatefulWidget {
-  const _Gallery({required this.urls});
+  const _Gallery({required this.images});
 
-  final List<String> urls;
+  final List<PortfolioImage> images;
 
   @override
   State<_Gallery> createState() => _GalleryState();
@@ -314,27 +313,42 @@ class _GalleryState extends State<_Gallery> {
 
   @override
   Widget build(BuildContext context) {
-    final urls = widget.urls;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        PageView.builder(
-          itemCount: urls.length,
-          onPageChanged: (i) => setState(() => _index = i),
-          itemBuilder: (_, i) =>
-              GestureDetector(onTap: () => PortfolioViewer.open(context, urls, i), child: PortfolioImageView(urls[i])),
-        ),
-        if (urls.length > 1)
-          Positioned(
-            right: 12,
-            bottom: 12,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-              decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(10)),
-              child: Text('${_index + 1} / ${urls.length}', style: const TextStyle(color: Colors.white, fontSize: 12)),
+    final images = widget.images;
+    final urls = [for (final i in images) i.url];
+    final width = MediaQuery.sizeOf(context).width;
+    final aspect = images.isEmpty ? 4 / 3 : images[_index].aspect;
+    // Very tall renders would push everything below the fold.
+    final height = (width / aspect).clamp(width * 0.5, width * 1.35);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      height: height,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            itemCount: images.length,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (_, i) => GestureDetector(
+              onTap: () => PortfolioViewer.open(context, urls, i),
+              child: PortfolioImageView(urls[i]),
             ),
           ),
-      ],
+          if (images.length > 1)
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+                decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(10)),
+                child: Text(
+                  '${_index + 1} / ${images.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

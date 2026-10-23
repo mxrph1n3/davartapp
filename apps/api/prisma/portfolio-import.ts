@@ -41,6 +41,7 @@ type ManifestProject = {
 };
 
 type Manifest = {
+  mosaic?: { number: string; file: string };
   styles: Array<{
     slug: string;
     label: string;
@@ -133,6 +134,21 @@ async function main() {
         sortOrder: order,
       },
     });
+  }
+
+  if (manifest.mosaic) {
+    // Always replaced: the grid is rebuilt on every export.
+    const { number, file } = manifest.mosaic;
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: keyOf(number, file),
+        Body: readFileSync(join(dir, number, file)),
+        ContentType: 'image/jpeg',
+        CacheControl: 'public, max-age=3600',
+      }),
+    );
+    uploaded += 1;
   }
 
   for (const p of manifest.projects) {

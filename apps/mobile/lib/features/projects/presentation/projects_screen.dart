@@ -195,7 +195,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 ],
                 const SizedBox(height: AppSpacing.xl),
                 _PortfolioEntryCard(
-                  collage: ref.watch(portfolioTilesProvider).asData?.value.collage ?? const [],
+                  mosaicUrl: ref.watch(portfolioTilesProvider).asData?.value.mosaicUrl,
                   onTap: () => context.push(AppRoutes.portfolio),
                 ),
               ],
@@ -210,11 +210,11 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 class _PortfolioEntryCard extends StatelessWidget {
   const _PortfolioEntryCard({
     required this.onTap,
-    required this.collage,
+    this.mosaicUrl,
   });
 
   final VoidCallback onTap;
-  final List<String> collage;
+  final String? mosaicUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +235,7 @@ class _PortfolioEntryCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                PortfolioCollage(urls: collage),
+                PortfolioMosaic(url: mosaicUrl),
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(

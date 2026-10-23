@@ -81,14 +81,11 @@ class _PortfolioListScreenState extends ConsumerState<PortfolioListScreen> {
               return ClipRRect(
                 borderRadius: BorderRadius.circular(18),
                 child: AspectRatio(
-                  aspectRatio: 4 / 3,
+                  aspectRatio: 16 / 9,
                   child: PortfolioCarousel(
                     images: c.images,
                     onTap: () => context.push(AppRoutes.portfolioProject(c.id)),
-                    caption: Text(
-                      parts.join(' · '),
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-                    ),
+                    caption: Text(parts.join(' · '), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
                 ),
               );
