@@ -16,6 +16,8 @@ import '../../commerce/presentation/active_project_provider.dart';
 import '../data/projects_models.dart';
 import '../data/projects_repository.dart';
 import '../data/project_summary.dart';
+import '../../portfolio/presentation/portfolio_home_screen.dart';
+import '../../portfolio/presentation/portfolio_widgets.dart';
 import 'projects_notifier.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
@@ -119,7 +121,6 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final projectsAsync = ref.watch(projectsListProvider);
-    final showcaseAsync = ref.watch(showcaseProjectsProvider);
 
     return TabPage(
       child: projectsAsync.when(
@@ -136,7 +137,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(projectsListProvider);
-              ref.invalidate(showcaseProjectsProvider);
+              ref.invalidate(portfolioTilesProvider);
             },
             child: ListView(
               clipBehavior: Clip.none,
@@ -194,9 +195,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 ],
                 const SizedBox(height: AppSpacing.xl),
                 _PortfolioEntryCard(
-                  coverUrl: showcaseAsync.asData?.value.isNotEmpty == true
-                      ? projectCoverUrl(showcaseAsync.asData!.value.first.id)
-                      : null,
+                  collage: ref.watch(portfolioTilesProvider).asData?.value.collage ?? const [],
                   onTap: () => context.push(AppRoutes.portfolio),
                 ),
               ],
@@ -211,11 +210,11 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 class _PortfolioEntryCard extends StatelessWidget {
   const _PortfolioEntryCard({
     required this.onTap,
-    this.coverUrl,
+    required this.collage,
   });
 
   final VoidCallback onTap;
-  final String? coverUrl;
+  final List<String> collage;
 
   @override
   Widget build(BuildContext context) {
@@ -236,16 +235,7 @@ class _PortfolioEntryCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (coverUrl != null)
-                  Image.network(
-                    coverUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: colors.imagePlaceholder,
-                    ),
-                  )
-                else
-                  ColoredBox(color: colors.imagePlaceholder),
+                PortfolioCollage(urls: collage),
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(

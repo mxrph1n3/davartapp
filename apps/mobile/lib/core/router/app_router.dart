@@ -31,7 +31,9 @@ import '../../features/profile/presentation/notifications_settings_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../../features/projects/presentation/brief_screen.dart';
-import '../../features/projects/presentation/portfolio_screen.dart';
+import '../../features/portfolio/presentation/portfolio_home_screen.dart';
+import '../../features/portfolio/presentation/portfolio_list_screen.dart';
+import '../../features/portfolio/presentation/portfolio_project_screen.dart';
 import '../../features/projects/presentation/project_detail_screen.dart';
 import '../../features/projects/presentation/projects_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
@@ -75,6 +77,8 @@ abstract final class AppRoutes {
   static String projectDetail(String id) => '/projects/$id';
   static String projectBrief(String id) => '/projects/$id/brief';
   static const portfolio = '/projects/portfolio';
+  static const portfolioList = '/projects/portfolio/list';
+  static String portfolioProject(String id) => '/projects/portfolio/p/$id';
   static String documentViewer(String id) => '/documents/$id';
   static String chatDetail(String id) => '/chat/$id';
   static String chatInfo(String id) => '/chat/$id/info';
@@ -348,7 +352,25 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'portfolio',
-                    builder: (context, state) => const PortfolioScreen(),
+                    builder: (context, state) => const PortfolioHomeScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'list',
+                        builder: (context, state) {
+                          final q = state.uri.queryParameters;
+                          return PortfolioListScreen(
+                            title: q['title'] ?? 'Портфолио',
+                            style: q['style'],
+                            kind: q['kind'],
+                          );
+                        },
+                      ),
+                      GoRoute(
+                        path: 'p/:id',
+                        builder: (context, state) =>
+                            PortfolioProjectScreen(id: state.pathParameters['id']!),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: ':id',
