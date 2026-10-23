@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
@@ -124,36 +125,18 @@ class _PortfolioCarouselState extends State<PortfolioCarousel> {
             child: AnimatedOpacity(
               opacity: _index == 0 ? 1 : 0,
               duration: const Duration(milliseconds: 220),
-              child: Builder(
-                builder: (context) {
-                  // Dark theme — darkened corner with white text; light theme — lightened corner.
-                  final dark = Theme.of(context).brightness == Brightness.dark;
-                  final shade = dark ? Colors.black : Colors.white;
-                  return DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: RadialGradient(
-                        center: Alignment.bottomLeft,
-                        radius: 1.25,
-                        colors: [
-                          shade.withValues(alpha: 0.82),
-                          shade.withValues(alpha: 0.35),
-                          shade.withValues(alpha: 0),
-                        ],
-                        stops: const [0, 0.45, 1],
-                      ),
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: GlassPlate(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: DefaultTextStyle.merge(
+                      style: const TextStyle(color: Colors.white),
+                      child: widget.caption,
                     ),
-                    child: Align(
-                      alignment: Alignment.bottomLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: DefaultTextStyle.merge(
-                          style: TextStyle(color: dark ? Colors.white : const Color(0xFF151515)),
-                          child: widget.caption,
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                  ),
+                ),
               ),
             ),
           ),
@@ -362,4 +345,32 @@ class _SlideGradient extends GradientTransform {
   @override
   Matrix4 transform(Rect bounds, {TextDirection? textDirection}) =>
       Matrix4.translationValues(bounds.width * shift, 0, 0);
+}
+
+/// Dark matte glass under white text: the picture shows through, blurred. Same in both themes.
+class GlassPlate extends StatelessWidget {
+  const GlassPlate({super.key, required this.child, this.padding = const EdgeInsets.all(12), this.radius = 14});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(radius),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: const Color(0x73000000),
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: const Color(0x1FFFFFFF), width: 0.6),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
 }

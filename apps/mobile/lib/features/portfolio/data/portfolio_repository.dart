@@ -7,6 +7,33 @@ final portfolioRepositoryProvider = Provider<PortfolioRepository>((ref) {
   return PortfolioRepository(ref.watch(dioProvider));
 });
 
+/// Questionnaire pictures: style covers and the first render of each room per style.
+class PortfolioBriefImages {
+  const PortfolioBriefImages({this.styles = const {}, this.rooms = const {}});
+
+  factory PortfolioBriefImages.fromJson(Map<String, dynamic> json) => PortfolioBriefImages(
+    styles: {
+      for (final e in (json['styles'] as Map<String, dynamic>).entries)
+        if (e.value is String) e.key: e.value as String,
+    },
+    rooms: {
+      for (final e in (json['rooms'] as Map<String, dynamic>).entries)
+        e.key: {
+          for (final r in (e.value as Map<String, dynamic>).entries)
+            if (r.value is String) r.key: r.value as String,
+        },
+    },
+  );
+
+  final Map<String, String> styles;
+  final Map<String, Map<String, String>> rooms;
+}
+
+/// Kept for the whole session: the questionnaire asks for it on many steps.
+final portfolioBriefImagesProvider = FutureProvider<PortfolioBriefImages>((ref) {
+  return ref.watch(portfolioRepositoryProvider).briefImages();
+});
+
 class PortfolioTile {
   const PortfolioTile({required this.label, this.style, this.kind, this.coverUrl});
 
@@ -215,6 +242,11 @@ class PortfolioRepository {
   PortfolioRepository(this._dio);
 
   final Dio _dio;
+
+  Future<PortfolioBriefImages> briefImages() async {
+    final response = await _dio.get('/portfolio/brief-images');
+    return PortfolioBriefImages.fromJson(response.data as Map<String, dynamic>);
+  }
 
   Future<PortfolioTiles> tiles() async {
     final response = await _dio.get('/portfolio/tiles');

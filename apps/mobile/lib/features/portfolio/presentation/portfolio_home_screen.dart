@@ -122,7 +122,13 @@ class _Tile extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(9, 0, 6, 8),
                 child: Text(
                   label,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, height: 1.15),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                    height: 1.15,
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ),
             ),

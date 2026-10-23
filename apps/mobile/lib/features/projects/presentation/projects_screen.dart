@@ -141,7 +141,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
             },
             child: ListView(
               clipBehavior: Clip.none,
-              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
               children: [
                 const ScreenHeader(title: 'Проекты'),
                 if (!ref.watch(authProvider).isAuthenticated && noOwnProjects)
@@ -230,36 +230,22 @@ class _PortfolioEntryCard extends StatelessWidget {
             children: [
               // No frame: the mosaic dissolves into the background on every side.
               PortfolioMosaic(url: mosaicUrl),
-              // White in both themes, centred; a soft shadow keeps it readable on light renders.
+              // Matte glass plate in the centre: reads the same in both themes.
               const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Портфолио работ',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        shadows: [
-                          Shadow(color: Color(0xCC000000), blurRadius: 18),
-                          Shadow(color: Color(0x99000000), blurRadius: 4),
-                        ],
+                child: GlassPlate(
+                  radius: 18,
+                  padding: EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Портфолио работ',
+                        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
                       ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Смотреть проекты студии',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        shadows: [
-                          Shadow(color: Color(0xCC000000), blurRadius: 14),
-                          Shadow(color: Color(0x99000000), blurRadius: 3),
-                        ],
-                      ),
-                    ),
-                  ],
+                      SizedBox(height: 3),
+                      Text('Смотреть проекты студии', style: TextStyle(color: Color(0xE6FFFFFF), fontSize: 14)),
+                    ],
+                  ),
                 ),
               ),
             ],

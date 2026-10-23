@@ -153,7 +153,7 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.chair_outlined, color: colors.accent),
+                                Icon(Icons.chair_outlined, color: colors.accentText),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
@@ -399,7 +399,7 @@ class _Plaque extends StatelessWidget {
       decoration: BoxDecoration(color: colors.surfaceMuted, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          Icon(icon, size: 22, color: colors.accent),
+          Icon(icon, size: 22, color: colors.accentText),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -431,7 +431,8 @@ class _RelatedRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
-    final accent = Theme.of(context).brightness == Brightness.dark ? colors.accent : const Color(0xFFD9B800);
+    // Thin brand-yellow outline; it is a line, not text, so it stays yellow in both themes.
+    final accent = colors.accent;
     // The plaque names the kind of project; the object and figures go underneath.
     final title = switch (item.kind) {
       'exterior' => 'Дизайн-проект экстерьера',

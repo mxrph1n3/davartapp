@@ -498,6 +498,8 @@ enum PortfolioKind {
   exterior
   architecture
   landscape
+  /// Cafes, offices, clinics, shops — their own tile, not mixed into the interior styles.
+  commercial
 }
 
 /// A finished studio project shown in «Портфолио». Not linked to a client: no names,

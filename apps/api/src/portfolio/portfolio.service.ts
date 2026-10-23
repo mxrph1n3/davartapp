@@ -10,6 +10,7 @@ const KIND_TILES: Array<{ kind: PortfolioKind; label: string }> = [
   { kind: PortfolioKind.architecture, label: 'Архитектурный проект' },
   { kind: PortfolioKind.exterior, label: 'Экстерьер' },
   { kind: PortfolioKind.landscape, label: 'Ландшафт' },
+  { kind: PortfolioKind.commercial, label: 'Коммерческие объекты' },
 ];
 
 const KIND_LABELS: Record<PortfolioKind, string> = {
@@ -18,6 +19,7 @@ const KIND_LABELS: Record<PortfolioKind, string> = {
   exterior: 'Экстерьер',
   architecture: 'Архитектурный',
   landscape: 'Ландшафт',
+  commercial: 'Коммерческий',
 };
 
 /** Shown number: internal suffixes for second cards of one project (15283-АР, 15299-Л) are hidden. */
@@ -28,6 +30,12 @@ export const MOSAIC_KEY = 'portfolio/_cover/mosaic.jpg';
 const INTERIOR_KINDS: PortfolioKind[] = [
   PortfolioKind.full,
   PortfolioKind.basic,
+];
+
+/** Among an object's other projects these go first: interior, incl. commercial interiors. */
+const INTERIOR_FIRST: PortfolioKind[] = [
+  ...INTERIOR_KINDS,
+  PortfolioKind.commercial,
 ];
 
 export type PortfolioQuery = {
@@ -121,6 +129,44 @@ export class PortfolioService {
           coverUrl: this.url(style.coverKey),
         })),
       kinds: kindCovers,
+    };
+  }
+
+  /**
+   * Pictures for the questionnaire: style covers and, per style, the first render of each
+   * room (rooms as named in the portfolio: «Кухня-гостиная», «Спальня»…).
+   */
+  async briefImages() {
+    const [styles, images] = await Promise.all([
+      this.prisma.portfolioStyle.findMany({
+        where: { NOT: { slug: { startsWith: 'kind:' } } },
+        select: { slug: true, coverKey: true },
+      }),
+      this.prisma.portfolioImage.findMany({
+        where: {
+          isPlan: false,
+          room: { not: null },
+          project: {
+            published: true,
+            kind: { in: INTERIOR_KINDS },
+            style: { not: null },
+          },
+        },
+        orderBy: [{ project: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+        select: { key: true, room: true, project: { select: { style: true } } },
+      }),
+    ]);
+    const rooms: Record<string, Record<string, string | null>> = {};
+    for (const image of images) {
+      const style = image.project.style!;
+      const byRoom = (rooms[style] ??= {});
+      if (!(image.room! in byRoom)) byRoom[image.room!] = this.url(image.key);
+    }
+    return {
+      styles: Object.fromEntries(
+        styles.map((style) => [style.slug, this.url(style.coverKey)]),
+      ),
+      rooms,
     };
   }
 
@@ -248,8 +294,8 @@ export class PortfolioService {
       related: [...related]
         .sort(
           (a, b) =>
-            Number(!INTERIOR_KINDS.includes(a.kind)) -
-            Number(!INTERIOR_KINDS.includes(b.kind)),
+            Number(!INTERIOR_FIRST.includes(a.kind)) -
+            Number(!INTERIOR_FIRST.includes(b.kind)),
         )
         .map((r) => ({
           id: r.id,

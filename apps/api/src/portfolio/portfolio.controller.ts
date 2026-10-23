@@ -75,6 +75,11 @@ export class PortfolioController {
     return this.portfolio.filters(user);
   }
 
+  @Get('brief-images')
+  briefImages() {
+    return this.portfolio.briefImages();
+  }
+
   @Get('favorites')
   @UseGuards(JwtAuthGuard)
   favorites(@CurrentUser() user: JwtPayload) {
