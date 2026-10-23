@@ -218,7 +218,6 @@ class _PortfolioEntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -231,27 +230,34 @@ class _PortfolioEntryCard extends StatelessWidget {
             children: [
               // No frame: the mosaic dissolves into the background on every side.
               PortfolioMosaic(url: mosaicUrl),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+              // White in both themes, centred; a soft shadow keeps it readable on light renders.
+              const Center(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       'Портфолио работ',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            color: colors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            shadows: [Shadow(color: colors.background, blurRadius: 12)],
-                          ),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        shadows: [
+                          Shadow(color: Color(0xCC000000), blurRadius: 18),
+                          Shadow(color: Color(0x99000000), blurRadius: 4),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: 4),
                     Text(
                       'Смотреть проекты студии',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: colors.textPrimary.withValues(alpha: 0.9),
-                            shadows: [Shadow(color: colors.background, blurRadius: 10)],
-                          ),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        shadows: [
+                          Shadow(color: Color(0xCC000000), blurRadius: 14),
+                          Shadow(color: Color(0x99000000), blurRadius: 3),
+                        ],
+                      ),
                     ),
                   ],
                 ),
