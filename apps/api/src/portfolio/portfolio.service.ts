@@ -188,6 +188,23 @@ export class PortfolioService {
     });
     if (!project) throw new NotFoundException('Project not found');
     const styleLabels = await this.styleLabels();
+    const related = project.objectGroup
+      ? await this.prisma.portfolioProject.findMany({
+          where: {
+            objectGroup: project.objectGroup,
+            id: { not: project.id },
+            ...this.visibility(viewer),
+          },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' },
+              where: { isPlan: false },
+              take: 1,
+            },
+          },
+          orderBy: { sortOrder: 'asc' },
+        })
+      : [];
     const favorite = viewer
       ? (await this.prisma.portfolioFavorite.findUnique({
           where: { userId_projectId: { userId: viewer.sub, projectId: id } },
@@ -223,6 +240,16 @@ export class PortfolioService {
           width: image.width,
           height: image.height,
         })),
+      /** «Этот объект в других проектах». */
+      related: related.map((r) => ({
+        id: r.id,
+        title: r.title,
+        kind: r.kind,
+        kindLabel: KIND_LABELS[r.kind],
+        styleLabel: r.style ? (styleLabels.get(r.style) ?? null) : null,
+        area: r.area,
+        coverUrl: this.url(r.images[0]?.key),
+      })),
       plans: project.images
         .filter((image) => image.isPlan)
         .map((image) => this.url(image.key)),

@@ -35,6 +35,7 @@ type ManifestProject = {
   materialsCost?: number | null;
   description?: string | null;
   inRealization?: boolean;
+  objectGroup?: string | null;
   published?: boolean;
   sortOrder?: number;
   images: ManifestImage[];
@@ -180,6 +181,7 @@ async function main() {
       materialsCost: p.materialsCost ?? null,
       description: p.description ?? null,
       inRealization: p.inRealization ?? false,
+      objectGroup: p.objectGroup ?? null,
       published: p.published ?? false,
       sortOrder: p.sortOrder ?? 0,
     };

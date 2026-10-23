@@ -187,6 +187,20 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
                       ],
                     ),
                   ),
+                  if (p.related.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                      sliver: SliverList.list(
+                        children: [
+                          Text(
+                            'Этот объект в других проектах',
+                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: colors.textPrimary),
+                          ),
+                          const SizedBox(height: 7),
+                          for (final r in p.related) _RelatedRow(item: r),
+                        ],
+                      ),
+                    ),
                   // Pushes the number just below the bottom edge: it is seen only after scrolling down.
                   const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink()),
                   SliverToBoxAdapter(
@@ -403,6 +417,65 @@ class _Plaque extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small plaque: thumbnail, title, kind · style · area, chevron; opens that project.
+class _RelatedRow extends StatelessWidget {
+  const _RelatedRow({required this.item});
+
+  final PortfolioRelated item;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final accent = Theme.of(context).brightness == Brightness.dark ? colors.accent : const Color(0xFFD9B800);
+    final subtitle = [
+      item.kind == 'full' || item.kind == 'basic' ? 'Интерьер' : item.kindLabel,
+      ?item.styleLabel,
+      if (item.area != null) portfolioArea(item.area!, kind: item.kind),
+    ].join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: colors.surfaceMuted,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(11),
+          side: BorderSide(color: accent),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => context.push(AppRoutes.portfolioProject(item.id)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: SizedBox(width: 54, height: 38, child: PortfolioImageView(item.coverUrl)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: colors.textPrimary),
+                      ),
+                      Text(subtitle, style: TextStyle(fontSize: 11, color: colors.textSecondary)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

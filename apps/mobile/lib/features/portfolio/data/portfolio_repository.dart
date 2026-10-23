@@ -91,6 +91,37 @@ class PortfolioImage {
   double get aspect => (width ?? 0) > 0 && (height ?? 0) > 0 ? width! / height! : 4 / 3;
 }
 
+/// Another project of the same object (the house's interior, its bath complex, the plot).
+class PortfolioRelated {
+  const PortfolioRelated({
+    required this.id,
+    required this.title,
+    required this.kind,
+    required this.kindLabel,
+    this.styleLabel,
+    this.area,
+    this.coverUrl,
+  });
+
+  factory PortfolioRelated.fromJson(Map<String, dynamic> json) => PortfolioRelated(
+    id: json['id'] as String,
+    title: json['title'] as String,
+    kind: json['kind'] as String,
+    kindLabel: json['kindLabel'] as String,
+    styleLabel: json['styleLabel'] as String?,
+    area: (json['area'] as num?)?.toDouble(),
+    coverUrl: json['coverUrl'] as String?,
+  );
+
+  final String id;
+  final String title;
+  final String kind;
+  final String kindLabel;
+  final String? styleLabel;
+  final double? area;
+  final String? coverUrl;
+}
+
 class PortfolioProject {
   const PortfolioProject({
     required this.id,
@@ -101,6 +132,7 @@ class PortfolioProject {
     required this.images,
     required this.rooms,
     required this.favorite,
+    this.related = const [],
     this.objectType,
     this.styleLabel,
     this.area,
@@ -126,6 +158,10 @@ class PortfolioProject {
     description: json['description'] as String?,
     inRealization: json['inRealization'] as bool? ?? false,
     favorite: json['favorite'] as bool? ?? false,
+    related: [
+      for (final r in json['related'] as List<dynamic>? ?? const [])
+        PortfolioRelated.fromJson(r as Map<String, dynamic>),
+    ],
     rooms: [for (final r in json['rooms'] as List<dynamic>) r as String],
     images: [
       for (final i in json['images'] as List<dynamic>)
@@ -147,6 +183,7 @@ class PortfolioProject {
   final String? description;
   final bool inRealization;
   final bool favorite;
+  final List<PortfolioRelated> related;
   final List<String> rooms;
   final List<PortfolioImage> images;
 }

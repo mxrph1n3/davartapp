@@ -521,6 +521,9 @@ model PortfolioProject {
   /// Sum of the furnishing lists in the PDF; null — no plaque.
   materialsCost Decimal?            @map("materials_cost") @db.Decimal(12, 2)
   description   String?
+  /// Projects made for one object (house, its bath complex, the plot) share this key;
+  /// the project page links to the others.
+  objectGroup   String?             @map("object_group")
   inRealization Boolean             @default(false) @map("in_realization")
   /// Drafts are seen by the studio only.
   published     Boolean             @default(false)
@@ -532,6 +535,7 @@ model PortfolioProject {
 
   @@index([style])
   @@index([kind])
+  @@index([objectGroup])
   @@map("portfolio_projects")
 }
 

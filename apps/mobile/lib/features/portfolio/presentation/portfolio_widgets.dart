@@ -258,8 +258,8 @@ String portfolioArea(double area, {String? kind}) {
   final word = m10 == 1 && m100 != 11
       ? 'сотка'
       : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14))
-          ? 'сотки'
-          : 'соток';
+      ? 'сотки'
+      : 'соток';
   return '$text $word';
 }
 
