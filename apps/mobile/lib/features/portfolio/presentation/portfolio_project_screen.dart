@@ -201,14 +201,20 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
                         style: TextStyle(fontSize: 15, height: 1.45, color: colors.textPrimary.withValues(alpha: 0.85)),
                       ),
                     ],
-                    const SizedBox(height: 28),
-                    Center(
-                      child: Text(
-                        'Проект № ${p.number}',
-                        style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
-                      ),
-                    ),
                   ],
+                ),
+              ),
+              // Pushes the number just below the bottom edge: it is seen only after scrolling down.
+              const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink()),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+                  child: Center(
+                    child: Text(
+                      'Проект № ${p.number}',
+                      style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
+                    ),
+                  ),
                 ),
               ),
             ],
