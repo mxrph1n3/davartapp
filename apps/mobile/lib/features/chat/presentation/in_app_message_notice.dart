@@ -119,6 +119,8 @@ class _InAppMessageNoticeState extends ConsumerState<InAppMessageNotice> {
   }
 
   bool _isViewingChat(String chatId) {
+    // The open chat screen registers itself — works for client and staff routes alike.
+    if (ref.read(pushServiceProvider).activeChatId == chatId) return true;
     try {
       final path = ref.read(routerProvider).state.uri.path;
       return path == '/chat/$chatId' || path.startsWith('/chat/$chatId/');

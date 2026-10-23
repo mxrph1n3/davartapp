@@ -566,7 +566,7 @@ class _NewChatScreenState extends ConsumerState<NewChatScreen> {
                   ? Icons.check_circle
                   : Icons.circle_outlined,
               color: _selectedIds.contains(contact.user?.id)
-                  ? colors.accent
+                  ? colors.accentText
                   : colors.textSecondary,
             )
           : opening

@@ -179,6 +179,21 @@ LocalKey distinctPageKey(String base) {
   return ValueKey(n == 1 ? base : '$base#$n');
 }
 
+/// Hides the keyboard whenever a screen opens or closes — a search field left focused on the
+/// previous screen must not keep the keyboard over the next one.
+class UnfocusOnNavigate extends NavigatorObserver {
+  void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _unfocus();
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _unfocus();
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _unfocus();
+}
+
 bool _isStaffPath(String location) => location.startsWith('/staff');
 
 bool _isClientShellPath(String location) {
@@ -195,6 +210,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = ref.read(routerRefreshProvider);
 
   final router = GoRouter(
+    observers: [UnfocusOnNavigate()],
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     refreshListenable: refreshNotifier,

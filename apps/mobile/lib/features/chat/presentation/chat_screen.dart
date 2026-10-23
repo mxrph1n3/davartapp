@@ -325,7 +325,7 @@ class _TelegramChatTile extends StatelessWidget {
                         timeLabel,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: hasUnread
-                                  ? colors.accent
+                                  ? colors.accentText
                                   : colors.textSecondary,
                               fontWeight: hasUnread
                                   ? FontWeight.w600

@@ -47,7 +47,15 @@ const PROJECT_WELCOME_MESSAGE = [
 
 type MessageWithRelations = Prisma.MessageGetPayload<{
   include: {
-    sender: { select: { id: true; name: true; phone: true; role: true; avatarUrl: true } };
+    sender: {
+      select: {
+        id: true;
+        name: true;
+        phone: true;
+        role: true;
+        avatarUrl: true;
+      };
+    };
     product: {
       select: {
         id: true;
@@ -63,7 +71,15 @@ type MessageWithRelations = Prisma.MessageGetPayload<{
         type: true;
         content: true;
         attachmentName: true;
-        sender: { select: { id: true; name: true; phone: true; role: true; avatarUrl: true } };
+        sender: {
+          select: {
+            id: true;
+            name: true;
+            phone: true;
+            role: true;
+            avatarUrl: true;
+          };
+        };
       };
     };
     reactions: {
@@ -73,7 +89,9 @@ type MessageWithRelations = Prisma.MessageGetPayload<{
 }>;
 
 const messageInclude = {
-  sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
+  sender: {
+    select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+  },
   product: {
     select: {
       id: true,
@@ -89,7 +107,15 @@ const messageInclude = {
       type: true,
       content: true,
       attachmentName: true,
-      sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
+      sender: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          role: true,
+          avatarUrl: true,
+        },
+      },
     },
   },
   reactions: {
@@ -140,7 +166,13 @@ export class ChatService {
             participants: {
               select: {
                 user: {
-                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    role: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
@@ -306,8 +338,6 @@ export class ChatService {
       select: { id: true, role: true, extraRoles: true },
     });
     if (!viewer) throw new NotFoundException('User not found');
-    const viewerIsStaff = hasStudioRole(allRolesOf(viewer));
-
     const query = q?.trim();
 
     const namePhoneFilter: Prisma.UserWhereInput | undefined = query
@@ -330,7 +360,13 @@ export class ChatService {
         },
         ...(namePhoneFilter ?? {}),
       },
-      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        avatarUrl: true,
+      },
       orderBy: [{ name: 'asc' }, { phone: 'asc' }],
       take: 200,
     });
@@ -345,12 +381,10 @@ export class ChatService {
         })
         .map((user) => ({
           id: user.id,
-          name: this.publicDisplayName(user, {
-            revealPhone: viewerIsStaff || user.role === UserRole.client,
-          }),
-          // Studio staff numbers stay private from clients.
-          phone:
-            viewerIsStaff || user.role === UserRole.client ? user.phone : null,
+          name: this.publicDisplayName(user, { revealPhone: true }),
+          // All numbers are visible for now (customer, 23.10): there are no in-app calls yet,
+          // so clients and designers must be able to phone each other.
+          phone: user.phone,
           role: user.role,
           roleLabel: this.contactRoleLabel(user.role),
           avatarUrl: user.avatarUrl ?? null,
@@ -365,7 +399,13 @@ export class ChatService {
 
     const other = await this.prisma.user.findUnique({
       where: { id: otherUserId },
-      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        avatarUrl: true,
+      },
     });
     if (!other) throw new NotFoundException('User not found');
 
@@ -418,7 +458,13 @@ export class ChatService {
         participants: {
           include: {
             user: {
-              select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                role: true,
+                avatarUrl: true,
+              },
             },
           },
         },
@@ -472,7 +518,13 @@ export class ChatService {
         id: { not: actorId },
         phone: { in: normalized },
       },
-      select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        role: true,
+        avatarUrl: true,
+      },
     });
 
     const matches: Array<{
@@ -704,7 +756,13 @@ export class ChatService {
         participants: {
           include: {
             user: {
-              select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                role: true,
+                avatarUrl: true,
+              },
             },
           },
         },
@@ -737,7 +795,13 @@ export class ChatService {
               participants: {
                 include: {
                   user: {
-                    select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      phone: true,
+                      role: true,
+                      avatarUrl: true,
+                    },
                   },
                 },
               },
@@ -762,9 +826,13 @@ export class ChatService {
     const mine = refreshed.participants.find((p) => p.user.id === userId);
     const revealPersonalPhone = refreshed.type === ChatType.personal;
 
-    const visibleParticipants = viewerIsStudio
-      ? refreshed.participants
-      : refreshed.participants.filter((p) => p.user.id === userId);
+    // Group and personal chats show everyone; project/support threads keep clients to themselves.
+    const visibleParticipants =
+      viewerIsStudio ||
+      refreshed.type === ChatType.group ||
+      refreshed.type === ChatType.personal
+        ? refreshed.participants
+        : refreshed.participants.filter((p) => p.user.id === userId);
     const other = refreshed.participants.find((p) => p.user.id !== userId);
 
     return {
@@ -787,7 +855,9 @@ export class ChatService {
         id: participant.user.id,
         name: this.publicDisplayName(participant.user),
         phone:
-          revealPersonalPhone || canSeeContactPhone(viewerRoles)
+          revealPersonalPhone ||
+          refreshed.type === ChatType.group ||
+          canSeeContactPhone(viewerRoles)
             ? participant.user.phone
             : '',
         role: participant.user.role,
@@ -806,7 +876,15 @@ export class ChatService {
     const messages = await this.prisma.message.findMany({
       where: { chatId },
       include: {
-        sender: { select: { id: true, name: true, phone: true, role: true, avatarUrl: true } },
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            role: true,
+            avatarUrl: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 200,
@@ -1708,7 +1786,13 @@ export class ChatService {
             participants: {
               include: {
                 user: {
-                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    role: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
@@ -1717,7 +1801,13 @@ export class ChatService {
               take: 1,
               include: {
                 sender: {
-                  select: { id: true, name: true, phone: true, role: true, avatarUrl: true },
+                  select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    role: true,
+                    avatarUrl: true,
+                  },
                 },
               },
             },
@@ -2096,6 +2186,72 @@ export class ChatService {
       where: { chatId_userId: { chatId, userId } },
     });
     return { message: 'Left the group' };
+  }
+
+  /** Anyone in a group may add people to it. */
+  async addGroupMembers(actorId: string, chatId: string, userIds: string[]) {
+    await this.ensureParticipant(actorId, chatId);
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { type: true },
+    });
+    if (!chat || chat.type !== ChatType.group) {
+      throw new BadRequestException('Only a group takes new members');
+    }
+    const ids = [...new Set(userIds.filter((id) => id && id !== actorId))];
+    if (ids.length === 0) throw new BadRequestException('Nobody to add');
+    const found = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true },
+    });
+    if (found.length !== ids.length)
+      throw new NotFoundException('User not found');
+    await this.prisma.chatParticipant.createMany({
+      data: ids.map((userId) => ({ chatId, userId })),
+      skipDuplicates: true,
+    });
+    return this.getChat(actorId, chatId);
+  }
+
+  /**
+   * Removing someone from a group (not blocking). Admins (incl. the head designer) remove
+   * anyone; a client removes only other clients (family); designers and managers — nobody.
+   */
+  async removeGroupMember(actorId: string, chatId: string, targetId: string) {
+    await this.ensureParticipant(actorId, chatId);
+    const chat = await this.prisma.chat.findUnique({
+      where: { id: chatId },
+      select: { type: true },
+    });
+    if (!chat || chat.type !== ChatType.group) {
+      throw new BadRequestException('Only a group member can be removed');
+    }
+    if (targetId === actorId) {
+      throw new BadRequestException('Use «Выйти из группы» to leave');
+    }
+    const [actor, target] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: actorId },
+        select: { role: true, extraRoles: true },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: targetId },
+        select: { role: true, extraRoles: true },
+      }),
+    ]);
+    if (!actor || !target) throw new NotFoundException('User not found');
+    const actorRoles = allRolesOf(actor);
+    const targetIsStaff = hasStudioRole(allRolesOf(target));
+    const allowed = actorRoles.includes(UserRole.admin)
+      ? true
+      : !hasStudioRole(actorRoles) && !targetIsStaff;
+    if (!allowed) {
+      throw new ForbiddenException('No right to remove this member');
+    }
+    await this.prisma.chatParticipant.deleteMany({
+      where: { chatId, userId: targetId },
+    });
+    return this.getChat(actorId, chatId);
   }
 
   private async createChatWithParticipants(params: {

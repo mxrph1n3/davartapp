@@ -7,6 +7,7 @@ import {
   HttpCode,
   Logger,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -322,6 +323,30 @@ export class ChatController {
     @Param() params: ChatIdParamDto,
   ) {
     return this.chatService.dismissChat(user.sub, params.id);
+  }
+
+  @Post(':id/members')
+  @HttpCode(200)
+  addGroupMembers(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+    @Body() body: { userIds?: string[] },
+  ) {
+    return this.chatService.addGroupMembers(
+      user.sub,
+      params.id,
+      body.userIds ?? [],
+    );
+  }
+
+  @Delete(':id/members/:userId')
+  @HttpCode(200)
+  removeGroupMember(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) chatId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.chatService.removeGroupMember(user.sub, chatId, userId);
   }
 
   @Post(':id/participants')

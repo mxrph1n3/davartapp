@@ -1113,7 +1113,7 @@ class _MessageBubble extends ConsumerWidget {
                         color: colors.textPrimary.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                         border: Border(
-                          left: BorderSide(color: colors.accent, width: 2),
+                          left: BorderSide(color: colors.accentText, width: 2),
                         ),
                       ),
                       child: Column(

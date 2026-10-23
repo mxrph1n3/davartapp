@@ -214,6 +214,16 @@ class ChatRepository {
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Anyone in a group can add people.
+  Future<void> addGroupMembers(String chatId, List<String> userIds) async {
+    await _dio.post('/chats/$chatId/members', data: {'userIds': userIds});
+  }
+
+  /// Removes someone from a group (not a block); the server checks who may do it.
+  Future<void> removeGroupMember(String chatId, String userId) async {
+    await _dio.delete('/chats/$chatId/members/$userId');
+  }
+
   Future<void> setPinned(String chatId, {required bool pinned}) async {
     await _dio.patch('/chats/$chatId/pin', data: {'pinned': pinned});
   }
