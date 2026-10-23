@@ -1,9 +1,13 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/app_router.dart';
+import '../../chat/presentation/phone_contact_picker.dart';
+import '../../chat/data/chat_repository.dart';
+import '../../../core/widgets/top_notice.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -42,10 +46,11 @@ class ProjectDetailScreen extends ConsumerWidget {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_horiz),
-            onPressed: () {},
-          ),
+          if (projectAsync.asData?.value case final project? when !project.isShowcase)
+            IconButton(
+              icon: const Icon(Icons.more_horiz),
+              onPressed: () => _projectMenu(context, ref, project),
+            ),
         ],
       ),
       body: projectAsync.when(
@@ -390,6 +395,29 @@ class _GeneralInfoTab extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // First choice: someone from the phone's contacts; typing is the fallback.
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.contacts_outlined, size: 20),
+                        label: const Text('Выбрать из контактов'),
+                        onPressed: () async {
+                          final picked = await pickPhoneContact(ctx);
+                          if (picked == null) return;
+                          setLocal(() {
+                            phoneController.text = picked.phone;
+                            if (nameController.text.trim().isEmpty) nameController.text = picked.name;
+                            errorText = '';
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'или введите номер вручную',
+                      style: Theme.of(ctx).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 4),
                     TextField(
                       controller: phoneController,
                       keyboardType: TextInputType.phone,
@@ -401,7 +429,6 @@ class _GeneralInfoTab extends ConsumerWidget {
                         labelText: 'Телефон',
                         hintText: '+7XXXXXXXXXX',
                       ),
-                      autofocus: true,
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -698,3 +725,60 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
+
+/// «…» on the project screen: project chat; delete while the questionnaire is still open.
+Future<void> _projectMenu(BuildContext context, WidgetRef ref, Project project) async {
+  final canDelete = project.status == 'brief_filling';
+  final action = await showCupertinoModalPopup<String>(
+    context: context,
+    builder: (ctx) => CupertinoActionSheet(
+      title: Text(project.name),
+      actions: [
+        CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(ctx, 'chat'),
+          child: const Text('Чат проекта'),
+        ),
+        if (canDelete)
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(ctx, 'delete'),
+            child: const Text('Удалить проект'),
+          ),
+      ],
+      cancelButton: CupertinoActionSheetAction(
+        onPressed: () => Navigator.pop(ctx),
+        child: const Text('Отмена'),
+      ),
+    ),
+  );
+  if (!context.mounted || action == null) return;
+  if (action == 'chat') {
+    try {
+      final chat = await ref.read(chatRepositoryProvider).getProjectChat(project.id);
+      if (context.mounted) context.push(AppRoutes.chatDetail(chat.id));
+    } catch (_) {
+      if (context.mounted) showTopNotice(context, 'Чат проекта появится после отправки анкеты');
+    }
+    return;
+  }
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Удалить проект?'),
+      content: const Text('Анкета и данные проекта будут удалены.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+        TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить')),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    await ref.read(projectsRepositoryProvider).deleteProject(project.id);
+    ref.invalidate(projectsListProvider);
+    if (context.mounted) popOrGo(context, AppRoutes.projects);
+  } catch (_) {
+    if (context.mounted) showTopNotice(context, 'Не удалось удалить проект');
+  }
+}
+
