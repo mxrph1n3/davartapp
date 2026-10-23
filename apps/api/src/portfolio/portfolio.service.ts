@@ -25,7 +25,10 @@ const shownNumber = (number: string) => number.replace(/-(АР|Л)$/u, '');
 
 export const MOSAIC_KEY = 'portfolio/_cover/mosaic.jpg';
 
-const INTERIOR_KINDS = [PortfolioKind.full, PortfolioKind.basic];
+const INTERIOR_KINDS: PortfolioKind[] = [
+  PortfolioKind.full,
+  PortfolioKind.basic,
+];
 
 export type PortfolioQuery = {
   style?: string;
@@ -241,15 +244,22 @@ export class PortfolioService {
           height: image.height,
         })),
       /** «Этот объект в других проектах». */
-      related: related.map((r) => ({
-        id: r.id,
-        title: r.title,
-        kind: r.kind,
-        kindLabel: KIND_LABELS[r.kind],
-        styleLabel: r.style ? (styleLabels.get(r.style) ?? null) : null,
-        area: r.area,
-        coverUrl: this.url(r.images[0]?.key),
-      })),
+      // Interior always first among the object's other projects; the rest keep their order.
+      related: [...related]
+        .sort(
+          (a, b) =>
+            Number(!INTERIOR_KINDS.includes(a.kind)) -
+            Number(!INTERIOR_KINDS.includes(b.kind)),
+        )
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          kind: r.kind,
+          kindLabel: KIND_LABELS[r.kind],
+          styleLabel: r.style ? (styleLabels.get(r.style) ?? null) : null,
+          area: r.area,
+          coverUrl: this.url(r.images[0]?.key),
+        })),
       plans: project.images
         .filter((image) => image.isPlan)
         .map((image) => this.url(image.key)),
