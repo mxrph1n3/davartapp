@@ -435,7 +435,7 @@ class _Summary extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppColors.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
       decoration: BoxDecoration(
         color: colors.background,
         border: Border(top: BorderSide(color: colors.divider)),

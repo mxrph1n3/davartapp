@@ -6,11 +6,8 @@ import '../../../../core/utils/price_formatter.dart';
 import '../../data/catalog_models.dart';
 import 'shop_cart.dart';
 
-/// Yellow on dark backgrounds; a deeper gold on light ones, where pure yellow is unreadable.
-Color shopAccentLine(BuildContext context) =>
-    Theme.of(context).brightness == Brightness.dark
-        ? AppColors.of(context).accent
-        : const Color(0xFFC9A400);
+/// Brand yellow on dark backgrounds; black on light ones, where yellow is unreadable.
+Color shopAccentLine(BuildContext context) => AppColors.of(context).accentText;
 
 /// Yellow «+» / «−» drawn with round caps (same weight in both themes).
 class AccentGlyph extends StatelessWidget {

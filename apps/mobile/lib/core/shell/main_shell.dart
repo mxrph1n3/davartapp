@@ -32,11 +32,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     final currentIndex = widget.navigationShell.currentIndex;
 
     return Scaffold(
+      // Content scrolls under the floating glass bar.
+      extendBody: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: widget.navigationShell,
       bottomNavigationBar: DavartBottomNavigation(
         currentIndex: currentIndex,
         onTap: (index) {
+          FocusManager.instance.primaryFocus?.unfocus();
           // Always use goBranch inside StatefulShellRoute — context.go
           // can leave the shell stuck on one branch (e.g. cart).
           widget.navigationShell.goBranch(

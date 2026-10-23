@@ -31,7 +31,7 @@ class ProfileScreen extends ConsumerWidget {
 
     return TabPage(
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
         children: [
           const ScreenHeader(title: 'Профиль'),
           Padding(
@@ -122,7 +122,7 @@ class _GuestProfile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return TabPage(
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
         children: [
           const ScreenHeader(title: 'Профиль'),
           Text(

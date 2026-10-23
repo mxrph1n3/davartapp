@@ -120,7 +120,7 @@ class _ShopHomeScreenState extends ConsumerState<ShopHomeScreen> {
                   for (final c in list) (slug: c.slug, name: c.name),
                 ];
                 return SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 24),
+                  padding: EdgeInsets.fromLTRB(14, 0, 14, 24 + MediaQuery.paddingOf(context).bottom),
                   sliver: SliverGrid.count(
                     crossAxisCount: 3,
                     mainAxisSpacing: 8,

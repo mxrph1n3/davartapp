@@ -25,7 +25,7 @@ class StaffProfileScreen extends ConsumerWidget {
 
     return TabPage(
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
         children: [
           const ScreenHeader(title: 'Профиль'),
           const SizedBox(height: AppSpacing.sm),
