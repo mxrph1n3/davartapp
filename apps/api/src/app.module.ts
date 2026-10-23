@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module';
 import { LegalModule } from './legal/legal.module';
 import { MeilisearchModule } from './meilisearch/meilisearch.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { PortfolioModule } from './portfolio/portfolio.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PushModule } from './push/push.module';
 import { RedisModule } from './redis/redis.module';
@@ -40,6 +41,7 @@ import { UsersModule } from './users/users.module';
     CatalogModule,
     CommerceModule,
     ProjectsModule,
+    PortfolioModule,
     DocumentsModule,
     ChatModule,
     StaffModule,
