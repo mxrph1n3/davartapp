@@ -194,7 +194,7 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
                         children: [
                           Text(
                             'Этот объект в других проектах',
-                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: colors.textPrimary),
+                            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500, color: colors.textPrimary),
                           ),
                           const SizedBox(height: 7),
                           for (final r in p.related) _RelatedRow(item: r),
@@ -437,42 +437,47 @@ class _RelatedRow extends StatelessWidget {
       ?item.styleLabel,
       if (item.area != null) portfolioArea(item.area!, kind: item.kind),
     ].join(' · ');
+    // Soft glow instead of a hard outline.
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Material(
-        color: colors.surfaceMuted,
-        shape: RoundedRectangleBorder(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(11),
-          side: BorderSide(color: accent),
+          border: Border.all(color: accent.withValues(alpha: 0.35), width: 0.8),
+          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.22), blurRadius: 10, spreadRadius: 0.5)],
         ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => context.push(AppRoutes.portfolioProject(item.id)),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
-            child: Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(7),
-                  child: SizedBox(width: 54, height: 38, child: PortfolioImageView(item.coverUrl)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: colors.textPrimary),
-                      ),
-                      Text(subtitle, style: TextStyle(fontSize: 11, color: colors.textSecondary)),
-                    ],
+        child: Material(
+          color: colors.surfaceMuted,
+          borderRadius: BorderRadius.circular(11),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => context.push(AppRoutes.portfolioProject(item.id)),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(7),
+                    child: SizedBox(width: 54, height: 38, child: PortfolioImageView(item.coverUrl)),
                   ),
-                ),
-                Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
-              ],
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: colors.textPrimary),
+                        ),
+                        Text(subtitle, style: TextStyle(fontSize: 11, color: colors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.chevron_right, size: 20, color: colors.textSecondary),
+                ],
+              ),
             ),
           ),
         ),
