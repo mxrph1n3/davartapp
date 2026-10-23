@@ -54,9 +54,11 @@ class PortfolioCard {
     required this.images,
     this.styleLabel,
     this.area,
+    this.kind,
   });
 
   factory PortfolioCard.fromJson(Map<String, dynamic> json) => PortfolioCard(
+    kind: json['kind'] as String?,
     id: json['id'] as String,
     number: json['number'] as String,
     title: json['title'] as String,
@@ -73,6 +75,7 @@ class PortfolioCard {
   final String title;
   final String? styleLabel;
   final double? area;
+  final String? kind;
   final List<String> images;
 }
 
@@ -94,6 +97,7 @@ class PortfolioProject {
     required this.number,
     required this.title,
     required this.kindLabel,
+    required this.kind,
     required this.images,
     required this.rooms,
     required this.favorite,
@@ -112,6 +116,7 @@ class PortfolioProject {
     number: json['number'] as String,
     title: json['title'] as String,
     kindLabel: json['kindLabel'] as String,
+    kind: json['kind'] as String,
     objectType: json['objectType'] as String?,
     styleLabel: json['styleLabel'] as String?,
     area: (json['area'] as num?)?.toDouble(),
@@ -132,6 +137,7 @@ class PortfolioProject {
   final String number;
   final String title;
   final String kindLabel;
+  final String kind;
   final String? objectType;
   final String? styleLabel;
   final double? area;

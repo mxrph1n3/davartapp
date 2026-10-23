@@ -72,7 +72,7 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
         final plaques = <({IconData icon, String label, String value})>[
           (icon: Icons.design_services_outlined, label: 'Дизайн-проект', value: p.kindLabel),
           if (p.styleLabel != null) (icon: Icons.palette_outlined, label: 'Стиль', value: p.styleLabel!),
-          if (p.area != null) (icon: Icons.square_foot, label: 'Площадь', value: portfolioArea(p.area!)),
+          if (p.area != null) (icon: Icons.square_foot, label: 'Площадь', value: portfolioArea(p.area!, kind: p.kind)),
           if (p.designer != null) (icon: Icons.person_outline, label: 'Дизайнер', value: p.designer!),
           if (p.completedAt != null)
             (
@@ -292,7 +292,7 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
   }
 
   Future<void> _share(PortfolioProject p) async {
-    final parts = [p.title, if (p.styleLabel != null) p.styleLabel!, if (p.area != null) portfolioArea(p.area!)];
+    final parts = [p.title, if (p.styleLabel != null) p.styleLabel!, if (p.area != null) portfolioArea(p.area!, kind: p.kind)];
     await Clipboard.setData(ClipboardData(text: '${parts.join(' · ')} — проект DAVart'));
     if (mounted) showTopNotice(context, 'Скопировано');
   }

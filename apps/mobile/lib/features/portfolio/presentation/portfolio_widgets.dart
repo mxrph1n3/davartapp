@@ -248,9 +248,19 @@ class _PortfolioViewerState extends State<PortfolioViewer> {
   }
 }
 
-String portfolioArea(double area) {
+/// «52,5 м²»; plots (landscape) are measured in сотки: «44 сотки».
+String portfolioArea(double area, {String? kind}) {
   final text = area == area.roundToDouble() ? area.toStringAsFixed(0) : area.toStringAsFixed(1).replaceAll('.', ',');
-  return '$text м²';
+  if (kind != 'landscape') return '$text м²';
+  if (area != area.roundToDouble()) return '$text сотки';
+  final n = area.round();
+  final m10 = n % 10, m100 = n % 100;
+  final word = m10 == 1 && m100 != 11
+      ? 'сотка'
+      : (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14))
+          ? 'сотки'
+          : 'соток';
+  return '$text $word';
 }
 
 /// «Портфолио работ» cover: the mosaic of renders drifts slowly while a band of light

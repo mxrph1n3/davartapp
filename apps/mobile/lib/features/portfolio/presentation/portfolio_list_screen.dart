@@ -77,7 +77,7 @@ class _PortfolioListScreenState extends ConsumerState<PortfolioListScreen> {
             separatorBuilder: (_, _) => const SizedBox(height: 14),
             itemBuilder: (_, i) {
               final c = cards[i];
-              final parts = [c.title, if (c.area != null) portfolioArea(c.area!), if (allProjects) ?c.styleLabel];
+              final parts = [c.title, if (c.area != null) portfolioArea(c.area!, kind: c.kind), if (allProjects) ?c.styleLabel];
               return ClipRRect(
                 borderRadius: BorderRadius.circular(18),
                 child: AspectRatio(
