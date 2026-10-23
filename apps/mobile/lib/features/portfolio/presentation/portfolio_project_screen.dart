@@ -450,13 +450,13 @@ class _RelatedRow extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(11),
           // A light but crisp outline: thin line plus a tight glow that hugs it.
-          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.28), blurRadius: 3, spreadRadius: 0.2)],
+          boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.14), blurRadius: 3, spreadRadius: 0.2)],
         ),
         child: Material(
           color: colors.surfaceMuted,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(11),
-            side: BorderSide(color: accent.withValues(alpha: 0.7), width: 0.8),
+            side: BorderSide(color: accent.withValues(alpha: 0.4), width: 0.8),
           ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
