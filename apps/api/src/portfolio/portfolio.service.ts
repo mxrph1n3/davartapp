@@ -20,6 +20,9 @@ const KIND_LABELS: Record<PortfolioKind, string> = {
   landscape: 'Ландшафт',
 };
 
+/** Shown number: internal suffixes for second cards of one project (15283-АР, 15299-Л) are hidden. */
+const shownNumber = (number: string) => number.replace(/-(АР|Л)$/u, '');
+
 export const MOSAIC_KEY = 'portfolio/_cover/mosaic.jpg';
 
 const INTERIOR_KINDS = [PortfolioKind.full, PortfolioKind.basic];
@@ -59,7 +62,10 @@ export class PortfolioService {
   async tiles(viewer?: JwtPayload) {
     const visible = this.visibility(viewer);
     const [styles, styleCounts, kindCounts, collage] = await Promise.all([
-      this.prisma.portfolioStyle.findMany({ orderBy: { sortOrder: 'asc' } }),
+      this.prisma.portfolioStyle.findMany({
+        where: { NOT: { slug: { startsWith: 'kind:' } } },
+        orderBy: { sortOrder: 'asc' },
+      }),
       this.prisma.portfolioProject.groupBy({
         by: ['style'],
         where: { ...visible, kind: { in: INTERIOR_KINDS } },
@@ -81,6 +87,17 @@ export class PortfolioService {
     const kinds = new Set(kindCounts.map((row) => row.kind));
     const kindCovers = await Promise.all(
       KIND_TILES.filter((t) => kinds.has(t.kind)).map(async (t) => {
+        // A cover picked by hand (manifest kindCovers) wins over the first project's render.
+        const picked = await this.prisma.portfolioStyle.findUnique({
+          where: { slug: `kind:${t.kind}` },
+        });
+        if (picked?.coverKey) {
+          return {
+            kind: t.kind,
+            label: t.label,
+            coverUrl: this.url(picked.coverKey),
+          };
+        }
         const cover = await this.prisma.portfolioImage.findFirst({
           where: { isPlan: false, project: { ...visible, kind: t.kind } },
           orderBy: [{ project: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
@@ -126,7 +143,7 @@ export class PortfolioService {
     const styleLabels = await this.styleLabels();
     return projects.map((p) => ({
       id: p.id,
-      number: p.number,
+      number: shownNumber(p.number),
       title: p.title,
       kind: p.kind,
       style: p.style,
@@ -178,7 +195,7 @@ export class PortfolioService {
       : false;
     return {
       id: project.id,
-      number: project.number,
+      number: shownNumber(project.number),
       title: project.title,
       kind: project.kind,
       kindLabel: KIND_LABELS[project.kind],
@@ -236,7 +253,7 @@ export class PortfolioService {
     const styleLabels = await this.styleLabels();
     return rows.map(({ project: p }) => ({
       id: p.id,
-      number: p.number,
+      number: shownNumber(p.number),
       title: p.title,
       kind: p.kind,
       style: p.style,
@@ -249,6 +266,7 @@ export class PortfolioService {
 
   private async styleLabels() {
     const styles = await this.prisma.portfolioStyle.findMany({
+      where: { NOT: { slug: { startsWith: 'kind:' } } },
       orderBy: { sortOrder: 'asc' },
     });
     return new Map(styles.map((s) => [s.slug, s.label]));

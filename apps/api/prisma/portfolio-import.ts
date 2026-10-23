@@ -42,6 +42,8 @@ type ManifestProject = {
 
 type Manifest = {
   mosaic?: { number: string; file: string };
+  /** Hand-picked covers for the Архитектура / Экстерьер / Ландшафт tiles. */
+  kindCovers?: Record<string, { number: string; file: string }>;
   styles: Array<{
     slug: string;
     label: string;
@@ -149,6 +151,16 @@ async function main() {
       }),
     );
     uploaded += 1;
+  }
+
+  for (const [kind, cover] of Object.entries(manifest.kindCovers ?? {})) {
+    // Stored next to the styles (slug «kind:…»); never shown as a style tile.
+    const coverKey = keyOf(cover.number, cover.file);
+    await prisma.portfolioStyle.upsert({
+      where: { slug: `kind:${kind}` },
+      update: { coverKey },
+      create: { slug: `kind:${kind}`, label: kind, coverKey, sortOrder: 1000 },
+    });
   }
 
   for (const p of manifest.projects) {

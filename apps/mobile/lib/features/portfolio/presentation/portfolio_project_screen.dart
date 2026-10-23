@@ -85,134 +85,141 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
 
         return Scaffold(
           backgroundColor: colors.background,
-          body: CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Stack(
-                  children: [
-                    _Gallery(images: p.images),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      child: SafeArea(
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                          child: Row(
-                            children: [
-                              _RoundButton(
-                                icon: Icons.arrow_back_ios_new_rounded,
-                                onTap: () => popOrGo(context, AppRoutes.portfolio),
-                              ),
-                              const Spacer(),
-                              _RoundButton(icon: Icons.ios_share_rounded, onTap: () => _share(p)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                sliver: SliverList.list(
-                  children: [
-                    Row(
+          body: Stack(
+            children: [
+              CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(child: _Gallery(images: p.images)),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    sliver: SliverList.list(
                       children: [
-                        Expanded(
-                          child: Text(
-                            p.title,
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary),
-                          ),
-                        ),
-                        if (p.inRealization)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: colors.accent),
-                            ),
-                            child: Text('В реализации', style: TextStyle(fontSize: 12, color: colors.textPrimary)),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    GridView.count(
-                      padding: EdgeInsets.zero,
-                      crossAxisCount: 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 8,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 2.6,
-                      children: [for (final q in plaques) _Plaque(icon: q.icon, label: q.label, value: q.value)],
-                    ),
-                    if (p.rooms.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final r in p.rooms)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: colors.surfaceMuted,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(r, style: TextStyle(fontSize: 12.5, color: colors.textPrimary)),
-                            ),
-                        ],
-                      ),
-                    ],
-                    if (p.materialsCost != null) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: colors.surfaceMuted,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: colors.accent, width: 1.5),
-                        ),
-                        child: Row(
+                        Row(
                           children: [
-                            Icon(Icons.chair_outlined, color: colors.accent),
-                            const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'Материалы и мебель в проекте',
-                                style: TextStyle(fontSize: 14, color: colors.textPrimary),
+                                p.title,
+                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: colors.textPrimary),
                               ),
                             ),
-                            Text(
-                              formatPrice(p.materialsCost!),
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: colors.textPrimary),
-                            ),
+                            if (p.inRealization)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: colors.accent),
+                                ),
+                                child: Text('В реализации', style: TextStyle(fontSize: 12, color: colors.textPrimary)),
+                              ),
                           ],
                         ),
+                        const SizedBox(height: 14),
+                        GridView.count(
+                          padding: EdgeInsets.zero,
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 8,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 2.6,
+                          children: [for (final q in plaques) _Plaque(icon: q.icon, label: q.label, value: q.value)],
+                        ),
+                        if (p.rooms.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final r in p.rooms)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: colors.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(r, style: TextStyle(fontSize: 12.5, color: colors.textPrimary)),
+                                ),
+                            ],
+                          ),
+                        ],
+                        if (p.materialsCost != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: colors.surfaceMuted,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: colors.accent, width: 1.5),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.chair_outlined, color: colors.accent),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Материалы и мебель в проекте',
+                                    style: TextStyle(fontSize: 14, color: colors.textPrimary),
+                                  ),
+                                ),
+                                Text(
+                                  formatPrice(p.materialsCost!),
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        if ((p.description ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          Text(
+                            p.description!,
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.45,
+                              color: colors.textPrimary.withValues(alpha: 0.85),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  // Pushes the number just below the bottom edge: it is seen only after scrolling down.
+                  const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink()),
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
+                      child: Center(
+                        child: Text(
+                          'Проект № ${p.number}',
+                          style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
+                        ),
                       ),
-                    ],
-                    if ((p.description ?? '').isNotEmpty) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        p.description!,
-                        style: TextStyle(fontSize: 15, height: 1.45, color: colors.textPrimary.withValues(alpha: 0.85)),
-                      ),
-                    ],
-                  ],
-                ),
+                    ),
+                  ),
+                ],
               ),
-              // Pushes the number just below the bottom edge: it is seen only after scrolling down.
-              const SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink()),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 28),
-                  child: Center(
-                    child: Text(
-                      'Проект № ${p.number}',
-                      style: TextStyle(fontSize: 11.5, color: colors.textSecondary.withValues(alpha: 0.6)),
+              // Back and share stay in place while the page scrolls.
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: Row(
+                      children: [
+                        _RoundButton(
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          onTap: () => popOrGo(context, AppRoutes.portfolio),
+                        ),
+                        const Spacer(),
+                        _RoundButton(icon: Icons.ios_share_rounded, onTap: () => _share(p)),
+                      ],
                     ),
                   ),
                 ),
@@ -298,7 +305,11 @@ class _PortfolioProjectScreenState extends ConsumerState<PortfolioProjectScreen>
   }
 
   Future<void> _share(PortfolioProject p) async {
-    final parts = [p.title, if (p.styleLabel != null) p.styleLabel!, if (p.area != null) portfolioArea(p.area!, kind: p.kind)];
+    final parts = [
+      p.title,
+      if (p.styleLabel != null) p.styleLabel!,
+      if (p.area != null) portfolioArea(p.area!, kind: p.kind),
+    ];
     await Clipboard.setData(ClipboardData(text: '${parts.join(' · ')} — проект DAVart'));
     if (mounted) showTopNotice(context, 'Скопировано');
   }
