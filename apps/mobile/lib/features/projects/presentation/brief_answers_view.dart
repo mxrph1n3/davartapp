@@ -14,7 +14,7 @@ bool briefHasFilledContent(Brief brief) {
     final room = answers.rooms[section.id];
     if (room == null || room.included == false) continue;
     for (final field in section.fields) {
-      if ((room.fields[field.id] ?? '').trim().isNotEmpty) return true;
+      if (briefRoomFieldValue(field, room.fields).isNotEmpty) return true;
     }
   }
   return brief.rooms.any((room) => room.name.trim().isNotEmpty);
@@ -102,8 +102,8 @@ class BriefAnswersView extends StatelessWidget {
 
     final fields = [
       for (final field in section.fields)
-        if ((room.fields[field.id] ?? '').trim().isNotEmpty)
-          _Answer(label: field.label, value: room.fields[field.id]),
+        if (briefRoomFieldValue(field, room.fields).isNotEmpty)
+          _Answer(label: field.label, value: briefRoomFieldValue(field, room.fields)),
     ];
     if (fields.isEmpty) return const [];
 

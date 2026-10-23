@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { Injectable } from '@nestjs/common';
 import { ProjectStatus } from '@prisma/client';
 import PDFDocument from 'pdfkit';
@@ -7,6 +9,7 @@ import {
   BRIEF_INTRO,
   BRIEF_ROOM_SECTIONS,
   formatBriefValue,
+  formatRoomField,
   type BriefAnswers,
 } from './brief-questionnaire';
 
@@ -20,11 +23,19 @@ interface BriefPdfData {
   answers?: BriefAnswers | null;
 }
 
+/** Built-in PDF fonts have no Cyrillic: the brief came out as gibberish. */
+const FONT_DIR = join(process.cwd(), 'assets', 'fonts');
+const FONT_REGULAR = join(FONT_DIR, 'DejaVuSans.ttf');
+
 @Injectable()
 export class BriefPdfService {
   async generate(data: BriefPdfData): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50 });
+      if (existsSync(FONT_REGULAR)) {
+        doc.registerFont('body', FONT_REGULAR);
+        doc.font('body');
+      }
       const chunks: Buffer[] = [];
 
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -74,7 +85,7 @@ export class BriefPdfService {
           .text(`${section.title}${included ? '' : ' (нет в проекте)'}`);
         if (included) {
           for (const field of section.fields) {
-            const value = room?.[field.id]?.trim();
+            const value = formatRoomField(field, room);
             doc.fontSize(10).fillColor('#444444').text(field.label);
             doc
               .fontSize(11)

@@ -1,11 +1,32 @@
 import 'dart:convert';
 
 class BriefField {
-  const BriefField({required this.id, required this.label, this.lines = 3});
+  const BriefField({
+    required this.id,
+    required this.label,
+    this.lines = 3,
+    this.groups = const [],
+  });
 
   final String id;
   final String label;
   final int lines;
+
+  /// Answer buttons; empty — the question is answered with text only.
+  final List<BriefChoiceGroup> groups;
+}
+
+/// A row of answer buttons under a room question. Picked labels are stored as text
+/// («Паркет; Ламинат»), so the PDF and the staff see them without a lookup table.
+class BriefChoiceGroup {
+  const BriefChoiceGroup(this.options, {this.key = '', this.label, this.multi = false});
+
+  final List<String> options;
+
+  /// '' — stored under the field id itself, otherwise under «fieldId.key».
+  final String key;
+  final String? label;
+  final bool multi;
 }
 
 class BriefRoomSection {
@@ -50,11 +71,15 @@ class BriefVisualOption {
     required this.id,
     required this.label,
     required this.asset,
+    this.url,
   });
 
   final String id;
   final String label;
   final String asset;
+
+  /// A render from the studio portfolio; the bundled [asset] stays as the fallback.
+  final String? url;
 }
 
 const briefIntro =
@@ -258,13 +283,6 @@ const briefReplanChoices = <BriefChoice>[
   BriefChoice(id: 'keep', label: 'Стены оставляем'),
 ];
 
-const briefFloorHeatingChoices = <BriefChoice>[
-  BriefChoice(id: 'all', label: 'Везде'),
-  BriefChoice(id: 'wet', label: 'В мокрых зонах'),
-  BriefChoice(id: 'no', label: 'Не нужен'),
-  BriefChoice(id: 'later', label: 'Решим позже'),
-];
-
 const briefWasherChoices = <BriefChoice>[
   BriefChoice(id: 'bathroom', label: 'В ванной'),
   BriefChoice(id: 'kitchen', label: 'На кухне'),
@@ -272,24 +290,34 @@ const briefWasherChoices = <BriefChoice>[
   BriefChoice(id: 'unknown', label: 'Пока не знаем'),
 ];
 
-const briefSplitChoices = <BriefChoice>[
-  BriefChoice(id: 'living', label: 'Гостиная'),
-  BriefChoice(id: 'bedrooms', label: 'Спальни'),
-  BriefChoice(id: 'all', label: 'Во всех комнатах'),
-  BriefChoice(id: 'no', label: 'Не нужен'),
-];
-
 const briefGadgetChoices = <BriefChoice>[
-  BriefChoice(id: 'yes', label: 'Да, заложить'),
-  BriefChoice(id: 'no', label: 'Не нужно'),
+  BriefChoice(id: 'robot', label: 'Робот-пылесос'),
+  BriefChoice(id: 'humidifier', label: 'Увлажнитель'),
+  BriefChoice(id: 'bedside', label: 'Зарядки у кровати'),
+  BriefChoice(id: 'none', label: 'Нет'),
+];
+
+/// «Что меняем» — each item on its own (radiators, windows, sills, doors).
+const briefRadiatorChoices = <BriefChoice>[
+  BriefChoice(id: 'radiators', label: 'Радиаторы'),
+  BriefChoice(id: 'windows', label: 'Окна'),
+  BriefChoice(id: 'sills', label: 'Подоконники'),
+  BriefChoice(id: 'entranceDoor', label: 'Входная дверь'),
+  BriefChoice(id: 'doors', label: 'Межкомнатные двери'),
+  BriefChoice(id: 'none', label: 'Ничего не меняем'),
   BriefChoice(id: 'later', label: 'Решим позже'),
 ];
 
-const briefRadiatorChoices = <BriefChoice>[
-  BriefChoice(id: 'replace', label: 'Меняем всё'),
-  BriefChoice(id: 'keep', label: 'Оставляем'),
-  BriefChoice(id: 'later', label: 'Решим позже'),
-];
+/// Conditioner and warm floor are asked per room the client picked; this closes the list.
+const briefNoneChoice = BriefChoice(id: 'none', label: 'Не нужен');
+
+/// Answers from the earlier version of the questionnaire, so old briefs still read well.
+const _legacyLabels = <String, Map<String, String>>{
+  'floorHeating': {'all': 'Везде', 'wet': 'В мокрых зонах', 'no': 'Не нужен', 'later': 'Решим позже'},
+  'split': {'living': 'Гостиная', 'bedrooms': 'Спальни', 'all': 'Во всех комнатах', 'no': 'Не нужен'},
+  'gadgetOutlets': {'yes': 'Да, заложить', 'no': 'Не нужно', 'later': 'Решим позже'},
+  'radiators': {'replace': 'Меняем всё', 'keep': 'Оставляем'},
+};
 
 const briefDefaultRoomsByObject = <String, List<String>>{
   'apartment': ['hallway', 'kitchen_living', 'bedroom', 'bathroom', 'loggia'],
@@ -357,7 +385,7 @@ const briefGeneralFields = <BriefField>[
   BriefField(id: 'zones', label: 'Комнаты и зоны в помещении'),
   BriefField(
     id: 'split',
-    label: 'Где разместить сплит-систему (кондиционеры)?',
+    label: 'Кондиционер',
   ),
   BriefField(
     id: 'gadgetOutlets',
@@ -365,7 +393,7 @@ const briefGeneralFields = <BriefField>[
   ),
   BriefField(
     id: 'radiators',
-    label: 'Новые радиаторы, подоконники, двери, окна',
+    label: 'Что меняем',
   ),
   BriefField(id: 'floorHeating', label: 'Тёплый пол', lines: 1),
   BriefField(
@@ -373,6 +401,12 @@ const briefGeneralFields = <BriefField>[
     label: 'Где планируется стиральная машина?',
     lines: 2,
   ),
+  BriefField(id: 'replanNote', label: 'Перепланировка — комментарий', lines: 2),
+  BriefField(id: 'radiatorsNote', label: 'Что меняем — комментарий', lines: 2),
+  BriefField(id: 'splitNote', label: 'Кондиционер — комментарий', lines: 2),
+  BriefField(id: 'gadgetOutletsNote', label: 'Розетки — комментарий', lines: 2),
+  BriefField(id: 'floorHeatingNote', label: 'Тёплый пол — комментарий', lines: 2),
+  BriefField(id: 'washerLocationNote', label: 'Стиральная машина — комментарий', lines: 2),
   BriefField(id: 'details', label: 'Важные детали'),
   BriefField(
     id: 'existingItems',
@@ -382,97 +416,161 @@ const briefGeneralFields = <BriefField>[
   ),
 ];
 
+const _floor = BriefChoiceGroup(
+  ['Паркет / инженерная доска', 'Ламинат', 'Кварцвинил', 'Керамогранит', 'Микроцемент', 'Ковролин', 'Решит дизайнер'],
+  key: 'floor',
+  label: 'Пол',
+  multi: true,
+);
+const _walls = BriefChoiceGroup(
+  ['Покраска', 'Обои', 'Декоративная штукатурка', 'Стеновые панели / рейки', 'Плитка', 'Молдинги', 'Решит дизайнер'],
+  key: 'walls',
+  label: 'Стены',
+  multi: true,
+);
+const _apron = BriefChoiceGroup(
+  ['Плитка', 'Керамогранит крупного формата', 'Камень (как столешница)', 'Стекло', 'Решит дизайнер'],
+  key: 'apron',
+  label: 'Фартук',
+);
+const _finishes = BriefField(
+  id: 'finishes',
+  label: 'Предпочтения по отделке',
+  groups: [_floor, _walls],
+);
+const _kitchenFinishes = BriefField(
+  id: 'finishes',
+  label: 'Предпочтения по отделке',
+  groups: [_floor, _walls, _apron],
+);
 const _lighting = BriefField(
   id: 'lighting',
   label: 'Какое освещение предусмотреть?',
+  groups: [
+    BriefChoiceGroup(
+      ['Люстра', 'Точечные светильники', 'Трековые', 'Подсветка (скрытая, LED)', 'Бра', 'Торшер', 'Настольные лампы', 'Решит дизайнер'],
+      multi: true,
+    ),
+  ],
 );
-const _other = BriefField(id: 'other', label: 'Что еще необходимо учесть?');
+const _other = BriefField(id: 'other', label: 'Что ещё необходимо учесть?');
+
+const _kitchenFields = <BriefField>[
+  BriefField(
+    id: 'hood',
+    label: 'Вытяжка',
+    groups: [
+      BriefChoiceGroup(['Встроенная', 'Островная', 'Наклонная настенная', 'Купольная', 'Встроенная в варочную панель', 'Решит дизайнер']),
+    ],
+  ),
+  BriefField(
+    id: 'diningTable',
+    label: 'Обеденный стол',
+    groups: [
+      BriefChoiceGroup(['Круглый', 'Прямоугольный', 'Раздвижной', 'Барная стойка', 'Не нужен']),
+      BriefChoiceGroup(['2', '4', '6', '8', '10+'], key: 'seats', label: 'Мест'),
+    ],
+  ),
+  BriefField(
+    id: 'island',
+    label: 'Стол-остров',
+    groups: [
+      BriefChoiceGroup(['Да', 'Нет', 'Если поместится']),
+    ],
+  ),
+  BriefField(
+    id: 'dishwasher',
+    label: 'Посудомойка',
+    groups: [
+      BriefChoiceGroup(['45 см', '60 см', 'Не нужна']),
+    ],
+  ),
+  BriefField(
+    id: 'cooktop',
+    label: 'Варочная панель',
+    groups: [
+      BriefChoiceGroup(['2 конфорки', '4 конфорки', '5 конфорок']),
+      BriefChoiceGroup(['Индукция', 'Газ', 'Домино (комбинированная)'], key: 'type', label: 'Тип'),
+    ],
+  ),
+  BriefField(
+    id: 'oven',
+    label: 'Духовой шкаф',
+    groups: [
+      BriefChoiceGroup(['Духовой шкаф', 'Компактный с СВЧ', 'Пароварка', 'Не нужен'], multi: true),
+    ],
+  ),
+  BriefField(
+    id: 'fridge',
+    label: 'Холодильник',
+    groups: [
+      BriefChoiceGroup(['Встроенный', 'Отдельностоящий', 'Side-by-side (двухдверный)', 'Встроенный + винный шкаф']),
+    ],
+  ),
+];
+
+const _livingCurtains = BriefField(
+  id: 'curtains',
+  label: 'Шторы',
+  groups: [
+    BriefChoiceGroup(['Портьеры', 'Тюль', 'Римские шторы', 'Рулонные', 'Жалюзи', 'Не нужны'], multi: true),
+  ],
+);
 
 const briefRoomSections = <BriefRoomSection>[
   BriefRoomSection(
     id: 'kitchen',
     title: 'Кухня',
-    fields: [
-      _lighting,
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены, фартук)?',
-      ),
-      BriefField(
-        id: 'hood',
-        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
-      ),
-      BriefField(
-        id: 'diningTable',
-        label:
-            'Есть ли предпочтения по форме обеденного стола и по материалу?',
-        lines: 4,
-      ),
-      BriefField(id: 'island', label: 'Нужен ли стол-остров?'),
-      BriefField(
-        id: 'dishwasher',
-        label: 'Нужна ли посудомойка? Какого размера?',
-      ),
-      BriefField(id: 'cooktop', label: 'На сколько конфорок варочная панель?'),
-      BriefField(
-        id: 'oven',
-        label:
-            'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
-      ),
-      BriefField(
-        id: 'fridge',
-        label: 'Холодильник встроенный или отдельностоящий?',
-      ),
-      _other,
-    ],
+    fields: [_lighting, _kitchenFinishes, ..._kitchenFields, _other],
   ),
   BriefRoomSection(
     id: 'kitchen_living',
     title: 'Кухня-гостиная',
     fields: [
       _lighting,
+      _kitchenFinishes,
       BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены, фартук)?',
+        id: 'doorFromHall',
+        label: 'Дверь из прихожей',
+        groups: [
+          BriefChoiceGroup(['Нужна', 'Не нужна', 'Раздвижная', 'Скрытая']),
+        ],
       ),
-      BriefField(id: 'doorFromHall', label: 'Нужна ли дверь из прихожей?'),
       BriefField(
         id: 'sofa',
-        label:
-            'Нужен ли диван (прямой, угловой, большой, маленький, раскладной, мягкий, жесткий)?',
+        label: 'Диван',
+        groups: [
+          BriefChoiceGroup(['Прямой', 'Угловой', 'Модульный', 'П-образный', 'Диван-кровать', 'Не нужен']),
+          BriefChoiceGroup(
+            ['Небольшой (до 2 м)', 'Средний (2–2,5 м)', 'Большой (от 2,5 м)'],
+            key: 'size',
+            label: 'Размер',
+          ),
+        ],
       ),
       BriefField(
         id: 'extraFurniture',
-        label: 'Нужны ли кресла, журнальный столик, рабочее место, камин и тд?',
-      ),
-      BriefField(id: 'shelves', label: 'Нужен ли стеллаж или открытые полки?'),
-      BriefField(
-        id: 'hood',
-        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
+        label: 'Кресла, столик, рабочее место, камин',
+        groups: [
+          BriefChoiceGroup(['Кресла', 'Журнальный столик', 'Рабочее место', 'Биокамин', 'Электрокамин', 'Ничего'], multi: true),
+        ],
       ),
       BriefField(
-        id: 'diningTable',
-        label:
-            'Есть ли предпочтения по форме обеденного стола и по материалу? Должен ли он раскладываться? На какое количество персон в разложенном и сложенном видах?',
-        lines: 4,
+        id: 'shelves',
+        label: 'Стеллаж / открытые полки',
+        groups: [
+          BriefChoiceGroup(['Стеллаж', 'Открытые полки', 'Закрытые шкафы', 'Не нужно']),
+        ],
       ),
-      BriefField(id: 'island', label: 'Нужен ли стол-остров?'),
+      ..._kitchenFields,
       BriefField(
-        id: 'dishwasher',
-        label: 'Нужна ли посудомойка? Какого размера?',
+        id: 'tv',
+        label: 'ТВ',
+        groups: [
+          BriefChoiceGroup(['Нужен, на стене', 'Нужен, на тумбе', 'Проектор', 'Не нужен']),
+        ],
       ),
-      BriefField(id: 'cooktop', label: 'На сколько конфорок варочная панель?'),
-      BriefField(
-        id: 'oven',
-        label:
-            'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
-      ),
-      BriefField(
-        id: 'fridge',
-        label: 'Холодильник встроенный или отдельностоящий?',
-      ),
-      BriefField(id: 'tv', label: 'Нужен ли тв?'),
-      BriefField(id: 'curtains', label: 'Нужны ли шторы, римские шторы и тд?'),
+      _livingCurtains,
       _other,
     ],
   ),
@@ -480,15 +578,17 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'hallway',
     title: 'Прихожая',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
       BriefField(
         id: 'storage',
-        label:
-            'Нужны ли открытые вешалки, пуф, шкаф, полочки для ключей и перчаток, зеркало в полный рост, зеркало для макияжа?',
+        label: 'Хранение',
+        groups: [
+          BriefChoiceGroup(
+            ['Шкаф-купе', 'Распашной шкаф', 'Открытая вешалка', 'Обувница', 'Банкетка / пуф', 'Зеркало в полный рост', 'Ключница'],
+            multi: true,
+          ),
+        ],
       ),
       _other,
     ],
@@ -497,26 +597,51 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'bedroom',
     title: 'Спальня',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
-      BriefField(id: 'mattress', label: 'Размер матраса на кровать?'),
+      BriefField(
+        id: 'mattress',
+        label: 'Размер кровати / матраса',
+        groups: [
+          BriefChoiceGroup(['140 см', '160 см', '180 см', '200 см'], key: 'width', label: 'Ширина'),
+          BriefChoiceGroup(['190 см', '200 см', '210 см'], key: 'length', label: 'Длина'),
+        ],
+      ),
       BriefField(
         id: 'shelves',
-        label: 'Нужны ли полочки, прикроватные тумбочки или стеллажи?',
+        label: 'Полки, тумбочки, стеллажи',
+        groups: [
+          BriefChoiceGroup(['Прикроватные тумбы', 'Подвесные полки', 'Стеллаж', 'Не нужны'], multi: true),
+        ],
       ),
       BriefField(
         id: 'vanity',
-        label: 'Нужен ли туалетный столик для макияжа или рабочий стол?',
+        label: 'Туалетный / рабочий стол',
+        groups: [
+          BriefChoiceGroup(['Туалетный столик', 'Рабочий стол', 'Не нужно'], multi: true),
+        ],
       ),
       BriefField(
         id: 'wardrobe',
-        label: 'Нужен ли комод, шкаф, гардеробная? Каких размеров?',
+        label: 'Хранение',
+        groups: [
+          BriefChoiceGroup(['Комод', 'Шкаф', 'Гардеробная', 'Кровать с ящиками'], multi: true),
+        ],
       ),
-      BriefField(id: 'curtains', label: 'Нужны ли шторы, римские шторы?'),
-      BriefField(id: 'mirror', label: 'Нужно ли зеркало?'),
+      BriefField(
+        id: 'curtains',
+        label: 'Шторы',
+        groups: [
+          BriefChoiceGroup(['Блэкаут', 'Тюль', 'Римские', 'Рулонные', 'Не нужны'], multi: true),
+        ],
+      ),
+      BriefField(
+        id: 'mirror',
+        label: 'Зеркало',
+        groups: [
+          BriefChoiceGroup(['Настенное', 'В полный рост', 'В дверце шкафа', 'Не нужно']),
+        ],
+      ),
       _other,
     ],
   ),
@@ -524,38 +649,81 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'bathroom',
     title: 'Санузел',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
-      BriefField(id: 'bathOrShower', label: 'Ванна или душ? Размеры?'),
+      BriefField(
+        id: 'bathOrShower',
+        label: 'Ванна или душ',
+        groups: [
+          BriefChoiceGroup(['Ванна', 'Душ', 'Ванна и душ', 'Отдельностоящая ванна']),
+          BriefChoiceGroup(['150 см', '170 см', '180 см'], key: 'bathSize', label: 'Размер ванны'),
+          BriefChoiceGroup(['Поддон', 'Трап в полу'], key: 'shower', label: 'Душ'),
+        ],
+      ),
       BriefField(
         id: 'screen',
-        label: 'Шторка для ванны или стеклянная перегородка?',
+        label: 'Шторка / перегородка',
+        groups: [
+          BriefChoiceGroup(['Стеклянная перегородка', 'Шторка', 'Не нужна']),
+        ],
       ),
       BriefField(
         id: 'toilet',
-        label: 'Унитаз обычный или подвесной со скрытой инсталляцией?',
+        label: 'Унитаз',
+        groups: [
+          BriefChoiceGroup(['Подвесной с инсталляцией', 'Напольный', 'Приставной']),
+        ],
       ),
-      BriefField(id: 'sinks', label: 'Количество раковин?', lines: 1),
-      BriefField(id: 'bidet', label: 'Нужен ли гигиенический душ или биде?'),
+      BriefField(
+        id: 'sinks',
+        label: 'Раковины',
+        groups: [
+          BriefChoiceGroup(['1', '2'], label: 'Количество'),
+          BriefChoiceGroup(['Накладная', 'Встроенная', 'На тумбе', 'Подвесная'], key: 'type', label: 'Тип'),
+        ],
+      ),
+      BriefField(
+        id: 'bidet',
+        label: 'Гигиенический душ / биде',
+        groups: [
+          BriefChoiceGroup(['Гигиенический душ', 'Биде', 'Не нужно']),
+        ],
+      ),
       BriefField(
         id: 'makeupLight',
-        label: 'Нужно ли к зеркалу освещение для макияжа или бьюти-процедур?',
+        label: 'Подсветка зеркала',
+        groups: [
+          BriefChoiceGroup(['Нужна', 'Не нужна']),
+        ],
       ),
-      BriefField(id: 'storage', label: 'Какие нужны места для хранения?'),
+      BriefField(
+        id: 'storage',
+        label: 'Хранение',
+        groups: [
+          BriefChoiceGroup(['Тумба под раковиной', 'Пенал', 'Шкаф над инсталляцией', 'Ниша', 'Открытые полки'], multi: true),
+        ],
+      ),
       BriefField(
         id: 'towelRail',
-        label:
-            'Какой полотенцесушитель предпочитаете: электрический или водяной?',
+        label: 'Полотенцесушитель',
+        groups: [
+          BriefChoiceGroup(['Водяной', 'Электрический', 'Не нужен']),
+        ],
       ),
       BriefField(
         id: 'washerKg',
-        label: 'На сколько кг стиральная машина?',
-        lines: 1,
+        label: 'Стиральная машина',
+        groups: [
+          BriefChoiceGroup(['6 кг', '7–8 кг', '9 кг и больше', 'Не здесь']),
+        ],
       ),
-      BriefField(id: 'dryer', label: 'Нужна ли сушильная машина?'),
+      BriefField(
+        id: 'dryer',
+        label: 'Сушильная машина',
+        groups: [
+          BriefChoiceGroup(['Нужна, в колонну со стиральной', 'Нужна, рядом', 'Не нужна']),
+        ],
+      ),
       _other,
     ],
   ),
@@ -563,21 +731,39 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'wardrobe',
     title: 'Гардеробная',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
       BriefField(
         id: 'system',
-        label: 'Какая система хранения нужна: корпусная, встроенная, открытая?',
+        label: 'Система хранения',
+        groups: [
+          BriefChoiceGroup(['Корпусная', 'Встроенная', 'Открытая (на стойках)', 'Решит дизайнер']),
+        ],
       ),
       BriefField(
         id: 'zones',
-        label: 'Какие зоны нужны: одежда, обувь, сумки, бельё?',
+        label: 'Зоны',
+        groups: [
+          BriefChoiceGroup(
+            ['Одежда на штангах', 'Полки', 'Обувь', 'Сумки', 'Бельё (ящики)', 'Гладильная доска', 'Пылесос'],
+            multi: true,
+          ),
+        ],
       ),
-      BriefField(id: 'island', label: 'Нужен ли остров / пуф в гардеробной?'),
-      BriefField(id: 'mirror', label: 'Нужно ли зеркало?'),
+      BriefField(
+        id: 'island',
+        label: 'Остров / пуф',
+        groups: [
+          BriefChoiceGroup(['Остров с ящиками', 'Пуф', 'Не нужно']),
+        ],
+      ),
+      BriefField(
+        id: 'mirror',
+        label: 'Зеркало',
+        groups: [
+          BriefChoiceGroup(['В полный рост', 'Не нужно']),
+        ],
+      ),
       _other,
     ],
   ),
@@ -585,20 +771,24 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'kids',
     title: 'Детская',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
       BriefField(
         id: 'furniture',
-        label:
-            'Нужны ли рабочее место, шкаф, комод, кровать или диван (и размер матраса), тумбочка прикроватная, стеллажи, полки, шторы, ковер и тд?',
+        label: 'Мебель',
+        groups: [
+          BriefChoiceGroup(
+            ['Кровать', 'Двухъярусная кровать', 'Кровать-чердак', 'Рабочий стол', 'Шкаф', 'Стеллаж для игрушек'],
+            multi: true,
+          ),
+        ],
       ),
       BriefField(
         id: 'kidsItems',
-        label:
-            'Нужны ли детские предметы (вигвам, бизи-борд, бассейн с шариками, шведская стенка, столик со стульчиком, ночник и тд)?',
+        label: 'Что ещё',
+        groups: [
+          BriefChoiceGroup(['Шведская стенка', 'Игровая зона', 'Место для творчества', 'Мягкий пол / ковёр'], multi: true),
+        ],
       ),
       _other,
     ],
@@ -607,20 +797,99 @@ const briefRoomSections = <BriefRoomSection>[
     id: 'loggia',
     title: 'Лоджия',
     fields: [
-      BriefField(
-        id: 'finishes',
-        label: 'Предпочтения по отделке (пол, стены)?',
-      ),
+      _finishes,
       _lighting,
       BriefField(
         id: 'relax',
-        label: 'Нужна ли релакс-зона с креслом и столиком?',
+        label: 'Релакс-зона',
+        groups: [
+          BriefChoiceGroup(['Кресло и столик', 'Рабочее место', 'Зона для цветов', 'Не нужна']),
+        ],
       ),
-      BriefField(id: 'storage', label: 'Нужно ли место для хранения (шкаф)?'),
+      BriefField(
+        id: 'storage',
+        label: 'Хранение',
+        groups: [
+          BriefChoiceGroup(['Шкаф', 'Открытые полки', 'Не нужно']),
+        ],
+      ),
       _other,
     ],
   ),
 ];
+
+String briefGroupKey(BriefField field, BriefChoiceGroup group) =>
+    group.key.isEmpty ? field.id : '${field.id}.${group.key}';
+
+String briefNoteKey(BriefField field) => '${field.id}.note';
+
+const _labelSeparator = '; ';
+
+List<String> briefLabelParts(String? raw) => [
+      for (final part in (raw ?? '').split(';'))
+        if (part.trim().isNotEmpty) part.trim(),
+    ];
+
+/// «Не нужен», «Ничего», «Решит дизайнер»… — picking one clears the rest of the row.
+bool _isExclusiveLabel(String label) =>
+    RegExp(r'^(Не нуж|Не здесь|Ничего|Нет$|Решит дизайнер|Решим позже)').hasMatch(label);
+
+/// Toggles [label] in a stored row; text typed in the old free-form version stays.
+String briefToggleLabel(String? raw, BriefChoiceGroup group, String label) {
+  final parts = briefLabelParts(raw);
+  final free = [for (final p in parts) if (!group.options.contains(p)) p];
+  var picked = [for (final p in parts) if (group.options.contains(p)) p];
+  if (picked.contains(label)) {
+    picked.remove(label);
+  } else if (!group.multi || _isExclusiveLabel(label)) {
+    picked = [label];
+  } else {
+    picked
+      ..removeWhere(_isExclusiveLabel)
+      ..add(label);
+  }
+  return [...free, ...picked].join(_labelSeparator);
+}
+
+/// The answer as it reads in the brief: one line per row, the comment last.
+String briefRoomFieldValue(BriefField field, Map<String, String> fields) {
+  if (field.groups.isEmpty) return (fields[field.id] ?? '').trim();
+  final lines = <String>[];
+  if (!field.groups.any((g) => g.key.isEmpty)) {
+    final legacy = (fields[field.id] ?? '').trim();
+    if (legacy.isNotEmpty) lines.add(legacy);
+  }
+  for (final group in field.groups) {
+    final value = (fields[briefGroupKey(field, group)] ?? '').trim();
+    if (value.isEmpty) continue;
+    lines.add(group.label == null ? value : '${group.label}: $value');
+  }
+  final note = (fields[briefNoteKey(field)] ?? '').trim();
+  if (note.isNotEmpty) lines.add(lines.isEmpty ? note : 'Комментарий: $note');
+  return lines.join('\n');
+}
+
+/// Portfolio style for each questionnaire style (pictures of rooms in the client's style).
+const briefPortfolioStyle = <String, String>{
+  'scandi': 'skandinavskij',
+  'minimal': 'minimalizm',
+  'classic': 'sovr-klassika',
+  'classical': 'neoklassika',
+  'provence': 'provans',
+  'loft': 'loft',
+};
+
+/// Questionnaire room → rooms as named under portfolio renders, best match first.
+const briefPortfolioRooms = <String, List<String>>{
+  'kitchen': ['Кухня', 'Кухня-гостиная'],
+  'kitchen_living': ['Кухня-гостиная', 'Гостиная', 'Кухня'],
+  'hallway': ['Прихожая', 'Коридор', 'Холл'],
+  'bedroom': ['Спальня', 'Гостевая'],
+  'bathroom': ['Санузел', 'Ванная'],
+  'wardrobe': ['Гардеробная'],
+  'kids': ['Детская'],
+  'loggia': ['Лоджия'],
+};
 
 const briefAttachments = [
   'фотографии проектируемого помещения',
@@ -651,11 +920,22 @@ final briefValueLabels = <String, Map<String, String>>{
   'disliked': {for (final item in briefDislikeChoices) item.id: item.label},
   'budget': {for (final item in briefBudgetChoices) item.id: item.label},
   'replan': {for (final item in briefReplanChoices) item.id: item.label},
-  'floorHeating': {for (final item in briefFloorHeatingChoices) item.id: item.label},
+  'floorHeating': {..._legacyLabels['floorHeating']!, ..._roomLabels},
   'washerLocation': {for (final item in briefWasherChoices) item.id: item.label},
-  'split': {for (final item in briefSplitChoices) item.id: item.label},
-  'gadgetOutlets': {for (final item in briefGadgetChoices) item.id: item.label},
-  'radiators': {for (final item in briefRadiatorChoices) item.id: item.label},
+  'split': {..._legacyLabels['split']!, ..._roomLabels},
+  'gadgetOutlets': {
+    ..._legacyLabels['gadgetOutlets']!,
+    for (final item in briefGadgetChoices) item.id: item.label,
+  },
+  'radiators': {
+    ..._legacyLabels['radiators']!,
+    for (final item in briefRadiatorChoices) item.id: item.label,
+  },
+};
+
+final _roomLabels = <String, String>{
+  for (final section in briefRoomSections) section.id: section.title,
+  briefNoneChoice.id: briefNoneChoice.label,
 };
 
 List<String> briefSelectedIds(String? raw) {
@@ -683,10 +963,12 @@ String briefToggleId(String? raw, String id, {int? max}) {
 }
 
 String briefToggleExclusiveNone(String? raw, String id, {required String noneId}) {
-  if (id == noneId) {
-    return raw == noneId ? '' : noneId;
+  // «Решим позже» also stands alone, like «Нет».
+  bool alone(String item) => item == noneId || item == 'later';
+  if (alone(id)) {
+    return raw == id ? '' : id;
   }
-  final selected = briefSelectedIds(raw).where((item) => item != noneId).toList();
+  final selected = briefSelectedIds(raw).where((item) => !alone(item)).toList();
   if (selected.contains(id)) {
     selected.remove(id);
   } else {

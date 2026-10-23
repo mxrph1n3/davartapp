@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../chat/presentation/chat_notifier.dart';
+import '../../portfolio/data/portfolio_repository.dart';
 import '../../profile/presentation/profile_notifier.dart';
 import '../data/brief_questionnaire.dart';
 import '../data/projects_models.dart';
@@ -393,6 +394,8 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                   onTap: () => FocusScope.of(context).unfocus(),
                   behavior: HitTestBehavior.translucent,
                   child: SingleChildScrollView(
+                    // Each step opens from the top.
+                    key: ValueKey(_step),
                     keyboardDismissBehavior:
                         ScrollViewKeyboardDismissBehavior.onDrag,
                     padding: const EdgeInsets.fromLTRB(
@@ -473,6 +476,34 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
     final general = formState.answers.general;
     final eyebrow = '${stepIndex + 1} из $total';
     final enabled = !isLocked;
+    final pictures = ref.watch(portfolioBriefImagesProvider).valueOrNull;
+
+    /// A render of this room in the client's style; null — the general picture.
+    String? roomPicture(String roomId) {
+      if (pictures == null) return null;
+      for (final style in briefSelectedIds(general['likedStyles'])) {
+        final byRoom = pictures.rooms[briefPortfolioStyle[style]];
+        if (byRoom == null) continue;
+        for (final name in briefPortfolioRooms[roomId] ?? const <String>[]) {
+          final url = byRoom[name];
+          if (url != null) return url;
+        }
+      }
+      return null;
+    }
+
+    final includedRooms = [
+      for (final section in briefRoomsForObject(general['objectType']))
+        if (_roomIncluded(formState.answers, section.id)) section,
+    ];
+
+    /// Conditioner, warm floor: asked per room the client picked.
+    List<BriefChoice> roomChoices() => [
+          for (final section in includedRooms)
+            BriefChoice(id: section.id, label: section.title),
+          briefNoneChoice,
+        ];
+
 
     Widget chips({
       required List<BriefChoice> choices,
@@ -502,6 +533,20 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
         onChanged: (value) => notifier.setGeneral(fieldId, value),
       );
     }
+
+    Widget question(String title, Widget answers, String noteId) => Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.sm),
+              answers,
+              const SizedBox(height: AppSpacing.sm),
+              note(noteId, 'Комментарий', lines: 2),
+            ],
+          ),
+        );
 
     switch (step.id) {
       case 'family':
@@ -603,7 +648,13 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
             BriefImageChoiceGrid(
               options: [
                 for (final option in briefStyleOptions)
-                  if (option.id != 'travans') option,
+                  if (option.id != 'travans')
+                    BriefVisualOption(
+                      id: option.id,
+                      label: option.label,
+                      asset: option.asset,
+                      url: pictures?.styles[briefPortfolioStyle[option.id]],
+                    ),
               ],
               selectedIds: briefSelectedIds(general['likedStyles']),
               enabled: enabled,
@@ -757,6 +808,7 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
                     id: section.id,
                     label: section.title,
                     asset: section.imageAsset,
+                    url: roomPicture(section.id),
                   ),
               ],
               selectedIds: [
@@ -816,29 +868,36 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
               subtitle: 'Коротко про стены, климат и технику.',
             ),
             const SizedBox(height: AppSpacing.xl),
-            Text('Перепланировка', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefReplanChoices, fieldId: 'replan', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Тёплый пол', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefFloorHeatingChoices, fieldId: 'floorHeating', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Стиральная машина', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefWasherChoices, fieldId: 'washerLocation', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Кондиционер', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefSplitChoices, fieldId: 'split', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Розетки под гаджеты', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefGadgetChoices, fieldId: 'gadgetOutlets', max: 1),
-            const SizedBox(height: AppSpacing.xl),
-            Text('Радиаторы, окна, двери', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            chips(choices: briefRadiatorChoices, fieldId: 'radiators', max: 1),
+            question(
+              'Перепланировка',
+              chips(choices: briefReplanChoices, fieldId: 'replan', max: 1),
+              'replanNote',
+            ),
+            question(
+              'Что меняем',
+              chips(choices: briefRadiatorChoices, fieldId: 'radiators', exclusiveNone: true),
+              'radiatorsNote',
+            ),
+            question(
+              'Кондиционер',
+              chips(choices: roomChoices(), fieldId: 'split', exclusiveNone: true),
+              'splitNote',
+            ),
+            question(
+              'Тёплый пол',
+              chips(choices: roomChoices(), fieldId: 'floorHeating', exclusiveNone: true),
+              'floorHeatingNote',
+            ),
+            question(
+              'Розетки под гаджеты',
+              chips(choices: briefGadgetChoices, fieldId: 'gadgetOutlets', exclusiveNone: true),
+              'gadgetOutletsNote',
+            ),
+            question(
+              'Стиральная машина',
+              chips(choices: briefWasherChoices, fieldId: 'washerLocation', max: 1),
+              'washerLocationNote',
+            ),
           ],
         );
       case 'finish':
@@ -886,7 +945,7 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            BriefCoverImage(asset: section.imageAsset),
+            BriefCoverImage(asset: section.imageAsset, url: roomPicture(section.id)),
             const SizedBox(height: AppSpacing.lg),
             BriefStepHeader(
               eyebrow: eyebrow,
@@ -896,15 +955,71 @@ class _BriefScreenState extends ConsumerState<BriefScreen> {
             const SizedBox(height: AppSpacing.xl),
             ...section.fields.map((field) {
               final key = 'r.${section.id}.${field.id}';
+              if (field.groups.isEmpty) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  child: AppInput(
+                    controller: _controller(key, room.fields[field.id] ?? ''),
+                    labelText: field.label,
+                    maxLines: field.lines,
+                    enabled: enabled,
+                    onChanged: (value) =>
+                        notifier.setRoomField(section.id, field.id, value),
+                  ),
+                );
+              }
+              final noteKey = briefNoteKey(field);
               return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                child: AppInput(
-                  controller: _controller(key, room.fields[field.id] ?? ''),
-                  labelText: field.label,
-                  maxLines: field.lines,
-                  enabled: enabled,
-                  onChanged: (value) =>
-                      notifier.setRoomField(section.id, field.id, value),
+                padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(field.label, style: Theme.of(context).textTheme.titleMedium),
+                    for (final group in field.groups) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      if (group.label != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Text(
+                            group.label!,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: AppColors.of(context).textSecondary,
+                                ),
+                          ),
+                        ),
+                      BriefChipWrap(
+                        choices: [
+                          for (final option in group.options)
+                            BriefChoice(id: option, label: option),
+                        ],
+                        selectedIds: briefLabelParts(
+                          room.fields[briefGroupKey(field, group)],
+                        ),
+                        enabled: enabled,
+                        onToggle: (option) => notifier.setRoomField(
+                          section.id,
+                          briefGroupKey(field, group),
+                          briefToggleLabel(
+                            room.fields[briefGroupKey(field, group)],
+                            group,
+                            option,
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sm),
+                    AppInput(
+                      controller: _controller(
+                        'r.${section.id}.$noteKey',
+                        room.fields[noteKey] ?? '',
+                      ),
+                      hintText: 'Свой вариант / комментарий',
+                      maxLines: 2,
+                      enabled: enabled,
+                      onChanged: (value) =>
+                          notifier.setRoomField(section.id, noteKey, value),
+                    ),
+                  ],
                 ),
               );
             }),
