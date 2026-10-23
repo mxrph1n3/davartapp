@@ -20,7 +20,7 @@ class PortfolioTiles {
   const PortfolioTiles({required this.collage, required this.styles, required this.kinds, this.mosaicUrl});
 
   factory PortfolioTiles.fromJson(Map<String, dynamic> json) => PortfolioTiles(
-        mosaicUrl: json['mosaicUrl'] as String?,
+    mosaicUrl: json['mosaicUrl'] as String?,
     collage: [
       for (final u in json['collage'] as List<dynamic>)
         if (u is String) u,

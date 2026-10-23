@@ -277,41 +277,69 @@ class _PortfolioMosaicState extends State<PortfolioMosaic> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        AnimatedBuilder(
-          animation: _drift,
-          builder: (context, child) {
-            final t = Curves.easeInOut.transform(_drift.value);
-            return Transform.scale(
-              scale: 1.12,
-              child: Transform.translate(offset: Offset(-18 + 36 * t, -6 + 12 * t), child: child),
-            );
-          },
-          child: PortfolioImageView(widget.url),
-        ),
-        IgnorePointer(
-          child: AnimatedBuilder(
-            animation: _shine,
-            builder: (context, _) => DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: const Alignment(-1, -0.6),
-                  end: const Alignment(1, 0.6),
-                  transform: _SlideGradient(_shine.value * 3 - 1.5),
-                  colors: [
-                    Colors.white.withValues(alpha: 0),
-                    Colors.white.withValues(alpha: 0.32),
-                    Colors.white.withValues(alpha: 0),
-                  ],
-                  stops: const [0.38, 0.5, 0.62],
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          AnimatedBuilder(
+            animation: _drift,
+            builder: (context, child) {
+              final t = Curves.easeInOut.transform(_drift.value);
+              return Transform.scale(
+                scale: 1.12,
+                child: Transform.translate(offset: Offset(-18 + 36 * t, -6 + 12 * t), child: child),
+              );
+            },
+            child: PortfolioImageView(widget.url),
+          ),
+          IgnorePointer(
+            child: AnimatedBuilder(
+              animation: _shine,
+              builder: (context, _) => DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: const Alignment(-1, -0.6),
+                    end: const Alignment(1, 0.6),
+                    transform: _SlideGradient(_shine.value * 3 - 1.5),
+                    colors: [
+                      Colors.white.withValues(alpha: 0),
+                      Colors.white.withValues(alpha: 0.32),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                    stops: const [0.38, 0.5, 0.62],
+                  ),
                 ),
               ),
             ),
           ),
+          // Edges go last, above the shine, so nothing shows a hard border.
+          const IgnorePointer(child: _EdgeShade(horizontal: true)),
+          const IgnorePointer(child: _EdgeShade(horizontal: false)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fades the grid into the page background on every side — dark theme darkens, light lightens.
+class _EdgeShade extends StatelessWidget {
+  const _EdgeShade({required this.horizontal});
+
+  final bool horizontal;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppColors.of(context).background;
+    final clear = bg.withValues(alpha: 0);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: horizontal ? Alignment.centerLeft : Alignment.topCenter,
+          end: horizontal ? Alignment.centerRight : Alignment.bottomCenter,
+          colors: [bg, bg.withValues(alpha: 0.6), clear, clear, bg.withValues(alpha: 0.6), bg],
+          stops: horizontal ? const [0, 0.06, 0.2, 0.8, 0.94, 1] : const [0, 0.1, 0.32, 0.68, 0.9, 1],
         ),
-      ],
+      ),
     );
   }
 }

@@ -224,55 +224,39 @@ class _PortfolioEntryCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
-        child: Ink(
+        child: SizedBox(
           height: 220,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: colors.imagePlaceholder,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                PortfolioMosaic(url: mosaicUrl),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.05),
-                        Colors.black.withValues(alpha: 0.55),
-                      ],
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // No frame: the mosaic dissolves into the background on every side.
+              PortfolioMosaic(url: mosaicUrl),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Портфолио работ',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            shadows: [Shadow(color: colors.background, blurRadius: 12)],
+                          ),
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Смотреть проекты студии',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: colors.textPrimary.withValues(alpha: 0.9),
+                            shadows: [Shadow(color: colors.background, blurRadius: 10)],
+                          ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Портфолио работ',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Смотреть проекты студии',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
