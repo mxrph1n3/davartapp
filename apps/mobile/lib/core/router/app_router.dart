@@ -10,9 +10,10 @@ import '../../features/auth/data/auth_repository.dart';
 import '../../features/auth/presentation/auth_notifier.dart';
 import '../../features/auth/presentation/otp_screen.dart';
 import '../../features/auth/presentation/phone_screen.dart';
-import '../../features/catalog/presentation/catalog_screen.dart';
-import '../../features/catalog/presentation/product_detail_screen.dart';
+import '../../features/catalog/presentation/category_screen.dart';
+import '../../features/catalog/presentation/product_screen.dart';
 import '../../features/catalog/presentation/search_screen.dart';
+import '../../features/catalog/presentation/shop_home_screen.dart';
 import '../../features/documents/presentation/document_viewer_screen.dart';
 import '../../features/commerce/presentation/cart_screen.dart';
 import '../../features/commerce/presentation/checkout_screen.dart';
@@ -30,7 +31,9 @@ import '../../features/profile/presentation/notifications_settings_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
 import '../../features/profile/presentation/settings_screen.dart';
 import '../../features/projects/presentation/brief_screen.dart';
-import '../../features/projects/presentation/portfolio_screen.dart';
+import '../../features/portfolio/presentation/portfolio_home_screen.dart';
+import '../../features/portfolio/presentation/portfolio_list_screen.dart';
+import '../../features/portfolio/presentation/portfolio_project_screen.dart';
 import '../../features/projects/presentation/project_detail_screen.dart';
 import '../../features/projects/presentation/projects_screen.dart';
 import '../../features/splash/presentation/splash_screen.dart';
@@ -38,6 +41,7 @@ import '../../features/admin/presentation/admin_users_screen.dart';
 import '../../features/staff/presentation/staff_audit_screen.dart';
 import '../../features/staff/presentation/staff_brief_screen.dart';
 import '../../features/staff/presentation/staff_checkout_screen.dart';
+import '../../features/staff/presentation/staff_client_personal_cart_screen.dart';
 import '../../features/staff/presentation/staff_client_cart_screen.dart';
 import '../../features/staff/presentation/staff_client_profile_screen.dart';
 import '../../features/staff/presentation/staff_order_detail_screen.dart';
@@ -73,6 +77,8 @@ abstract final class AppRoutes {
   static String projectDetail(String id) => '/projects/$id';
   static String projectBrief(String id) => '/projects/$id/brief';
   static const portfolio = '/projects/portfolio';
+  static const portfolioList = '/projects/portfolio/list';
+  static String portfolioProject(String id) => '/projects/portfolio/p/$id';
   static String documentViewer(String id) => '/documents/$id';
   static String chatDetail(String id) => '/chat/$id';
   static String chatInfo(String id) => '/chat/$id/info';
@@ -80,6 +86,7 @@ abstract final class AppRoutes {
   static const staffNewChat = '/staff/chats/new';
   static String staffChatInfo(String id) => '/staff/chats/$id/info';
   static String staffClientProfile(String id) => '/staff/clients/$id';
+  static String staffClientPersonalCart(String id) => '/staff/clients/$id/personal-cart';
   static String staffProjectWorkspace(String projectId) =>
       '/staff/projects/$projectId/workspace';
   static String staffProjectCart(String projectId) =>
@@ -104,6 +111,10 @@ abstract final class AppRoutes {
 
 String catalogPathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffCatalog : AppRoutes.catalog;
+
+/// Shop tile: '/catalog/c/plitka-i-keramogranit'; slug 'vse' — whole catalog.
+String categoryPathForRole(UserRole? role, String slug) =>
+    '${catalogPathForRole(role)}/c/$slug';
 
 String profilePathForRole(UserRole? role) =>
     role?.isStudio == true ? AppRoutes.staffProfile : AppRoutes.profile;
@@ -168,6 +179,21 @@ LocalKey distinctPageKey(String base) {
   return ValueKey(n == 1 ? base : '$base#$n');
 }
 
+/// Hides the keyboard whenever a screen opens or closes — a search field left focused on the
+/// previous screen must not keep the keyboard over the next one.
+class UnfocusOnNavigate extends NavigatorObserver {
+  void _unfocus() => FocusManager.instance.primaryFocus?.unfocus();
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => _unfocus();
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => _unfocus();
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => _unfocus();
+}
+
 bool _isStaffPath(String location) => location.startsWith('/staff');
 
 bool _isClientShellPath(String location) {
@@ -184,6 +210,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refreshNotifier = ref.read(routerRefreshProvider);
 
   final router = GoRouter(
+    observers: [UnfocusOnNavigate()],
     navigatorKey: rootNavigatorKey,
     initialLocation: AppRoutes.splash,
     refreshListenable: refreshNotifier,
@@ -306,7 +333,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.catalog,
-                builder: (context, state) => const CatalogScreen(),
+                builder: (context, state) => const ShopHomeScreen(),
+              ),
+              GoRoute(
+                path: '/catalog/c/:slug',
+                builder: (context, state) =>
+                    CategoryScreen(slug: state.pathParameters['slug']!),
               ),
               GoRoute(
                 path: AppRoutes.search,
@@ -319,7 +351,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/product/:id',
                 builder: (context, state) {
                   final productId = state.pathParameters['id']!;
-                  return ProductDetailScreen(productId: productId);
+                  return ProductScreen(productId: productId);
                 },
               ),
               GoRoute(
@@ -336,7 +368,25 @@ final routerProvider = Provider<GoRouter>((ref) {
                 routes: [
                   GoRoute(
                     path: 'portfolio',
-                    builder: (context, state) => const PortfolioScreen(),
+                    builder: (context, state) => const PortfolioHomeScreen(),
+                    routes: [
+                      GoRoute(
+                        path: 'list',
+                        builder: (context, state) {
+                          final q = state.uri.queryParameters;
+                          return PortfolioListScreen(
+                            title: q['title'] ?? 'Портфолио',
+                            style: q['style'],
+                            kind: q['kind'],
+                          );
+                        },
+                      ),
+                      GoRoute(
+                        path: 'p/:id',
+                        builder: (context, state) =>
+                            PortfolioProjectScreen(id: state.pathParameters['id']!),
+                      ),
+                    ],
                   ),
                   GoRoute(
                     path: ':id',
@@ -481,6 +531,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                     },
                     routes: [
                       GoRoute(
+                        path: 'personal-cart',
+                        builder: (context, state) => StaffClientPersonalCartScreen(
+                          clientId: state.pathParameters['clientId']!,
+                        ),
+                      ),
+                      GoRoute(
                         path: 'orders/:orderId',
                         builder: (context, state) {
                           final clientId = state.pathParameters['clientId']!;
@@ -537,7 +593,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             routes: [
               GoRoute(
                 path: AppRoutes.staffCatalog,
-                builder: (context, state) => const CatalogScreen(),
+                builder: (context, state) => const ShopHomeScreen(),
+              ),
+              GoRoute(
+                path: '/staff/catalog/c/:slug',
+                builder: (context, state) =>
+                    CategoryScreen(slug: state.pathParameters['slug']!),
               ),
               GoRoute(
                 path: '/staff/search',
@@ -550,7 +611,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: '/staff/product/:id',
                 builder: (context, state) {
                   final productId = state.pathParameters['id']!;
-                  return ProductDetailScreen(productId: productId);
+                  return ProductScreen(productId: productId);
                 },
               ),
               GoRoute(

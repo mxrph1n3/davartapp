@@ -168,6 +168,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     recipientUserIds: string[] = [],
     options: { skipChatRoom?: boolean } = {},
   ) {
+    if (!this.server) return;
     // Chat-room broadcast is optional so fan-out can send per-viewer payloads
     // without flooding everyone in the thread with the wrong isMine flag.
     if (!options.skipChatRoom) {
@@ -205,6 +206,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   emitUnreadUpdate(userId: string, total: number) {
+    if (!this.server) return;
     this.server.to(`user:${userId}`).emit('unread:update', { total });
   }
 
@@ -222,7 +224,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private extractToken(client: AuthedSocket): string | null {
-    const authToken = client.handshake.auth?.token;
+    const authToken: unknown = client.handshake.auth?.token;
     if (typeof authToken === 'string' && authToken.length > 0) {
       return authToken;
     }

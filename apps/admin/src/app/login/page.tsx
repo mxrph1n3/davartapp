@@ -71,7 +71,7 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6">
       <p className="font-[family-name:var(--font-fraunces)] text-3xl tracking-tight">
-        Davart
+        DAVart
       </p>
       <h1 className="mt-2 text-lg text-[var(--muted)]">Кабинет комплектации</h1>
       <form

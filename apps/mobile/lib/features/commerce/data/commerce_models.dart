@@ -10,6 +10,11 @@ class CartProduct {
     this.compareAtPrice,
     this.imageUrl,
     required this.inStock,
+    this.unit = 'шт',
+    this.sellByPack = false,
+    this.packSize,
+    this.leadTimeMinDays,
+    this.leadTimeMaxDays,
   });
 
   factory CartProduct.fromJson(Map<String, dynamic> json) {
@@ -30,6 +35,11 @@ class CartProduct {
         imageUrl: json['imageUrl'] as String?,
       ),
       inStock: json['inStock'] as bool? ?? false,
+      unit: json['unit'] as String? ?? 'шт',
+      sellByPack: json['sellByPack'] as bool? ?? false,
+      packSize: (json['packSize'] as num?)?.toDouble(),
+      leadTimeMinDays: json['leadTimeMinDays'] as int?,
+      leadTimeMaxDays: json['leadTimeMaxDays'] as int?,
     );
   }
 
@@ -37,10 +47,19 @@ class CartProduct {
   final String name;
   final String slug;
   final String sku;
+  /// Per [unit] (м² for tiles); a cart line is priced per pack — see [cartUnitPrice].
   final double price;
   final double? compareAtPrice;
   final String? imageUrl;
   final bool inStock;
+  final String unit;
+  final bool sellByPack;
+  final double? packSize;
+  final int? leadTimeMinDays;
+  final int? leadTimeMaxDays;
+
+  double get cartUnitPrice =>
+      sellByPack && packSize != null ? price * packSize! : price;
 }
 
 class CartItem {

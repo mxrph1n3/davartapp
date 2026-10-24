@@ -1,3 +1,4 @@
+import { unitLinePrice } from './pack-price';
 import {
   BadRequestException,
   Injectable,
@@ -8,6 +9,7 @@ import { isStudioRole } from '../auth/roles';
 import { LiveSyncService } from '../live/live-sync.service';
 import { PushService } from '../push/push.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrdersChatService } from '../chat/orders-chat.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { CartService } from './cart.service';
 
@@ -26,39 +28,53 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly pushService: PushService,
     private readonly telegram: TelegramService,
+    private readonly ordersChat: OrdersChatService,
     private readonly liveSync: LiveSyncService,
   ) {}
 
   async createFromCart(
     userId: string,
     actorRole: UserRole,
-    projectId: string,
+    projectId: string | undefined,
     address: string,
     comment?: string,
     cartItemIds?: string[],
     extraRoles: UserRole[] = [],
   ) {
-    await this.cartService.assertProjectCartAccess(projectId, userId, [
-      actorRole,
-      ...extraRoles,
-    ]);
+    // No project — the order is made from the client's personal cart.
+    if (projectId) {
+      await this.cartService.assertProjectCartAccess(projectId, userId, [
+        actorRole,
+        ...extraRoles,
+      ]);
+    } else if (isStudioRole(actorRole)) {
+      throw new BadRequestException('projectId is required for staff orders');
+    }
 
     if (!cartItemIds?.length) {
       throw new BadRequestException('cartItemIds is required');
     }
 
     const uniqueIds = [...new Set(cartItemIds)];
-    const cart = await this.cartService.getCartSnapshot(projectId);
+    const cart = projectId
+      ? await this.cartService.getCartSnapshot(projectId)
+      : await this.cartService.getCart(
+          undefined,
+          userId,
+          actorRole,
+          extraRoles,
+        );
     const visibleIds = new Set(cart.items.map((item) => item.id));
     if (uniqueIds.some((id) => !visibleIds.has(id))) {
       throw new BadRequestException('Some cart items were not found');
     }
 
-    const orderUserId = isStudioRole(actorRole) ? cart.ownerUserId : userId;
+    const orderUserId =
+      projectId && isStudioRole(actorRole) ? cart.ownerUserId : userId;
 
     const order = await this.prisma.$transaction(async (tx) => {
       const projectCart = await tx.cart.findUnique({
-        where: { projectId },
+        where: projectId ? { projectId } : { userId },
         select: { id: true },
       });
       if (!projectCart) {
@@ -74,7 +90,14 @@ export class OrdersService {
         },
         include: {
           product: {
-            select: { id: true, name: true, sku: true, price: true },
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              price: true,
+              sellByPack: true,
+              packSize: true,
+            },
           },
         },
       });
@@ -84,7 +107,7 @@ export class OrdersService {
       }
 
       const totalAmount = lines.reduce(
-        (sum, item) => sum + Number(item.product.price) * item.quantity,
+        (sum, item) => sum + unitLinePrice(item.product) * item.quantity,
         0,
       );
 
@@ -100,7 +123,8 @@ export class OrdersService {
             create: lines.map((item) => ({
               productId: item.product.id,
               quantity: item.quantity,
-              price: item.product.price,
+              // Per cart unit (a pack for goods sold in packs).
+              price: unitLinePrice(item.product),
               name: item.product.name,
               sku: item.product.sku,
             })),
@@ -134,14 +158,16 @@ export class OrdersService {
       select: { id: true, name: true, phone: true },
     });
 
-    void this.liveSync.publish(projectId, 'order', { orderId: formatted.id });
-    void this.liveSync.publish(projectId, 'cart');
+    if (projectId) {
+      void this.liveSync.publish(projectId, 'order', { orderId: formatted.id });
+      void this.liveSync.publish(projectId, 'cart');
+    }
 
-    // Alert is best-effort: a Telegram outage must not fail checkout.
-    void this.telegram.notifyOrderCreated({
+    // Alerts are best-effort: neither channel may fail checkout.
+    const alert = {
       orderId: formatted.id,
-      projectId,
-      projectName: cart.projectName,
+      projectId: projectId ?? null,
+      projectName: projectId ? cart.projectName : null,
       clientId: orderUserId,
       clientName: client?.name ?? null,
       clientPhone: client?.phone ?? '',
@@ -151,9 +177,11 @@ export class OrdersService {
         name: item.product.name,
         sku: item.product.sku,
         quantity: item.quantity,
-        price: Number(item.product.price),
+        price: unitLinePrice(item.product),
       })),
-    });
+    };
+    void this.telegram.notifyOrderCreated(alert);
+    void this.ordersChat.notifyOrderCreated(alert);
 
     return formatted;
   }

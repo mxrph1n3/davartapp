@@ -6,8 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -33,6 +37,26 @@ export class UsersController {
   @Patch('me')
   updateMe(@CurrentUser() user: JwtPayload, @Body() dto: UpdateUserDto) {
     return this.usersService.updateProfile(user.sub, dto);
+  }
+
+  @Post('me/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  setAvatar(
+    @CurrentUser() user: JwtPayload,
+    @UploadedFile()
+    file: { mimetype: string; size: number; buffer: Buffer } | undefined,
+  ) {
+    return this.usersService.setAvatar(user.sub, file);
+  }
+
+  @Delete('me/avatar')
+  removeAvatar(@CurrentUser() user: JwtPayload) {
+    return this.usersService.removeAvatar(user.sub);
   }
 
   @Delete('me')

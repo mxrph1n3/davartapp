@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,8 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../../core/widgets/top_notice.dart';
+import '../../auth/data/auth_repository.dart';
 import '../../auth/presentation/auth_notifier.dart';
 import '../../chat/data/chat_repository.dart';
 import '../../projects/data/projects_models.dart';
@@ -67,11 +70,46 @@ class StaffProjectWorkspaceScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _editNumber(BuildContext context, WidgetRef ref, String? current) async {
+    final controller = TextEditingController(text: current ?? '');
+    final number = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Номер договора'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.text,
+          decoration: const InputDecoration(hintText: 'Например, 16068', prefixText: '№ '),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (number == null || number.isEmpty || number == current) return;
+    try {
+      await ref.read(staffRepositoryProvider).setProjectNumber(projectId, number);
+      ref.invalidate(projectDetailProvider(projectId));
+      if (context.mounted) showTopNotice(context, 'Теперь это «Дизайн-проект №$number»');
+    } on DioException catch (e) {
+      final message = e.response?.statusCode == 409
+          ? 'Этот номер уже у другого проекта'
+          : e.response?.statusCode == 400
+              ? 'Номер — цифры, например 16068 или 15272-2'
+              : 'Не удалось сохранить номер';
+      if (context.mounted) showTopNotice(context, message);
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final projectAsync = ref.watch(projectDetailProvider(projectId));
     final canAssign =
         ref.watch(authProvider).user?.canSeeClients == true;
+    final isAdmin = ref.watch(authProvider).user?.hasRole(UserRole.admin) == true;
 
     return Scaffold(
       appBar: AppBar(
@@ -92,6 +130,13 @@ class StaffProjectWorkspaceScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(AppSpacing.screenPadding),
             children: [
               Text(project.name, style: Theme.of(context).textTheme.titleLarge),
+              if (isAdmin)
+                ListItem(
+                  title: 'Номер договора',
+                  subtitle: project.number == null ? 'Не указан — нажмите, чтобы ввести' : '№${project.number}',
+                  leading: const Icon(Icons.tag, size: 22),
+                  onTap: () => _editNumber(context, ref, project.number),
+                ),
               const SizedBox(height: 4),
               StatusBadge(
                 label: project.statusLabel,

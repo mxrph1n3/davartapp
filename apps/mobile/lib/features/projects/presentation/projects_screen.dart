@@ -16,6 +16,8 @@ import '../../commerce/presentation/active_project_provider.dart';
 import '../data/projects_models.dart';
 import '../data/projects_repository.dart';
 import '../data/project_summary.dart';
+import '../../portfolio/presentation/portfolio_home_screen.dart';
+import '../../portfolio/presentation/portfolio_widgets.dart';
 import 'projects_notifier.dart';
 
 class ProjectsScreen extends ConsumerStatefulWidget {
@@ -119,7 +121,6 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
   @override
   Widget build(BuildContext context) {
     final projectsAsync = ref.watch(projectsListProvider);
-    final showcaseAsync = ref.watch(showcaseProjectsProvider);
 
     return TabPage(
       child: projectsAsync.when(
@@ -136,11 +137,11 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(projectsListProvider);
-              ref.invalidate(showcaseProjectsProvider);
+              ref.invalidate(portfolioTilesProvider);
             },
             child: ListView(
               clipBehavior: Clip.none,
-              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
               children: [
                 const ScreenHeader(title: 'Проекты'),
                 if (!ref.watch(authProvider).isAuthenticated && noOwnProjects)
@@ -194,9 +195,7 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
                 ],
                 const SizedBox(height: AppSpacing.xl),
                 _PortfolioEntryCard(
-                  coverUrl: showcaseAsync.asData?.value.isNotEmpty == true
-                      ? projectCoverUrl(showcaseAsync.asData!.value.first.id)
-                      : null,
+                  mosaicUrl: ref.watch(portfolioTilesProvider).asData?.value.mosaicUrl,
                   onTap: () => context.push(AppRoutes.portfolio),
                 ),
               ],
@@ -211,78 +210,45 @@ class _ProjectsScreenState extends ConsumerState<ProjectsScreen> {
 class _PortfolioEntryCard extends StatelessWidget {
   const _PortfolioEntryCard({
     required this.onTap,
-    this.coverUrl,
+    this.mosaicUrl,
   });
 
   final VoidCallback onTap;
-  final String? coverUrl;
+  final String? mosaicUrl;
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppColors.of(context);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(24),
-        child: Ink(
+        child: SizedBox(
           height: 220,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            color: colors.imagePlaceholder,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (coverUrl != null)
-                  Image.network(
-                    coverUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => ColoredBox(
-                      color: colors.imagePlaceholder,
-                    ),
-                  )
-                else
-                  ColoredBox(color: colors.imagePlaceholder),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.05),
-                        Colors.black.withValues(alpha: 0.55),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // No frame: the mosaic dissolves into the background on every side.
+              PortfolioMosaic(url: mosaicUrl),
+              // Matte glass plate in the centre: reads the same in both themes.
+              const Center(
+                child: GlassPlate(
+                  radius: 18,
+                  padding: EdgeInsets.symmetric(horizontal: 22, vertical: 14),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         'Портфолио работ',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Смотреть проекты студии',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.9),
-                            ),
-                      ),
+                      SizedBox(height: 3),
+                      Text('Смотреть проекты студии', style: TextStyle(color: Color(0xE6FFFFFF), fontSize: 14)),
                     ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

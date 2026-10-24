@@ -26,13 +26,35 @@ class ProfileRepository {
     final response = await _dio.patch(
       '/users/me',
       data: {
-        if (name != null) 'name': name,
+        'name': ?name,
         // Empty string fails @IsEmail on API — omit rather than send "".
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
-        if (notificationsEnabled != null)
-          'notificationsEnabled': notificationsEnabled,
+        'notificationsEnabled': ?notificationsEnabled,
       },
     );
+    return UserProfile.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> uploadAvatar(String path) async {
+    final name = path.split('/').last;
+    final lower = name.toLowerCase();
+    final type = lower.endsWith('.png')
+        ? 'png'
+        : lower.endsWith('.heic')
+            ? 'heic'
+            : 'jpeg';
+    final response = await _dio.post(
+      '/users/me/avatar',
+      data: FormData.fromMap({
+        'file': await MultipartFile.fromFile(path, filename: name, contentType: DioMediaType('image', type)),
+      }),
+      options: Options(sendTimeout: const Duration(seconds: 60), receiveTimeout: const Duration(seconds: 60)),
+    );
+    return UserProfile.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> removeAvatar() async {
+    final response = await _dio.delete('/users/me/avatar');
     return UserProfile.fromJson(response.data as Map<String, dynamic>);
   }
 
@@ -44,7 +66,7 @@ class ProfileRepository {
       '/users/me/fcm-token',
       data: {
         'token': token,
-        if (platform != null) 'platform': platform,
+        'platform': ?platform,
       },
     );
   }
@@ -148,6 +170,7 @@ class UserProfile {
     required this.phone,
     this.name,
     this.email,
+    this.avatarUrl,
     required this.notificationsEnabled,
     this.role = UserRole.client,
     this.extraRoles = const [],
@@ -157,6 +180,7 @@ class UserProfile {
   final String phone;
   final String? name;
   final String? email;
+  final String? avatarUrl;
   final bool notificationsEnabled;
   final UserRole role;
   final List<UserRole> extraRoles;
@@ -170,6 +194,7 @@ class UserProfile {
       phone: json['phone'] as String,
       name: json['name'] as String?,
       email: json['email'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
       role: UserRole.fromJson(json['role'] as String?),
       extraRoles: extra,

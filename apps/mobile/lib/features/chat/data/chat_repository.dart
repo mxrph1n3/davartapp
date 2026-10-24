@@ -48,12 +48,12 @@ class ChatRepository {
       '/chats/$chatId/messages',
       data: {
         'type': type,
-        if (content != null) 'content': content,
-        if (attachmentKey != null) 'attachmentKey': attachmentKey,
-        if (attachmentName != null) 'attachmentName': attachmentName,
-        if (attachmentMime != null) 'attachmentMime': attachmentMime,
-        if (productId != null) 'productId': productId,
-        if (replyToId != null) 'replyToId': replyToId,
+        'content': ?content,
+        'attachmentKey': ?attachmentKey,
+        'attachmentName': ?attachmentName,
+        'attachmentMime': ?attachmentMime,
+        'productId': ?productId,
+        'replyToId': ?replyToId,
       },
     );
     return ChatMessage.fromJson(response.data as Map<String, dynamic>);
@@ -73,7 +73,7 @@ class ChatRepository {
       data: {
         'fileName': fileName,
         'contentType': contentType,
-        if (size != null) 'size': size,
+        'size': ?size,
       },
     );
     return response.data as Map<String, dynamic>;
@@ -214,6 +214,16 @@ class ChatRepository {
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Anyone in a group can add people.
+  Future<void> addGroupMembers(String chatId, List<String> userIds) async {
+    await _dio.post('/chats/$chatId/members', data: {'userIds': userIds});
+  }
+
+  /// Removes someone from a group (not a block); the server checks who may do it.
+  Future<void> removeGroupMember(String chatId, String userId) async {
+    await _dio.delete('/chats/$chatId/members/$userId');
+  }
+
   Future<void> setPinned(String chatId, {required bool pinned}) async {
     await _dio.patch('/chats/$chatId/pin', data: {'pinned': pinned});
   }
@@ -230,8 +240,8 @@ class ChatRepository {
     final response = await _dio.patch(
       '/chats/$chatId',
       data: {
-        if (title != null) 'title': title,
-        if (alias != null) 'alias': alias,
+        'title': ?title,
+        'alias': ?alias,
       },
     );
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);

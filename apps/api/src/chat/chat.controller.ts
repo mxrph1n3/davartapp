@@ -5,8 +5,8 @@ import {
   Delete,
   Get,
   HttpCode,
-  Logger,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -23,7 +23,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/decorators/current-user.decorator';
 import { assertDevEndpointsAllowed } from '../common/dev-endpoints';
-import { PushService } from '../push/push.service';
+import { ChatDeliveryService } from './chat-delivery.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import {
@@ -50,12 +50,10 @@ import {
 @Controller('chats')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  private readonly logger = new Logger(ChatController.name);
-
   constructor(
     private readonly chatService: ChatService,
     private readonly chatGateway: ChatGateway,
-    private readonly pushService: PushService,
+    private readonly delivery: ChatDeliveryService,
   ) {}
 
   @Get()
@@ -324,6 +322,30 @@ export class ChatController {
     return this.chatService.dismissChat(user.sub, params.id);
   }
 
+  @Post(':id/members')
+  @HttpCode(200)
+  addGroupMembers(
+    @CurrentUser() user: JwtPayload,
+    @Param() params: ChatIdParamDto,
+    @Body() body: { userIds?: string[] },
+  ) {
+    return this.chatService.addGroupMembers(
+      user.sub,
+      params.id,
+      body.userIds ?? [],
+    );
+  }
+
+  @Delete(':id/members/:userId')
+  @HttpCode(200)
+  removeGroupMember(
+    @CurrentUser() user: JwtPayload,
+    @Param('id', ParseUUIDPipe) chatId: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+  ) {
+    return this.chatService.removeGroupMember(user.sub, chatId, userId);
+  }
+
   @Post(':id/participants')
   @UseGuards(RolesGuard)
   @Roles(UserRole.complectator, UserRole.admin)
@@ -349,7 +371,7 @@ export class ChatController {
       ]);
 
       for (const userId of otherUserIds) {
-        this.scheduleDelivery(userId, params.id, message);
+        this.delivery.scheduleDelivery(userId, params.id, message);
       }
     }
 
@@ -372,91 +394,12 @@ export class ChatController {
     return message;
   }
 
-  /**
-   * Each phone may have a different chat id for the same person.
-   * Send a correctly labeled copy to every such id, then return.
-   * Push runs after the HTTP response. Chat text is never sent by SMS.
-   */
-  private async publishLive(
+  private publishLive(
     actorId: string,
     chatId: string,
-    message: {
-      chatId: string;
-      type: string;
-      content?: string | null;
-      attachmentName?: string | null;
-      sender?: { id: string; name?: string | null };
-      isMine?: boolean;
-    },
+    message: Parameters<ChatDeliveryService['publishLive']>[2],
   ) {
-    const others = await this.chatService.getOtherParticipantIds(
-      chatId,
-      actorId,
-    );
-    const viewers = [...new Set([actorId, ...others])];
-
-    for (const viewerId of viewers) {
-      const labeled = this.chatService.asViewerMessage(message, viewerId);
-      const threadIds = await this.chatService.listDeliveryChatIds(
-        viewerId,
-        chatId,
-      );
-      for (const threadId of threadIds) {
-        this.chatGateway.emitNewMessage(
-          threadId,
-          { ...labeled, chatId: threadId },
-          [viewerId],
-          { skipChatRoom: true },
-        );
-      }
-    }
-
-    for (const recipientId of others) {
-      this.scheduleDelivery(recipientId, chatId, message);
-    }
-  }
-
-  /** Push must not hold the HTTP response. The sender's app times out at 10s. */
-  private scheduleDelivery(
-    userId: string,
-    chatId: string,
-    message: {
-      id?: string;
-      type: string;
-      content?: string | null;
-      attachmentName?: string | null;
-      sender?: { name?: string | null };
-    },
-  ) {
-    void this.deliverToRecipient(userId, chatId, message).catch((error) => {
-      this.logger.warn(`Chat delivery failed for ${userId}: ${error}`);
-    });
-  }
-
-  /** Socket if the app is open. Apple stores the same alert for a closed or powered-off phone. Never SMS. */
-  private async deliverToRecipient(
-    userId: string,
-    chatId: string,
-    message: {
-      id?: string;
-      type: string;
-      content?: string | null;
-      attachmentName?: string | null;
-      sender?: { name?: string | null };
-    },
-  ) {
-    const total = (await this.chatService.getUnreadTotal(userId)).total;
-    this.chatGateway.emitUnreadUpdate(userId, total);
-    if (await this.chatService.isChatMuted(userId, chatId)) return;
-    const push = this.chatService.buildPushPayload(message);
-    const destination = await this.chatService.preferredChatId(userId, chatId);
-    await this.pushService.sendToUser(userId, {
-      title: push.title,
-      body: push.body,
-      badge: total,
-      collapseId: message.id,
-      data: { type: 'chat', chatId: destination, title: push.title },
-    });
+    return this.delivery.publishLive(actorId, chatId, message);
   }
 
   @Post(':id/read')

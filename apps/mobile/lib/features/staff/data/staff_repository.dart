@@ -58,8 +58,8 @@ class StaffRepository {
     await _dio.patch(
       '/staff/projects/$projectId/staff',
       data: {
-        if (designerId != null) 'designerId': designerId,
-        if (surveyorId != null) 'surveyorId': surveyorId,
+        'designerId': ?designerId,
+        'surveyorId': ?surveyorId,
       },
     );
   }
@@ -92,6 +92,18 @@ class StaffRepository {
   ) async {
     final response = await _dio.post(
       '/staff/clients/$clientId/addresses',
+      data: request.toJson(),
+    );
+    return UserAddress.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<UserAddress> updateAddress(
+    String clientId,
+    String addressId,
+    CreateAddressRequest request,
+  ) async {
+    final response = await _dio.patch(
+      '/staff/clients/$clientId/addresses/$addressId',
       data: request.toJson(),
     );
     return UserAddress.fromJson(response.data as Map<String, dynamic>);
@@ -135,6 +147,19 @@ class StaffRepository {
       options: Options(responseType: ResponseType.bytes),
     );
     return response.data ?? [];
+  }
+
+  /// What the client collected for themselves (read-only for the studio).
+  Future<Cart> getClientPersonalCart(String clientId) async {
+    final response = await _dio.get('/staff/clients/$clientId/cart');
+    return Cart.fromJson(response.data as Map<String, dynamic>);
+  }
+
+  Future<List<FavoriteItem>> getClientFavorites(String clientId) async {
+    final response = await _dio.get('/staff/clients/$clientId/favorites');
+    return (response.data as List<dynamic>)
+        .map((item) => FavoriteItem.fromJson(item as Map<String, dynamic>))
+        .toList();
   }
 
   Future<Cart> getCart(String projectId) async {
@@ -206,6 +231,11 @@ class StaffRepository {
     return Order.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// Admin only: contract number → project becomes «Дизайн-проект №16068».
+  Future<void> setProjectNumber(String projectId, String number) async {
+    await _dio.patch('/staff/projects/$projectId/number', data: {'number': number});
+  }
+
   Future<Project> advanceProjectStatus(String projectId, String status) async {
     final response = await _dio.post(
       '/staff/projects/$projectId/status',
@@ -235,7 +265,7 @@ class StaffRepository {
     final response = await _dio.get(
       '/staff/audit',
       queryParameters: {
-        if (clientId != null) 'clientId': clientId,
+        'clientId': ?clientId,
         'page': page,
         'limit': limit,
       },

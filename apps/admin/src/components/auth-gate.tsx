@@ -41,7 +41,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       <header className="flex shrink-0 items-center justify-between border-b border-[var(--rule)] px-5 py-3">
         <div>
           <p className="font-[family-name:var(--font-fraunces)] text-xl leading-none">
-            Davart
+            DAVart
           </p>
           <p className="mt-1 text-xs tracking-[0.16em] text-[var(--muted)] uppercase">
             CRM комплектации

@@ -26,8 +26,8 @@ export class CatalogController {
   }
 
   @Get('filters')
-  getFilters() {
-    return this.catalogService.getFilterOptions();
+  getFilters(@Query('categoryId') categoryId?: string) {
+    return this.catalogService.getFilterOptions(categoryId);
   }
 
   @Get('search')

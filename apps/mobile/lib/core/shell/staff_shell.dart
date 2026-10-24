@@ -19,11 +19,14 @@ class StaffShell extends ConsumerWidget {
     final currentIndex = navigationShell.currentIndex;
 
     return Scaffold(
+      // Content scrolls under the floating glass bar.
+      extendBody: true,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: navigationShell,
       bottomNavigationBar: DavartBottomNavigation(
         currentIndex: currentIndex,
         onTap: (index) {
+          FocusManager.instance.primaryFocus?.unfocus();
           navigationShell.goBranch(
             index,
             initialLocation: index == currentIndex,

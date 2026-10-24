@@ -64,32 +64,34 @@ enum ProjectMemberRole {
 }
 
 model User {
-  id                   String            @id @default(uuid())
-  phone                String            @unique
+  id                   String              @id @default(uuid())
+  phone                String              @unique
   name                 String?
+  avatarUrl            String?             @map("avatar_url")
   email                String?
-  role                 UserRole          @default(client)
-  extraRoles           UserRole[]        @default([]) @map("extra_roles")
-  notificationsEnabled Boolean           @default(true) @map("notifications_enabled")
-  birthDate            DateTime?         @map("birth_date") @db.Date
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @map("updated_at")
+  role                 UserRole            @default(client)
+  extraRoles           UserRole[]          @default([]) @map("extra_roles")
+  notificationsEnabled Boolean             @default(true) @map("notifications_enabled")
+  birthDate            DateTime?           @map("birth_date") @db.Date
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
   refreshTokens        RefreshToken[]
   favorites            Favorite[]
   orders               Order[]
-  clientProjects       Project[]         @relation("ClientProjects")
-  designerProjects     Project[]         @relation("DesignerProjects")
-  managerProjects      Project[]         @relation("ManagerProjects")
-  surveyorProjects     Project[]         @relation("SurveyorProjects")
+  clientProjects       Project[]           @relation("ClientProjects")
+  designerProjects     Project[]           @relation("DesignerProjects")
+  managerProjects      Project[]           @relation("ManagerProjects")
+  surveyorProjects     Project[]           @relation("SurveyorProjects")
   projectMemberships   ProjectMember[]
   chatParticipants     ChatParticipant[]
-  sentMessages         Message[]         @relation("SentMessages")
+  sentMessages         Message[]           @relation("SentMessages")
   messageReactions     MessageReaction[]
   addresses            Address[]
   personalCart         Cart?
   fcmTokens            FcmToken[]
-  staffAuditsAsActor   StaffAuditLog[]   @relation("StaffAuditActor")
-  staffAuditsAsClient  StaffAuditLog[]   @relation("StaffAuditClient")
+  staffAuditsAsActor   StaffAuditLog[]     @relation("StaffAuditActor")
+  staffAuditsAsClient  StaffAuditLog[]     @relation("StaffAuditClient")
+  portfolioFavorites   PortfolioFavorite[]
 
   @@map("users")
 }
@@ -117,14 +119,19 @@ model Brand {
 }
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  slug      String    @unique
-  sortOrder Int       @default(0) @map("sort_order")
-  imageUrl  String?   @map("image_url")
-  createdAt DateTime  @default(now()) @map("created_at")
+  id        String     @id @default(uuid())
+  name      String     @unique
+  slug      String     @unique
+  sortOrder Int        @default(0) @map("sort_order")
+  imageUrl  String?    @map("image_url")
+  /// Shop tiles are top-level categories; their children are the chips inside.
+  parentId  String?    @map("parent_id")
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[] @relation("CategoryTree")
+  createdAt DateTime   @default(now()) @map("created_at")
   products  Product[]
 
+  @@index([parentId])
   @@map("categories")
 }
 
@@ -140,6 +147,18 @@ model Product {
   price           Decimal            @db.Decimal(12, 2)
   compareAtPrice  Decimal?           @map("compare_at_price") @db.Decimal(12, 2)
   imageUrl        String?            @map("image_url")
+  /// Gallery after the main image: texture, interior shots, close-ups (manufacturer photos).
+  images          String[]           @default([])
+  /// Unit the price is quoted in: «шт», «м²», «пог. м», «л», «кг», «компл.».
+  unit            String             @default("шт")
+  /// Sold in whole packs: the cart counts packs, price is still per unit.
+  sellByPack      Boolean            @default(false) @map("sell_by_pack")
+  /// Units in one pack (e.g. 1.44 м²) and pieces in it (e.g. 2).
+  packSize        Decimal?           @map("pack_size") @db.Decimal(10, 4)
+  packPieces      Int?               @map("pack_pieces")
+  /// Lead time when not in stock, shown as «срок 7–10 дней».
+  leadTimeMinDays Int?               @map("lead_time_min_days")
+  leadTimeMaxDays Int?               @map("lead_time_max_days")
   inStock         Boolean            @default(true) @map("in_stock")
   isPopular       Boolean            @default(false) @map("is_popular")
   categoryId      String             @map("category_id")
@@ -218,20 +237,20 @@ model Favorite {
 }
 
 model Order {
-  id          String               @id @default(uuid())
-  userId      String               @map("user_id")
-  projectId   String?              @map("project_id")
-  status      OrderStatus          @default(created)
-  address     String
-  comment     String?
-  totalAmount Decimal              @map("total_amount") @db.Decimal(12, 2)
-  user        User                 @relation(fields: [userId], references: [id])
-  project     Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  items       OrderItem[]
-  statusHistory OrderStatusHistory[]
+  id              String               @id @default(uuid())
+  userId          String               @map("user_id")
+  projectId       String?              @map("project_id")
+  status          OrderStatus          @default(created)
+  address         String
+  comment         String?
+  totalAmount     Decimal              @map("total_amount") @db.Decimal(12, 2)
+  user            User                 @relation(fields: [userId], references: [id])
+  project         Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  items           OrderItem[]
+  statusHistory   OrderStatusHistory[]
   lockedCartItems CartItem[]
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([projectId])
@@ -240,15 +259,15 @@ model Order {
 }
 
 model OrderItem {
-  id        String   @id @default(uuid())
-  orderId   String   @map("order_id")
-  productId String   @map("product_id")
+  id        String  @id @default(uuid())
+  orderId   String  @map("order_id")
+  productId String  @map("product_id")
   quantity  Int
-  price     Decimal  @db.Decimal(12, 2)
+  price     Decimal @db.Decimal(12, 2)
   name      String
   sku       String
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id])
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product @relation(fields: [productId], references: [id])
 
   @@index([orderId])
   @@map("order_items")
@@ -266,33 +285,36 @@ model OrderStatusHistory {
 }
 
 model Project {
-  id         String        @id @default(uuid())
-  userId     String        @map("user_id")
-  designerId String?       @map("designer_id")
-  managerId  String?       @map("manager_id")
-  surveyorId String?       @map("surveyor_id")
-  name       String
-  address    String?
-  area       Float?
-  style      String?
-  objectType String?       @map("object_type")
-  startDate  DateTime?     @map("start_date")
-  status     ProjectStatus @default(brief_filling)
-  isShowcase Boolean       @default(false) @map("is_showcase")
-  isDraft    Boolean       @default(false) @map("is_draft")
-  projectChatDismissed Boolean @default(false) @map("project_chat_dismissed")
-  user       User          @relation("ClientProjects", fields: [userId], references: [id], onDelete: Cascade)
-  designer   User?         @relation("DesignerProjects", fields: [designerId], references: [id], onDelete: SetNull)
-  manager    User?         @relation("ManagerProjects", fields: [managerId], references: [id], onDelete: SetNull)
-  surveyor   User?         @relation("SurveyorProjects", fields: [surveyorId], references: [id], onDelete: SetNull)
-  brief      Brief?
-  documents  Document[]
-  chats      Chat[]
-  members    ProjectMember[]
-  cart       Cart?
-  orders     Order[]
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
+  id                   String          @id @default(uuid())
+  userId               String          @map("user_id")
+  designerId           String?         @map("designer_id")
+  managerId            String?         @map("manager_id")
+  surveyorId           String?         @map("surveyor_id")
+  name                 String
+  /// Studio contract number (16068, 15272-2). Entered by the admin; the project is then
+  /// shown as «Дизайн-проект №<number>».
+  number               String?         @unique
+  address              String?
+  area                 Float?
+  style                String?
+  objectType           String?         @map("object_type")
+  startDate            DateTime?       @map("start_date")
+  status               ProjectStatus   @default(brief_filling)
+  isShowcase           Boolean         @default(false) @map("is_showcase")
+  isDraft              Boolean         @default(false) @map("is_draft")
+  projectChatDismissed Boolean         @default(false) @map("project_chat_dismissed")
+  user                 User            @relation("ClientProjects", fields: [userId], references: [id], onDelete: Cascade)
+  designer             User?           @relation("DesignerProjects", fields: [designerId], references: [id], onDelete: SetNull)
+  manager              User?           @relation("ManagerProjects", fields: [managerId], references: [id], onDelete: SetNull)
+  surveyor             User?           @relation("SurveyorProjects", fields: [surveyorId], references: [id], onDelete: SetNull)
+  brief                Brief?
+  documents            Document[]
+  chats                Chat[]
+  members              ProjectMember[]
+  cart                 Cart?
+  orders               Order[]
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
 
   @@index([userId])
   @@index([designerId])
@@ -467,4 +489,91 @@ model StaffAuditLog {
   @@index([clientId, createdAt])
   @@index([createdAt])
   @@map("staff_audit_logs")
+}
+
+/// Kind of a portfolio project: interior (full / basic) or the separate tiles.
+enum PortfolioKind {
+  full
+  basic
+  exterior
+  architecture
+  landscape
+  /// Cafes, offices, clinics, shops — their own tile, not mixed into the interior styles.
+  commercial
+}
+
+/// A finished studio project shown in «Портфолио». Not linked to a client: no names,
+/// addresses or contacts here. Imported with `npm run portfolio:import`.
+model PortfolioProject {
+  id            String              @id @default(uuid())
+  /// Studio number shown small at the bottom: «Проект 15272».
+  number        String              @unique
+  kind          PortfolioKind       @default(full)
+  /// «Однокомнатная квартира», «Банный комплекс».
+  title         String
+  /// Filter group: apartment / house / bath / commercial.
+  objectType    String?             @map("object_type")
+  /// PortfolioStyle.slug; exterior / architecture / landscape have none.
+  style         String?
+  area          Float?
+  rooms         String[]
+  /// «Ольга К.» — first name and initial only.
+  designer      String?
+  completedAt   DateTime?           @map("completed_at")
+  /// Sum of the furnishing lists in the PDF; null — no plaque.
+  materialsCost Decimal?            @map("materials_cost") @db.Decimal(12, 2)
+  description   String?
+  /// Projects made for one object (house, its bath complex, the plot) share this key;
+  /// the project page links to the others.
+  objectGroup   String?             @map("object_group")
+  inRealization Boolean             @default(false) @map("in_realization")
+  /// Drafts are seen by the studio only.
+  published     Boolean             @default(false)
+  sortOrder     Int                 @default(0) @map("sort_order")
+  images        PortfolioImage[]
+  favorites     PortfolioFavorite[]
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+
+  @@index([style])
+  @@index([kind])
+  @@index([objectGroup])
+  @@map("portfolio_projects")
+}
+
+model PortfolioImage {
+  id        String           @id @default(uuid())
+  projectId String           @map("project_id")
+  project   PortfolioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// Storage key: portfolio/<number>/<file>.
+  key       String
+  room      String?
+  isPlan    Boolean          @default(false) @map("is_plan")
+  width     Int?
+  height    Int?
+  sortOrder Int              @default(0) @map("sort_order")
+
+  @@index([projectId, sortOrder])
+  @@map("portfolio_images")
+}
+
+/// Style tile on the portfolio home: best render of the style as the cover.
+model PortfolioStyle {
+  slug      String  @id
+  label     String
+  coverKey  String? @map("cover_key")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  @@map("portfolio_styles")
+}
+
+model PortfolioFavorite {
+  userId    String           @map("user_id")
+  projectId String           @map("project_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   PortfolioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  @@id([userId, projectId])
+  @@map("portfolio_favorites")
 }

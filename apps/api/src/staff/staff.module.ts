@@ -15,6 +15,7 @@ import { StaffService } from './staff.service';
     CommerceModule,
     ChatModule,
     AuthModule,
+    LiveSyncModule,
   ],
   controllers: [StaffController],
   providers: [StaffService],

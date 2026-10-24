@@ -12,6 +12,9 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { resolveProductImageUrl } from './demo-product-image';
 
+/** Characteristics worth showing in a list row, in this order. */
+const LIST_ATTRIBUTE_KEYS = ['Размер', 'Поверхность', 'Материал', 'Цвет'];
+
 const productListSelect = {
   id: true,
   name: true,
@@ -23,6 +26,18 @@ const productListSelect = {
   description: true,
   inStock: true,
   isPopular: true,
+  unit: true,
+  sellByPack: true,
+  packSize: true,
+  packPieces: true,
+  leadTimeMinDays: true,
+  leadTimeMaxDays: true,
+  collectionSlug: true,
+  // Shown under the name in lists: size, surface, etc.
+  attributes: {
+    where: { key: { in: LIST_ATTRIBUTE_KEYS } },
+    select: { key: true, value: true },
+  },
   category: {
     select: { id: true, name: true, slug: true },
   },
@@ -34,6 +49,8 @@ const productListSelect = {
 const productDetailSelect = {
   ...productListSelect,
   createdAt: true,
+  images: true,
+  sourceUrl: true,
   attributes: {
     select: { key: true, value: true },
     orderBy: { key: 'asc' as const },
@@ -47,8 +64,9 @@ export class CatalogService {
     private readonly meilisearch: MeilisearchService,
   ) {}
 
-  getCategories() {
-    return this.prisma.category.findMany({
+  /** Top-level tiles with their subcategories; counts include subcategories. */
+  async getCategories() {
+    const rows = await this.prisma.category.findMany({
       orderBy: { sortOrder: 'asc' },
       select: {
         id: true,
@@ -56,60 +74,95 @@ export class CatalogService {
         slug: true,
         imageUrl: true,
         sortOrder: true,
+        parentId: true,
         _count: { select: { products: true } },
       },
     });
+    const children = new Map<string, typeof rows>();
+    for (const row of rows) {
+      if (!row.parentId) continue;
+      children.set(row.parentId, [...(children.get(row.parentId) ?? []), row]);
+    }
+    const shape = (row: (typeof rows)[number]) => ({
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      imageUrl: row.imageUrl,
+      sortOrder: row.sortOrder,
+      productCount: row._count.products,
+    });
+    return rows
+      .filter((row) => !row.parentId)
+      .map((top) => {
+        const subs = (children.get(top.id) ?? []).map(shape);
+        return {
+          ...shape(top),
+          productCount:
+            top._count.products +
+            subs.reduce((sum, c) => sum + c.productCount, 0),
+          children: subs,
+        };
+      });
   }
 
-  async getFilterOptions() {
-    const [brands, materials, colors, collections, priceAgg] =
-      await Promise.all([
-        this.prisma.brand.findMany({
-          orderBy: { name: 'asc' },
-          select: { id: true, name: true, slug: true },
-        }),
-        this.prisma.productAttribute.findMany({
-          where: { key: 'Материал' },
-          distinct: ['value'],
-          select: { value: true },
-          orderBy: { value: 'asc' },
-        }),
-        this.prisma.productAttribute.findMany({
-          where: { key: 'Цвет' },
-          distinct: ['value'],
-          select: { value: true },
-          orderBy: { value: 'asc' },
-        }),
-        this.prisma.productAttribute.findMany({
-          where: { key: 'Коллекция' },
-          distinct: ['value'],
-          select: {
-            value: true,
-            product: { select: { collectionSlug: true } },
-          },
-          orderBy: { value: 'asc' },
-        }),
-        this.prisma.product.aggregate({
-          _min: { price: true },
-          _max: { price: true },
-        }),
-      ]);
+  /** A category and its subcategories, so a tile shows everything inside it. */
+  private async categoryScope(categoryId: string): Promise<string[]> {
+    const subs = await this.prisma.category.findMany({
+      where: { parentId: categoryId },
+      select: { id: true },
+    });
+    return [categoryId, ...subs.map((c) => c.id)];
+  }
 
-    const collectionMap = new Map<string, { slug: string; name: string }>();
-    for (const item of collections) {
-      const slug = item.product.collectionSlug ?? item.value;
-      if (!collectionMap.has(slug)) {
-        collectionMap.set(slug, { slug, name: item.value });
-      }
+  /** Filter options for a category (or the whole catalog): brands, price range and
+   *  every characteristic present with its values and product counts. */
+  async getFilterOptions(categoryId?: string) {
+    const scope = categoryId ? await this.categoryScope(categoryId) : undefined;
+    const productWhere: Prisma.ProductWhereInput = scope
+      ? { categoryId: { in: scope } }
+      : {};
+
+    const [brands, attributes, priceAgg] = await Promise.all([
+      this.prisma.brand.findMany({
+        where: scope ? { products: { some: productWhere } } : undefined,
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, slug: true },
+      }),
+      this.prisma.productAttribute.groupBy({
+        by: ['key', 'value'],
+        where: scope ? { product: productWhere } : undefined,
+        _count: { _all: true },
+        orderBy: [{ key: 'asc' }, { value: 'asc' }],
+      }),
+      this.prisma.product.aggregate({
+        where: productWhere,
+        _min: { price: true },
+        _max: { price: true },
+      }),
+    ]);
+
+    const facets = new Map<string, Array<{ value: string; count: number }>>();
+    for (const row of attributes) {
+      facets.set(row.key, [
+        ...(facets.get(row.key) ?? []),
+        { value: row.value, count: row._count._all },
+      ]);
     }
+    // Free-text characteristics (descriptions, articles) make poor filters.
+    const SKIP = new Set(['Описание', 'Артикул', 'Коллекция']);
 
     return {
       brands,
-      materials: materials.map((item) => item.value),
-      colors: colors.map((item) => item.value),
-      collections: [...collectionMap.values()].sort((a, b) =>
-        a.name.localeCompare(b.name, 'ru'),
-      ),
+      // Kept for older app builds.
+      materials: (facets.get('Материал') ?? []).map((v) => v.value),
+      colors: (facets.get('Цвет') ?? []).map((v) => v.value),
+      collections: [],
+      attributes: [...facets.entries()]
+        .filter(
+          ([key, values]) =>
+            !SKIP.has(key) && values.length > 1 && values.length <= 40,
+        )
+        .map(([key, values]) => ({ key, values })),
       priceRange: {
         min: Number(priceAgg._min.price ?? 0),
         max: Number(priceAgg._max.price ?? 0),
@@ -144,6 +197,16 @@ export class CatalogService {
   }
 
   async searchProducts(query: SearchQueryDto) {
+    // Browsing without text, characteristic filters, several brands and category trees go to
+    // Postgres; Meilisearch is only for text search (its index may lag behind the database).
+    if (
+      !query.q?.trim() ||
+      query.attr?.length ||
+      query.brandIds ||
+      query.categoryId
+    ) {
+      return this.searchWithPrisma(query);
+    }
     const params: SearchParams = {
       q: query.q,
       categoryId: query.categoryId,
@@ -184,7 +247,10 @@ export class CatalogService {
       throw new NotFoundException('Product not found');
     }
 
-    return this.formatProductDetail(product);
+    return this.formatProductDetail(
+      product,
+      await this.relatedProducts(product),
+    );
   }
 
   async reindexProducts(): Promise<number> {
@@ -242,7 +308,10 @@ export class CatalogService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
-    const where = this.buildPrismaWhere(query);
+    const scope = query.categoryId
+      ? await this.categoryScope(query.categoryId)
+      : undefined;
+    const where = this.buildPrismaWhere(query, scope);
 
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
@@ -298,7 +367,10 @@ export class CatalogService {
     };
   }
 
-  private buildPrismaWhere(query: SearchQueryDto): Prisma.ProductWhereInput {
+  private buildPrismaWhere(
+    query: SearchQueryDto,
+    categoryScope?: string[],
+  ): Prisma.ProductWhereInput {
     const and: Prisma.ProductWhereInput[] = [];
 
     if (query.q) {
@@ -310,8 +382,25 @@ export class CatalogService {
         ],
       });
     }
-    if (query.categoryId) and.push({ categoryId: query.categoryId });
+    if (categoryScope) {
+      and.push({ categoryId: { in: categoryScope } });
+    } else if (query.categoryId) {
+      and.push({ categoryId: query.categoryId });
+    }
     if (query.brandId) and.push({ brandId: query.brandId });
+    if (query.brandIds) {
+      and.push({ brandId: { in: query.brandIds.split(',').filter(Boolean) } });
+    }
+    const byKey = new Map<string, string[]>();
+    for (const pair of query.attr ?? []) {
+      const i = pair.indexOf(':');
+      if (i <= 0) continue;
+      const key = pair.slice(0, i);
+      byKey.set(key, [...(byKey.get(key) ?? []), pair.slice(i + 1)]);
+    }
+    for (const [key, values] of byKey) {
+      and.push({ attributes: { some: { key, value: { in: values } } } });
+    }
     if (query.minPrice !== undefined) {
       and.push({ price: { gte: query.minPrice } });
     }
@@ -388,6 +477,16 @@ export class CatalogService {
       description: product.description,
       inStock: product.inStock,
       isPopular: product.isPopular,
+      unit: product.unit,
+      sellByPack: product.sellByPack,
+      packSize: product.packSize ? Number(product.packSize) : null,
+      packPieces: product.packPieces,
+      leadTimeMinDays: product.leadTimeMinDays,
+      leadTimeMaxDays: product.leadTimeMaxDays,
+      collectionSlug: product.collectionSlug,
+      highlights: LIST_ATTRIBUTE_KEYS.flatMap((key) =>
+        product.attributes.filter((a) => a.key === key).map((a) => a.value),
+      ),
       category: product.category,
       brand: product.brand,
     };
@@ -395,11 +494,81 @@ export class CatalogService {
 
   private formatProductDetail(
     product: Prisma.ProductGetPayload<{ select: typeof productDetailSelect }>,
+    related: { collection: unknown[]; similar: unknown[] },
   ) {
+    const base = this.formatProductListItem(product);
     return {
-      ...this.formatProductListItem(product),
+      ...base,
+      images: [base.imageUrl, ...product.images].filter(
+        (url, i, all): url is string => !!url && all.indexOf(url) === i,
+      ),
       createdAt: product.createdAt,
       attributes: product.attributes,
+      collection: related.collection,
+      similar: related.similar,
+    };
+  }
+
+  /**
+   * Same collection, plus «Похожие» — every product gets alternatives: first the same
+   * subcategory at a similar price, then the same subcategory at any price, then the
+   * neighbouring subcategories of the same tile. Empty only when the tile has nothing else.
+   */
+  private async relatedProducts(product: {
+    id: string;
+    collectionSlug: string | null;
+    category: { id: string } | null;
+    price: Prisma.Decimal;
+  }) {
+    const price = Number(product.price);
+    const limit = 12;
+    const collection = product.collectionSlug
+      ? await this.prisma.product.findMany({
+          where: {
+            collectionSlug: product.collectionSlug,
+            id: { not: product.id },
+          },
+          take: limit,
+          orderBy: { isPopular: 'desc' },
+          select: productListSelect,
+        })
+      : [];
+
+    const similar: typeof collection = [];
+    if (product.category) {
+      const category = await this.prisma.category.findUnique({
+        where: { id: product.category.id },
+        select: { id: true, parentId: true },
+      });
+      const tileId = category?.parentId ?? category?.id;
+      const tileScope = tileId ? await this.categoryScope(tileId) : [];
+      const exclude = new Set([product.id, ...collection.map((p) => p.id)]);
+      const tiers: Prisma.ProductWhereInput[] = [
+        {
+          categoryId: product.category.id,
+          price: { gte: price * 0.5, lte: price * 1.6 },
+        },
+        { categoryId: product.category.id },
+        { categoryId: { in: tileScope } },
+      ];
+      for (const where of tiers) {
+        if (similar.length >= limit) break;
+        const found = await this.prisma.product.findMany({
+          where: { ...where, id: { notIn: [...exclude] } },
+          take: limit - similar.length,
+          orderBy: [{ inStock: 'desc' }, { isPopular: 'desc' }],
+          select: productListSelect,
+        });
+        for (const p of found) {
+          exclude.add(p.id);
+          similar.push(p);
+        }
+      }
+    }
+
+    return {
+      collection: collection.map((p) => this.formatProductListItem(p)),
+      similar: similar.map((p) => this.formatProductListItem(p)),
     };
   }
 }

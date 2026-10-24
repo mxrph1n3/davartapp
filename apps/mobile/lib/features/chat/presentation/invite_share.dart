@@ -34,7 +34,7 @@ Future<bool> openDavartInviteSms({String? phone}) async {
 Future<bool> openDavartSystemSettings() async {
   if (!Platform.isIOS) return false;
   try {
-    return launchUrl(
+    return await launchUrl(
       Uri.parse('app-settings:'),
       mode: LaunchMode.externalApplication,
     );

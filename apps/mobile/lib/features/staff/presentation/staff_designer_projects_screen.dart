@@ -46,7 +46,7 @@ class _StaffDesignerProjectsScreenState
           return RefreshIndicator(
             onRefresh: () async => ref.invalidate(projectsListProvider),
             child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.screenPadding),
+              padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
               children: [
                 const ScreenHeader(title: 'Мои проекты'),
                 Text(

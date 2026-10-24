@@ -44,7 +44,7 @@ class AdminUsersQueryDto {
   limit?: number = 30;
 }
 
-/** God mode: only admin (Artur). Create accounts, change phones, assign roles. */
+/** Режим Бога: only admin (Artur). Create accounts, change phones, assign roles. */
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.admin)

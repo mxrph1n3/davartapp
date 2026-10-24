@@ -18,6 +18,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/package.json ./
+# Fonts with Cyrillic for PDFs (brief).
+COPY --from=build /app/assets ./assets
 USER davart
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma migrate deploy && if [ -f dist/main.js ]; then node dist/main.js; else node dist/src/main.js; fi"]

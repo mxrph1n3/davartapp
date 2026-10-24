@@ -168,6 +168,15 @@ function slugify(value: string): string {
 
 type JsonLd = Record<string, unknown>;
 
+/** A JSON-LD value as text, the way String() read it before: lists joined by commas, objects skipped. */
+function jsonText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean')
+    return String(value);
+  if (Array.isArray(value)) return value.map(jsonText).join(',');
+  return '';
+}
+
 function parseJsonLdBlocks(html: string): JsonLd[] {
   const blocks =
     html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi) ??
@@ -215,16 +224,16 @@ export function parseKeramaProductHtml(
   const product = docs.find((doc) => doc['@type'] === 'Product');
   if (!product) return null;
 
-  const sku = sanitizeKeramaSku(String(product.sku ?? ''));
-  const name = stripTags(String(product.name ?? ''));
+  const sku = sanitizeKeramaSku(jsonText(product.sku));
+  const name = stripTags(jsonText(product.name));
   if (!sku || !name) return null;
 
-  const image = normalizeKeramaImage(String(product.image ?? ''));
+  const image = normalizeKeramaImage(jsonText(product.image));
   const offers =
     product.offers && typeof product.offers === 'object'
       ? (product.offers as JsonLd)
       : {};
-  const availability = String(offers.availability ?? '');
+  const availability = jsonText(offers.availability);
   const priceRaw = Number(offers.price);
   const breadcrumb = docs.find((doc) => doc['@type'] === 'BreadcrumbList');
   let collectionName: string | null = null;
@@ -234,9 +243,9 @@ export function parseKeramaProductHtml(
     for (const item of elements) {
       if (!item || typeof item !== 'object') continue;
       const row = item as JsonLd;
-      const itemUrl = String(row.item ?? '');
+      const itemUrl = jsonText(row.item);
       if (itemUrl.includes('/catalog/series/')) {
-        collectionName = stripTags(String(row.name ?? '')) || null;
+        collectionName = stripTags(jsonText(row.name)) || null;
         const slugPart = itemUrl.replace(/\/+$/, '').split('/').pop();
         collectionSlug = slugPart ? slugify(slugPart) : null;
       }
@@ -302,7 +311,7 @@ async function mapPool<T, R>(
   concurrency: number,
   mapper: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
-  const results: R[] = new Array(items.length);
+  const results = new Array<R>(items.length);
   let next = 0;
   async function worker() {
     while (next < items.length) {

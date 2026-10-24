@@ -56,8 +56,22 @@ export class SearchQueryDto {
   @IsString()
   collection?: string;
 
+  /** Characteristic filters, repeated: attr=Размер:60×120&attr=Поверхность:Матовая.
+   *  Values of the same key are OR-ed, different keys AND-ed. */
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }) =>
+    value == null ? undefined : Array.isArray(value) ? value : [value],
+  )
+  @IsString({ each: true })
+  attr?: string[];
+
+  /** Several brands at once (comma-separated ids). */
+  @IsOptional()
+  @IsString()
+  brandIds?: string;
+
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
     return value;

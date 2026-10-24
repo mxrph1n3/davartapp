@@ -20,7 +20,7 @@ export class OpenAppController {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Davart — заказ</title>
+  <title>DAVart — заказ</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0;
       min-height: 100vh; display: grid; place-items: center; background: #111; color: #fff; }
@@ -31,7 +31,7 @@ export class OpenAppController {
 </head>
 <body>
   <main>
-    <p>Открыть заказ в приложении Davart</p>
+    <p>Открыть заказ в приложении DAVart</p>
     <p><a href="${appUrl}">Открыть заказ</a></p>
   </main>
 </body>

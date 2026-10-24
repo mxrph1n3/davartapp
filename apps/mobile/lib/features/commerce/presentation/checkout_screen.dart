@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/price_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
+import '../../../core/widgets/top_notice.dart';
 import '../../auth/presentation/require_login.dart';
+import '../../catalog/presentation/widgets/shop_cart.dart';
+import '../../profile/data/profile_repository.dart';
 import '../data/commerce_models.dart';
 import '../data/commerce_repository.dart';
+import 'cart_screen.dart' show cartScope;
 import 'cart_selection_provider.dart';
 import 'commerce_notifier.dart';
-
-final _priceFormat = NumberFormat.currency(locale: 'ru_RU', symbol: '₽');
 
 class CheckoutScreen extends ConsumerStatefulWidget {
   const CheckoutScreen({super.key, this.projectId});
@@ -42,10 +43,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final projectId = widget.projectId;
-    if (projectId == null) return;
-
-    final cart = _projectCart(ref.read(cartProvider).projectCarts);
-    final selection = ref.read(cartSelectionProvider('project:$projectId'));
+    final cart = _cart(ref.read(cartProvider));
+    final selection = ref.read(cartSelectionProvider(cartScope(projectId)));
     final unlockedIds =
         cart?.items.where((i) => !i.locked).map((i) => i.id).toSet() ?? {};
     final cartItemIds = selection.intersection(unlockedIds).toList();
@@ -59,9 +58,8 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
     setState(() => _isSubmitting = true);
 
-    late final Order order;
     try {
-      order = await ref.read(commerceRepositoryProvider).createOrder(
+      await ref.read(commerceRepositoryProvider).createOrder(
             projectId: projectId,
             cartItemIds: cartItemIds,
             address: _addressController.text.trim(),
@@ -70,54 +68,55 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не удалось отправить заявку')),
+          const SnackBar(content: Text('Не удалось оформить заказ')),
         );
       }
       if (mounted) setState(() => _isSubmitting = false);
       return;
     }
 
-    ref.read(cartSelectionProvider('project:$projectId').notifier).state = {};
+    ref.read(cartSelectionProvider(cartScope(projectId)).notifier).state = {};
     ref.invalidate(ordersProvider);
     await ref.read(cartProvider.notifier).loadCart();
 
     if (!mounted) return;
-    context.pushReplacement(AppRoutes.orderDetail(order.id));
+    showTopNotice(context, 'Заказ оформлен. Менеджер свяжется с вами');
+    popOrGo(context, AppRoutes.cart);
   }
 
-  Cart? _projectCart(List<Cart> carts) {
+  /// Personal cart without [CheckoutScreen.projectId], otherwise that project's cart.
+  Cart? _cart(CartState state) {
     final projectId = widget.projectId;
-    if (projectId == null) return null;
-    for (final cart in carts) {
+    if (projectId == null) return state.cart;
+    for (final cart in state.projectCarts) {
       if (cart.projectId == projectId) return cart;
     }
     return null;
   }
 
   @override
-  Widget build(BuildContext context) {
-    final projectId = widget.projectId;
-    if (projectId == null) {
-      return Scaffold(
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          leading: AppBackButton(fallback: AppRoutes.cart),
-          title: const Text('Оформление заказа'),
-        ),
-        body: const Center(
-          child: Text('Сначала добавьте товары в проект'),
-        ),
-      );
-    }
+  void initState() {
+    super.initState();
+    // The saved default address goes straight into the field.
+    Future<void>.microtask(() async {
+      try {
+        final list = await ref.read(profileRepositoryProvider).getAddresses();
+        if (!mounted || list.isEmpty || _addressController.text.isNotEmpty) return;
+        final address = list.firstWhere((a) => a.isDefault, orElse: () => list.first);
+        _addressController.text = address.formatted;
+      } catch (_) {}
+    });
+  }
 
-    final cart = _projectCart(ref.watch(cartProvider).projectCarts);
-    final selection = ref.watch(cartSelectionProvider('project:$projectId'));
+  @override
+  Widget build(BuildContext context) {
+    final cart = _cart(ref.watch(cartProvider));
+    final selection = ref.watch(cartSelectionProvider(cartScope(widget.projectId)));
     final selected = cart?.items
             .where((i) => !i.locked && selection.contains(i.id))
             .toList() ??
         const [];
     final total = selected.fold<double>(0, (sum, i) => sum + i.subtotal);
-    final qty = selected.fold<int>(0, (sum, i) => sum + i.quantity);
 
     return Scaffold(
       appBar: AppBar(
@@ -134,28 +133,18 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 padding: const EdgeInsets.all(AppSpacing.screenPadding),
                 children: [
                   Text(
-                    'Позиций: ${selected.length} · товаров: $qty',
+                    'Товаров: ${selected.length} · ${formatPrice(total)}',
                     style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Сумма: ${_priceFormat.format(total)}',
-                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   ...selected.map(
                     (item) => Padding(
                       padding: const EdgeInsets.only(bottom: 6),
                       child: Text(
-                        '${item.product.name} × ${item.quantity}',
+                        '${item.product.name} — ${item.product.sellByPack ? '${item.quantity} уп. (${packAmountLabel(item.product.packSize, item.product.unit, item.quantity)})' : packAmountLabel(null, item.product.unit, item.quantity)}',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'Это заявка для студии. Оплата в приложении не списывается — менеджер свяжется с вами.',
-                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AppInput(
@@ -185,7 +174,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 AppSpacing.lg + MediaQuery.paddingOf(context).bottom,
               ),
               child: PrimaryButton(
-                label: 'Отправить заявку',
+                label: 'Оформить заказ',
                 isLoading: _isSubmitting,
                 onPressed: _isSubmitting || selected.isEmpty ? null : _submit,
               ),

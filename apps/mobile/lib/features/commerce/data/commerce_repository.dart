@@ -54,20 +54,6 @@ class CommerceRepository {
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
-  Future<Cart> assignToProject(
-    String projectId,
-    List<String> itemIds,
-  ) async {
-    final response = await _dio.post(
-      '/cart/assign',
-      data: {
-        'projectId': projectId,
-        'itemIds': itemIds,
-      },
-    );
-    return Cart.fromJson(response.data as Map<String, dynamic>);
-  }
-
   Future<Cart> updateCartItem({
     String? projectId,
     required String itemId,
@@ -96,6 +82,18 @@ class CommerceRepository {
     return Cart.fromJson(response.data as Map<String, dynamic>);
   }
 
+  /// «Удалить выбранные» — one request for the whole selection.
+  Future<Cart> removeCartItems({
+    String? projectId,
+    required List<String> itemIds,
+  }) async {
+    final response = await _dio.post(
+      '/cart/items/remove',
+      data: {'projectId': ?projectId, 'itemIds': itemIds},
+    );
+    return Cart.fromJson(response.data as Map<String, dynamic>);
+  }
+
   Future<Cart> clearCart(String projectId) async {
     final response = await _dio.delete(
       '/cart',
@@ -119,8 +117,9 @@ class CommerceRepository {
     await _dio.delete('/favorites/$productId');
   }
 
+  /// Without [projectId] the order is made from the personal cart.
   Future<Order> createOrder({
-    required String projectId,
+    String? projectId,
     required List<String> cartItemIds,
     required String address,
     String? comment,
@@ -128,7 +127,7 @@ class CommerceRepository {
     final response = await _dio.post(
       '/orders',
       data: {
-        'projectId': projectId,
+        'projectId': ?projectId,
         'cartItemIds': cartItemIds,
         'address': address,
         if (comment != null && comment.isNotEmpty) 'comment': comment,

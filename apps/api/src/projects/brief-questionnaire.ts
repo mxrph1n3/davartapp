@@ -1,6 +1,8 @@
 export type BriefField = {
   id: string;
   label: string;
+  /** Rows of answer buttons in the app; '' is stored under the field id, others under «id.key». */
+  groups?: Array<{ key: string; label?: string }>;
 };
 
 export type BriefRoomSection = {
@@ -39,14 +41,20 @@ export const BRIEF_GENERAL_FIELDS: BriefField[] = [
   { id: 'budget', label: 'Бюджет на ремонт' },
   { id: 'replan', label: 'Перепланировка: стены оставляем или двигаем?' },
   { id: 'zones', label: 'Комнаты и зоны в помещении' },
-  { id: 'split', label: 'Где разместить сплит-систему (кондиционеры)?' },
+  { id: 'split', label: 'Кондиционер' },
   {
     id: 'gadgetOutlets',
     label: 'Розетки под гаджеты (робот-пылесос, увлажнитель и т.д.)',
   },
-  { id: 'radiators', label: 'Новые радиаторы, подоконники, двери, окна' },
+  { id: 'radiators', label: 'Что меняем' },
   { id: 'floorHeating', label: 'Тёплый пол' },
   { id: 'washerLocation', label: 'Где планируется стиральная машина?' },
+  { id: 'replanNote', label: 'Перепланировка — комментарий' },
+  { id: 'radiatorsNote', label: 'Что меняем — комментарий' },
+  { id: 'splitNote', label: 'Кондиционер — комментарий' },
+  { id: 'gadgetOutletsNote', label: 'Розетки — комментарий' },
+  { id: 'floorHeatingNote', label: 'Тёплый пол — комментарий' },
+  { id: 'washerLocationNote', label: 'Стиральная машина — комментарий' },
   { id: 'details', label: 'Важные детали' },
   {
     id: 'existingItems',
@@ -54,6 +62,17 @@ export const BRIEF_GENERAL_FIELDS: BriefField[] = [
       'Уже купленные и переезжающие вещи (ссылки, если нет ссылки — фото и размеры)',
   },
 ];
+
+const ROOM_TITLES: Record<string, string> = {
+  kitchen: 'Кухня',
+  kitchen_living: 'Кухня-гостиная',
+  hallway: 'Прихожая',
+  bedroom: 'Спальня',
+  bathroom: 'Санузел',
+  wardrobe: 'Гардеробная',
+  kids: 'Детская',
+  loggia: 'Лоджия',
+};
 
 export const BRIEF_VALUE_LABELS: Record<string, Record<string, string>> = {
   likedColors: {
@@ -179,11 +198,14 @@ export const BRIEF_VALUE_LABELS: Record<string, Record<string, string>> = {
     partial: 'Частично',
     keep: 'Стены оставляем',
   },
+  // Conditioner and warm floor are picked per room; old answers keep their labels.
   floorHeating: {
     all: 'Везде',
     wet: 'В мокрых зонах',
     no: 'Не нужен',
     later: 'Решим позже',
+    ...ROOM_TITLES,
+    none: 'Не нужен',
   },
   washerLocation: {
     bathroom: 'В ванной',
@@ -196,16 +218,28 @@ export const BRIEF_VALUE_LABELS: Record<string, Record<string, string>> = {
     bedrooms: 'Спальни',
     all: 'Во всех комнатах',
     no: 'Не нужен',
+    ...ROOM_TITLES,
+    none: 'Не нужен',
   },
   gadgetOutlets: {
     yes: 'Да, заложить',
     no: 'Не нужно',
     later: 'Решим позже',
+    robot: 'Робот-пылесос',
+    humidifier: 'Увлажнитель',
+    bedside: 'Зарядки у кровати',
+    none: 'Нет',
   },
   radiators: {
     replace: 'Меняем всё',
     keep: 'Оставляем',
     later: 'Решим позже',
+    radiators: 'Радиаторы',
+    windows: 'Окна',
+    sills: 'Подоконники',
+    entranceDoor: 'Входная дверь',
+    doors: 'Межкомнатные двери',
+    none: 'Ничего не меняем',
   },
 };
 
@@ -221,220 +255,750 @@ export function formatBriefValue(fieldId: string, raw?: string): string {
     .join(', ');
 }
 
-const finishes = (extra = ''): BriefField => ({
-  id: 'finishes',
-  label: `Предпочтения по отделке (пол, стены${extra})?`,
-});
-
-const lighting: BriefField = {
-  id: 'lighting',
-  label: 'Какое освещение предусмотреть?',
-};
-
-const other: BriefField = {
-  id: 'other',
-  label: 'Что еще необходимо учесть?',
-};
-
+/** Same questions as the app (apps/mobile/.../brief_questionnaire.dart). */
 export const BRIEF_ROOM_SECTIONS: BriefRoomSection[] = [
   {
     id: 'kitchen',
     title: 'Кухня',
     fields: [
-      lighting,
-      finishes(', фартук'),
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+          {
+            key: 'apron',
+            label: 'Фартук',
+          },
+        ],
+      },
       {
         id: 'hood',
-        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
+        label: 'Вытяжка',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'diningTable',
-        label: 'Есть ли предпочтения по форме обеденного стола и по материалу?',
+        label: 'Обеденный стол',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'seats',
+            label: 'Мест',
+          },
+        ],
       },
-      { id: 'island', label: 'Нужен ли стол-остров?' },
+      {
+        id: 'island',
+        label: 'Стол-остров',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'dishwasher',
-        label: 'Нужна ли посудомойка? Какого размера?',
+        label: 'Посудомойка',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'cooktop', label: 'На сколько конфорок варочная панель?' },
+      {
+        id: 'cooktop',
+        label: 'Варочная панель',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'type',
+            label: 'Тип',
+          },
+        ],
+      },
       {
         id: 'oven',
-        label:
-          'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
+        label: 'Духовой шкаф',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'fridge',
-        label: 'Холодильник встроенный или отдельностоящий?',
+        label: 'Холодильник',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      other,
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'kitchen_living',
     title: 'Кухня-гостиная',
     fields: [
-      lighting,
-      finishes(', фартук'),
-      { id: 'doorFromHall', label: 'Нужна ли дверь из прихожей?' },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+          {
+            key: 'apron',
+            label: 'Фартук',
+          },
+        ],
+      },
+      {
+        id: 'doorFromHall',
+        label: 'Дверь из прихожей',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'sofa',
-        label:
-          'Нужен ли диван (прямой, угловой, большой, маленький, раскладной, мягкий, жесткий)?',
+        label: 'Диван',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'size',
+            label: 'Размер',
+          },
+        ],
       },
       {
         id: 'extraFurniture',
-        label: 'Нужны ли кресла, журнальный столик, рабочее место, камин и тд?',
+        label: 'Кресла, столик, рабочее место, камин',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'shelves', label: 'Нужен ли стеллаж или открытые полки?' },
+      {
+        id: 'shelves',
+        label: 'Стеллаж / открытые полки',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'hood',
-        label: 'Вытяжка встроенная в кухню или отдельностоящая?',
+        label: 'Вытяжка',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'diningTable',
-        label:
-          'Есть ли предпочтения по форме обеденного стола и по материалу? Должен ли он раскладываться? На какое количество персон в разложенном и сложенном видах?',
+        label: 'Обеденный стол',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'seats',
+            label: 'Мест',
+          },
+        ],
       },
-      { id: 'island', label: 'Нужен ли стол-остров?' },
-      { id: 'dishwasher', label: 'Нужна ли посудомойка? Какого размера?' },
-      { id: 'cooktop', label: 'На сколько конфорок варочная панель?' },
+      {
+        id: 'island',
+        label: 'Стол-остров',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'dishwasher',
+        label: 'Посудомойка',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'cooktop',
+        label: 'Варочная панель',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'type',
+            label: 'Тип',
+          },
+        ],
+      },
       {
         id: 'oven',
-        label:
-          'Нужен ли духовой шкаф? Рассматриваете ли вариант духовка 2в1 (с функцией свч), или нужна отдельная микроволновка?',
+        label: 'Духовой шкаф',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'fridge',
-        label: 'Холодильник встроенный или отдельностоящий?',
+        label: 'Холодильник',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'tv', label: 'Нужен ли тв?' },
-      { id: 'curtains', label: 'Нужны ли шторы, римские шторы и тд?' },
-      other,
+      {
+        id: 'tv',
+        label: 'ТВ',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'curtains',
+        label: 'Шторы',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'hallway',
     title: 'Прихожая',
     fields: [
-      finishes(),
-      lighting,
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'storage',
-        label:
-          'Нужны ли открытые вешалки, пуф, шкаф, полочки для ключей и перчаток, зеркало в полный рост, зеркало для макияжа?',
+        label: 'Хранение',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      other,
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'bedroom',
     title: 'Спальня',
     fields: [
-      finishes(),
-      lighting,
-      { id: 'mattress', label: 'Размер матраса на кровать?' },
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'mattress',
+        label: 'Размер кровати / матраса',
+        groups: [
+          {
+            key: 'width',
+            label: 'Ширина',
+          },
+          {
+            key: 'length',
+            label: 'Длина',
+          },
+        ],
+      },
       {
         id: 'shelves',
-        label: 'Нужны ли полочки, прикроватные тумбочки или стеллажи?',
+        label: 'Полки, тумбочки, стеллажи',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'vanity',
-        label: 'Нужен ли туалетный столик для макияжа или рабочий стол?',
+        label: 'Туалетный / рабочий стол',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'wardrobe',
-        label: 'Нужен ли комод, шкаф, гардеробная? Каких размеров?',
+        label: 'Хранение',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'curtains', label: 'Нужны ли шторы, римские шторы?' },
-      { id: 'mirror', label: 'Нужно ли зеркало?' },
-      other,
+      {
+        id: 'curtains',
+        label: 'Шторы',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'mirror',
+        label: 'Зеркало',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'bathroom',
     title: 'Санузел',
     fields: [
-      finishes(),
-      lighting,
-      { id: 'bathOrShower', label: 'Ванна или душ? Размеры?' },
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'bathOrShower',
+        label: 'Ванна или душ',
+        groups: [
+          {
+            key: '',
+          },
+          {
+            key: 'bathSize',
+            label: 'Размер ванны',
+          },
+          {
+            key: 'shower',
+            label: 'Душ',
+          },
+        ],
+      },
       {
         id: 'screen',
-        label: 'Шторка для ванны или стеклянная перегородка?',
+        label: 'Шторка / перегородка',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'toilet',
-        label: 'Унитаз обычный или подвесной со скрытой инсталляцией?',
+        label: 'Унитаз',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'sinks', label: 'Количество раковин?' },
-      { id: 'bidet', label: 'Нужен ли гигиенический душ или биде?' },
+      {
+        id: 'sinks',
+        label: 'Раковины',
+        groups: [
+          {
+            key: '',
+            label: 'Количество',
+          },
+          {
+            key: 'type',
+            label: 'Тип',
+          },
+        ],
+      },
+      {
+        id: 'bidet',
+        label: 'Гигиенический душ / биде',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'makeupLight',
-        label: 'Нужно ли к зеркалу освещение для макияжа или бьюти-процедур?',
+        label: 'Подсветка зеркала',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'storage', label: 'Какие нужны места для хранения?' },
+      {
+        id: 'storage',
+        label: 'Хранение',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'towelRail',
-        label:
-          'Какой полотенцесушитель предпочитаете: электрический или водяной?',
+        label: 'Полотенцесушитель',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'washerKg', label: 'На сколько кг стиральная машина?' },
-      { id: 'dryer', label: 'Нужна ли сушильная машина?' },
-      other,
+      {
+        id: 'washerKg',
+        label: 'Стиральная машина',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'dryer',
+        label: 'Сушильная машина',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'wardrobe',
     title: 'Гардеробная',
     fields: [
-      finishes(),
-      lighting,
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'system',
-        label: 'Какая система хранения нужна: корпусная, встроенная, открытая?',
+        label: 'Система хранения',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'zones',
-        label: 'Какие зоны нужны: одежда, обувь, сумки, бельё?',
+        label: 'Зоны',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'island', label: 'Нужен ли остров / пуф в гардеробной?' },
-      { id: 'mirror', label: 'Нужно ли зеркало?' },
-      other,
+      {
+        id: 'island',
+        label: 'Остров / пуф',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'mirror',
+        label: 'Зеркало',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'kids',
     title: 'Детская',
     fields: [
-      finishes(),
-      lighting,
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'furniture',
-        label:
-          'Нужны ли рабочее место, шкаф, комод, кровать или диван (и размер матраса), тумбочка прикроватная, стеллажи, полки, шторы, ковер и тд?',
+        label: 'Мебель',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
       {
         id: 'kidsItems',
-        label:
-          'Нужны ли детские предметы (вигвам, бизи-борд, бассейн с шариками, шведская стенка, столик со стульчиком, ночник и тд)?',
+        label: 'Что ещё',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      other,
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
   {
     id: 'loggia',
     title: 'Лоджия',
     fields: [
-      finishes(),
-      lighting,
+      {
+        id: 'finishes',
+        label: 'Предпочтения по отделке',
+        groups: [
+          {
+            key: 'floor',
+            label: 'Пол',
+          },
+          {
+            key: 'walls',
+            label: 'Стены',
+          },
+        ],
+      },
+      {
+        id: 'lighting',
+        label: 'Какое освещение предусмотреть?',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
       {
         id: 'relax',
-        label: 'Нужна ли релакс-зона с креслом и столиком?',
+        label: 'Релакс-зона',
+        groups: [
+          {
+            key: '',
+          },
+        ],
       },
-      { id: 'storage', label: 'Нужно ли место для хранения (шкаф)?' },
-      other,
+      {
+        id: 'storage',
+        label: 'Хранение',
+        groups: [
+          {
+            key: '',
+          },
+        ],
+      },
+      {
+        id: 'other',
+        label: 'Что ещё необходимо учесть?',
+      },
     ],
   },
 ];
+
+/**
+ * A room answer as it reads in the PDF: picked buttons per row, the comment last.
+ * Answers typed as free text in the earlier version stay as they are.
+ */
+export function formatRoomField(
+  field: BriefField,
+  room: Record<string, unknown> | undefined,
+): string {
+  const get = (key: string) => {
+    const value = room?.[key];
+    return typeof value === 'string' ? value.trim() : '';
+  };
+  if (!field.groups?.length) return get(field.id);
+  const lines: string[] = [];
+  if (!field.groups.some((g) => g.key === '') && get(field.id)) {
+    lines.push(get(field.id));
+  }
+  for (const group of field.groups) {
+    const value = get(group.key ? `${field.id}.${group.key}` : field.id);
+    if (value) lines.push(group.label ? `${group.label}: ${value}` : value);
+  }
+  const note = get(`${field.id}.note`);
+  if (note) lines.push(lines.length ? `Комментарий: ${note}` : note);
+  return lines.join('\n');
+}
 
 export const BRIEF_ATTACHMENTS = [
   'фотографии проектируемого помещения',

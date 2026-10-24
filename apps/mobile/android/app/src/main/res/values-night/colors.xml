@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark device theme: the icon on black, as before; light theme — on white (values/colors.xml). -->
+    <color name="ic_launcher_background">#000000</color>
+</resources>

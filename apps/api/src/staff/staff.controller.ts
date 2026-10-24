@@ -21,6 +21,7 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import type { Response } from 'express';
@@ -37,7 +38,7 @@ import { PushService } from '../push/push.service';
 import { AddCartItemDto, UpdateCartItemDto } from '../commerce/dto/cart.dto';
 import { CreateOrderDto } from '../commerce/dto/orders.dto';
 import { CreateProjectDto } from '../projects/dto/projects.dto';
-import { CreateAddressDto } from '../users/dto/users.dto';
+import { CreateAddressDto, UpdateAddressDto } from '../users/dto/users.dto';
 import { StaffService } from './staff.service';
 
 class UpdateOrderStatusDto {
@@ -103,6 +104,12 @@ class UpdateStaffClientDto {
 class StaffRosterQueryDto {
   @IsIn(['designer', 'surveyor'])
   role!: 'designer' | 'surveyor';
+}
+
+class SetProjectNumberDto {
+  @IsString()
+  @MaxLength(16)
+  number!: string;
 }
 
 class AssignProjectStaffDto {
@@ -197,6 +204,16 @@ export class StaffController {
     return this.staffService.createAddress(user, clientId, dto);
   }
 
+  @Patch('clients/:clientId/addresses/:addressId')
+  updateAddress(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+    @Param('addressId', ParseUUIDPipe) addressId: string,
+    @Body() dto: UpdateAddressDto,
+  ) {
+    return this.staffService.updateAddress(user, clientId, addressId, dto);
+  }
+
   @Get('clients/:clientId/projects')
   listProjects(
     @CurrentUser() user: JwtPayload,
@@ -248,12 +265,38 @@ export class StaffController {
     res.send(pdf);
   }
 
+  @Get('clients/:clientId/cart')
+  getClientPersonalCart(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+  ) {
+    return this.staffService.getClientPersonalCart(user, clientId);
+  }
+
+  @Get('clients/:clientId/favorites')
+  getClientFavorites(
+    @CurrentUser() user: JwtPayload,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+  ) {
+    return this.staffService.getClientFavorites(user, clientId);
+  }
+
   @Get('projects/:projectId/cart')
   getCart(
     @CurrentUser() user: JwtPayload,
     @Param('projectId', ParseUUIDPipe) projectId: string,
   ) {
     return this.staffService.getCart(user, projectId);
+  }
+
+  @Patch('projects/:projectId/number')
+  @Roles(UserRole.admin)
+  setProjectNumber(
+    @CurrentUser() user: JwtPayload,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: SetProjectNumberDto,
+  ) {
+    return this.staffService.setProjectNumber(user, projectId, dto.number);
   }
 
   @Patch('projects/:projectId/staff')

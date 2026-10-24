@@ -97,23 +97,14 @@ class StaffClientProfileScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ListItem(
-                  title: 'Корзина проекта',
-                  subtitle: 'Выберите проект и откройте корзину',
+                  title: 'Корзина и избранное клиента',
+                  subtitle: 'Что клиент отложил сам — для подборки',
                   leading: const Icon(Icons.shopping_bag_outlined, size: 22),
-                  onTap: () async {
-                    final projectId = await ensureActiveProject(
-                      context,
-                      ref,
-                      staffClientId: clientId,
-                      forcePicker: true,
-                    );
-                    if (projectId != null && context.mounted) {
-                      context.push(AppRoutes.staffProjectCart(projectId));
-                    }
-                  },
+                  onTap: () => context.push(AppRoutes.staffClientPersonalCart(clientId)),
                 ),
+                const SizedBox(height: AppSpacing.sm),
                 PrimaryButton(
-                  label: 'Работать с корзиной в каталоге',
+                  label: 'Наполнить корзину проекта',
                   onPressed: () async {
                     ref.read(workingClientProvider.notifier).state =
                         WorkingClient(
@@ -173,7 +164,7 @@ class StaffClientProfileScreen extends ConsumerWidget {
                                 Icons.location_on_outlined,
                                 size: 22,
                               ),
-                              showChevron: false,
+                              onTap: () => _addAddress(context, ref, address: a),
                             ),
                           )
                           .toList(),
@@ -232,11 +223,16 @@ class StaffClientProfileScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _addAddress(BuildContext context, WidgetRef ref) async {
+  Future<void> _addAddress(
+    BuildContext context,
+    WidgetRef ref, {
+    UserAddress? address,
+  }) async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => _StaffAddressFormSheet(clientId: clientId),
+      builder: (context) =>
+          _StaffAddressFormSheet(clientId: clientId, address: address),
     );
     ref.invalidate(staffClientAddressesProvider(clientId));
     ref.invalidate(staffClientProfileProvider(clientId));
@@ -244,9 +240,12 @@ class StaffClientProfileScreen extends ConsumerWidget {
 }
 
 class _StaffAddressFormSheet extends ConsumerStatefulWidget {
-  const _StaffAddressFormSheet({required this.clientId});
+  const _StaffAddressFormSheet({required this.clientId, this.address});
 
   final String clientId;
+
+  /// Address being edited; null — a new one.
+  final UserAddress? address;
 
   @override
   ConsumerState<_StaffAddressFormSheet> createState() =>
@@ -262,6 +261,20 @@ class _StaffAddressFormSheetState
   final _apartmentController = TextEditingController();
   var _isDefault = false;
   var _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final a = widget.address;
+    if (a != null) {
+      _labelController.text = a.label ?? '';
+      _cityController.text = a.city;
+      _streetController.text = a.street;
+      _buildingController.text = a.building;
+      _apartmentController.text = a.apartment ?? '';
+      _isDefault = a.isDefault;
+    }
+  }
 
   @override
   void dispose() {
@@ -289,7 +302,7 @@ class _StaffAddressFormSheetState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Новый адрес клиента',
+              widget.address == null ? 'Новый адрес клиента' : 'Адрес клиента',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: AppSpacing.md),
@@ -346,9 +359,7 @@ class _StaffAddressFormSheetState
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
-      await ref.read(staffRepositoryProvider).createAddress(
-            widget.clientId,
-            CreateAddressRequest(
+      final request = CreateAddressRequest(
               label: _labelController.text.trim().isEmpty
                   ? null
                   : _labelController.text.trim(),
@@ -359,8 +370,14 @@ class _StaffAddressFormSheetState
                   ? null
                   : _apartmentController.text.trim(),
               isDefault: _isDefault,
-            ),
-          );
+            );
+      final repo = ref.read(staffRepositoryProvider);
+      final editing = widget.address;
+      if (editing == null) {
+        await repo.createAddress(widget.clientId, request);
+      } else {
+        await repo.updateAddress(widget.clientId, editing.id, request);
+      }
       if (mounted) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _isSaving = false);

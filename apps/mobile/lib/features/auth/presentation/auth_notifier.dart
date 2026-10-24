@@ -62,35 +62,46 @@ class AuthNotifier extends Notifier<AuthState> {
     }
 
     try {
-      final user = await _repository.getMe();
-      state = AuthState.authenticated(user);
+      _setUser(await _repository.getMe());
     } on DioException catch (error) {
-      // Always try refresh when /me fails; clear tokens only on confirmed 401.
+      if (error.response?.statusCode != 401) {
+        // Offline or the server is slow: open with the saved profile, keep tokens.
+        await _restoreCachedUser();
+        return;
+      }
       try {
         final tokens = await _repository.refresh(refreshToken);
         await _tokenStorage.saveTokens(
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
         );
-        final user = await _repository.getMe();
-        state = AuthState.authenticated(user);
+        _setUser(await _repository.getMe());
       } on DioException catch (refreshError) {
-        if (refreshError.response?.statusCode == 401 ||
-            error.response?.statusCode == 401) {
+        final status = refreshError.response?.statusCode;
+        if (status == 401 || status == 403) {
           await _tokenStorage.clear();
+          state = const AuthState.unauthenticated();
+        } else {
+          await _restoreCachedUser();
         }
-        // Network/5xx: keep tokens so the next online request can restore.
-        state = const AuthState.unauthenticated();
       } catch (_) {
-        if (error.response?.statusCode == 401) {
-          await _tokenStorage.clear();
-        }
-        state = const AuthState.unauthenticated();
+        await _restoreCachedUser();
       }
     } catch (_) {
-      // Keep tokens; splash can proceed as guest until next retry.
-      state = const AuthState.unauthenticated();
+      await _restoreCachedUser();
     }
+  }
+
+  void _setUser(UserProfile user) {
+    state = AuthState.authenticated(user);
+    unawaited(_tokenStorage.saveUser(user.toJson()));
+  }
+
+  Future<void> _restoreCachedUser() async {
+    final cached = await _tokenStorage.getUser();
+    state = cached == null
+        ? const AuthState.unauthenticated()
+        : AuthState.authenticated(UserProfile.fromJson(cached));
   }
 
   void updateUserProfile(profile.UserProfile profile) {
@@ -140,7 +151,7 @@ class AuthNotifier extends Notifier<AuthState> {
       try {
         final me = await _repository.getMe().timeout(const Duration(seconds: 12));
         if (state.isAuthenticated) {
-          state = AuthState.authenticated(me);
+          _setUser(me);
         }
       } catch (_) {
         // Keep tokens.user / fallback — session is already usable.

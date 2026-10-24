@@ -42,6 +42,10 @@ abstract final class AppTheme {
       ),
       textTheme: textTheme,
       iconTheme: IconThemeData(color: colors.textPrimary),
+      // Text buttons («Вызов замерщика», «Изм.») — deep gold on white, yellow on black.
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: colors.accentText),
+      ),
       dividerColor: colors.divider,
       dividerTheme: DividerThemeData(
         color: colors.divider,
@@ -125,7 +129,7 @@ abstract final class AppTheme {
       ),
       cupertinoOverrideTheme: CupertinoThemeData(
         brightness: brightness,
-        primaryColor: colors.accent,
+        primaryColor: colors.accentText,
         scaffoldBackgroundColor: colors.background,
         barBackgroundColor: colors.surface,
         textTheme: CupertinoTextThemeData(

@@ -48,7 +48,7 @@ class ProjectCartBanner extends ConsumerWidget {
               Text(
                 'Сменить',
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: colors.accent,
+                      color: colors.accentText,
                     ),
               ),
             ],

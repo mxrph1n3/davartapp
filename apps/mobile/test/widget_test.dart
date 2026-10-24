@@ -7,19 +7,24 @@ import 'package:davart_mobile/features/auth/presentation/auth_notifier.dart';
 import 'package:davart_mobile/features/catalog/presentation/catalog_notifier.dart';
 
 void main() {
-  testWidgets('Unauthenticated user sees phone screen after splash', (tester) async {
+  testWidgets('Guest lands in the shop after splash', (tester) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           authProvider.overrideWith(() => _UnauthenticatedAuthNotifier()),
+          catalogProvider.overrideWith(() => _LoadedCatalogNotifier()),
         ],
         child: const DavartApp(),
       ),
     );
 
-    await tester.pumpAndSettle();
+    // The app keeps periodic timers (live sync, socket retry), so it never fully
+    // settles; pump long enough for the splash and the first route instead.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Введите номер телефона'), findsOneWidget);
+    // Guests browse without signing in; login is asked only for personal actions.
+    expect(find.text('Магазин'), findsWidgets);
   });
 
   testWidgets('Authenticated user sees catalog', (tester) async {
@@ -33,7 +38,10 @@ void main() {
       ),
     );
 
-    await tester.pumpAndSettle();
+    // The app keeps periodic timers (live sync, socket retry), so it never fully
+    // settles; pump long enough for the splash and the first route instead.
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('Магазин'), findsWidgets);
   });

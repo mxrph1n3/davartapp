@@ -55,7 +55,7 @@ async function mapPool<T, R>(
   concurrency: number,
   mapper: (item: T) => Promise<R>,
 ): Promise<R[]> {
-  const results: R[] = new Array(items.length);
+  const results = new Array<R>(items.length);
   let next = 0;
   async function worker() {
     while (next < items.length) {

@@ -290,7 +290,7 @@ class _ImageChoiceCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Image.asset(option.asset, fit: BoxFit.cover),
+                    BriefPicture(asset: option.asset, url: option.url),
                     if (selected)
                       const Positioned(
                         top: 10,
@@ -341,10 +341,33 @@ class _SelectedBadge extends StatelessWidget {
   }
 }
 
-class BriefCoverImage extends StatelessWidget {
-  const BriefCoverImage({super.key, required this.asset});
+/// A portfolio render when there is one, otherwise the bundled picture.
+class BriefPicture extends StatelessWidget {
+  const BriefPicture({super.key, required this.asset, this.url});
 
   final String asset;
+  final String? url;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Image.asset(asset, fit: BoxFit.cover);
+    if (url == null) return fallback;
+    return Image.network(
+      url!,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => fallback,
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : ColoredBox(color: AppColors.of(context).imagePlaceholder),
+    );
+  }
+}
+
+class BriefCoverImage extends StatelessWidget {
+  const BriefCoverImage({super.key, required this.asset, this.url});
+
+  final String asset;
+  final String? url;
 
   @override
   Widget build(BuildContext context) {
@@ -352,7 +375,7 @@ class BriefCoverImage extends StatelessWidget {
       borderRadius: AppRadius.imageRadius,
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        child: Image.asset(asset, fit: BoxFit.cover),
+        child: BriefPicture(asset: asset, url: url),
       ),
     );
   }

@@ -37,9 +37,7 @@ export function allRolesOf(user: {
   return uniqueRoles([user.role, ...(user.extraRoles ?? [])]);
 }
 
-export function isStudioRole(
-  role: UserRole | string | null | undefined,
-): boolean {
+export function isStudioRole(role: string | null | undefined): boolean {
   return (
     role === UserRole.designer ||
     role === UserRole.complectator ||
@@ -52,14 +50,12 @@ export function hasStudioRole(roles: UserRole[]): boolean {
   return roles.some((role) => isStudioRole(role));
 }
 
-export function isAdminRole(
-  role: UserRole | string | null | undefined,
-): boolean {
+export function isAdminRole(role: string | null | undefined): boolean {
   return role === UserRole.admin;
 }
 
 export function canSeeContactPhone(
-  roleOrRoles: UserRole | string | null | undefined | UserRole[],
+  roleOrRoles: string | null | undefined | UserRole[],
 ): boolean {
   const roles = Array.isArray(roleOrRoles)
     ? roleOrRoles
@@ -77,9 +73,7 @@ export const SUPPORT_DUTY_ROLES: UserRole[] = [
   UserRole.admin,
 ];
 
-export function isSupportDutyRole(
-  role: UserRole | string | null | undefined,
-): boolean {
+export function isSupportDutyRole(role: string | null | undefined): boolean {
   return role === UserRole.complectator || role === UserRole.admin;
 }
 

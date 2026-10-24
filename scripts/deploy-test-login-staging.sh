@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Deploy AUTH_TEST login (no SMS) to staging.
-# Usage: bash scripts/deploy-test-login-staging.sh
+# Deploy the App Review demo login (client account, no SMS) to staging.
+# Usage: AUTH_TEST_CODE=<random 4 digits, not 0000> bash scripts/deploy-test-login-staging.sh
 set -euo pipefail
+: "${AUTH_TEST_CODE:?set AUTH_TEST_CODE to a random 4-digit code}"
+[[ "$AUTH_TEST_CODE" =~ ^[0-9]{4}$ && "$AUTH_TEST_CODE" != "0000" ]] || { echo "AUTH_TEST_CODE: 4 digits, not 0000"; exit 1; }
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REMOTE="${REMOTE:-root@217.198.6.88}"
@@ -24,12 +26,11 @@ touch "\$ENV"
 grep -q "^AUTH_TEST_PHONES=" "\$ENV" 2>/dev/null \
   && sed -i "s|^AUTH_TEST_PHONES=.*|AUTH_TEST_PHONES=+70000000000|" "\$ENV" \
   || echo "AUTH_TEST_PHONES=+70000000000" >> "\$ENV"
-grep -q "^AUTH_TEST_STAFF_PHONES=" "\$ENV" 2>/dev/null \
-  && sed -i "s|^AUTH_TEST_STAFF_PHONES=.*|AUTH_TEST_STAFF_PHONES=+70000000001|" "\$ENV" \
-  || echo "AUTH_TEST_STAFF_PHONES=+70000000001" >> "\$ENV"
+# The studio demo (staff) login is gone: staff sign in with their own numbers.
+sed -i "/^AUTH_TEST_STAFF_PHONES=/d" "\$ENV"
 grep -q "^AUTH_TEST_CODE=" "\$ENV" 2>/dev/null \
-  && sed -i "s|^AUTH_TEST_CODE=.*|AUTH_TEST_CODE=0000|" "\$ENV" \
-  || echo "AUTH_TEST_CODE=0000" >> "\$ENV"
+  && sed -i "s|^AUTH_TEST_CODE=.*|AUTH_TEST_CODE=$AUTH_TEST_CODE|" "\$ENV" \
+  || echo "AUTH_TEST_CODE=$AUTH_TEST_CODE" >> "\$ENV"
 echo "==> AUTH_TEST:"; grep "^AUTH_TEST_" "\$ENV"
 DOCKER_BUILDKIT=0 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging build --no-cache api
 docker compose -f infra/docker-compose.staging.yml --env-file infra/.env.staging up -d api

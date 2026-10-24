@@ -225,7 +225,8 @@ class PushService {
       final router = _ref.read(routerProvider);
       final path = router.state.uri.path;
       final target = AppRoutes.chatDetail(chatId);
-      if (path == target || path.startsWith('$target/')) {
+      // Already on this chat: refresh it instead of opening another copy on top.
+      if (_activeChatId == chatId || path == target || path.startsWith('$target/')) {
         unawaited(
           _ref.read(chatMessagesProvider(chatId).notifier).refreshLatest(),
         );

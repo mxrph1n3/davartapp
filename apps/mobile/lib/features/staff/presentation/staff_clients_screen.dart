@@ -77,9 +77,11 @@ class _StaffClientsScreenState extends ConsumerState<StaffClientsScreen> {
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.screenPadding,
-                    vertical: AppSpacing.sm,
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.screenPadding,
+                    AppSpacing.sm,
+                    AppSpacing.screenPadding,
+                    AppSpacing.sm + MediaQuery.paddingOf(context).bottom,
                   ),
                   itemCount: page.items.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),

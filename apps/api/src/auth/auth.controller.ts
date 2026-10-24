@@ -1,4 +1,5 @@
 import { Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
@@ -8,8 +9,11 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Per-IP cap on top of the per-phone limit in AuthService: stops one client
+  // from burning the SMS budget by cycling through many phone numbers.
   @Post('send-otp')
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   sendOtp(@Body() dto: SendOtpDto) {
     return this.authService.sendOtp(dto.phone, dto.channel ?? 'sms');
   }

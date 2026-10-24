@@ -12,8 +12,9 @@ const SUBSCRIBERS_KEY = 'telegram:alert_chats';
 
 export type TelegramOrderAlert = {
   orderId: string;
-  projectId: string;
-  projectName: string;
+  /** null — order from the client's personal cart (no project). */
+  projectId: string | null;
+  projectName: string | null;
   clientId: string;
   clientName: string | null;
   clientPhone: string;
@@ -73,7 +74,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy() {
     this.polling = false;
   }
 
@@ -269,7 +270,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     return [
       '<b>Новый заказ</b>',
-      `Проект: ${this.escape(alert.projectName)}`,
+      alert.projectId
+        ? `Проект: ${this.escape(alert.projectName ?? '')}`
+        : 'Из личной корзины (без проекта)',
       `Клиент: ${this.escape(clientLabel)} (${this.escape(alert.clientPhone)})`,
       `Адрес: ${this.escape(alert.address)}`,
       `Сумма: ${alert.totalAmount.toLocaleString('ru-RU')} ₽`,

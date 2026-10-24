@@ -7,6 +7,7 @@ import '../../../core/router/app_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../auth/presentation/auth_notifier.dart';
+import '../../profile/presentation/avatar_picker.dart';
 import '../../profile/presentation/delete_account_button.dart';
 import '../../profile/presentation/profile_notifier.dart';
 import '../../profile/presentation/settings_screen.dart';
@@ -24,7 +25,7 @@ class StaffProfileScreen extends ConsumerWidget {
 
     return TabPage(
       child: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
+        padding: const EdgeInsets.all(AppSpacing.screenPadding).copyWith(bottom: AppSpacing.screenPadding + MediaQuery.paddingOf(context).bottom),
         children: [
           const ScreenHeader(title: 'Профиль'),
           const SizedBox(height: AppSpacing.sm),
@@ -32,8 +33,9 @@ class StaffProfileScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: Row(
               children: [
-                AppAvatar(
+                AvatarPicker(
                   label: name?.isNotEmpty == true ? name! : phone,
+                  imageUrl: profileAsync.value?.avatarUrl,
                   size: 72,
                 ),
                 const SizedBox(width: AppSpacing.md),

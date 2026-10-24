@@ -9,6 +9,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
   const DavartColors({
     required this.accent,
     required this.accentPressed,
+    required this.accentText,
     required this.textPrimary,
     required this.textSecondary,
     required this.textDisabled,
@@ -30,6 +31,10 @@ class DavartColors extends ThemeExtension<DavartColors> {
 
   final Color accent;
   final Color accentPressed;
+
+  /// Brand yellow for text and icons on dark; on white it is unreadable, so black there.
+  /// The yellow itself is the brand colour and is never replaced by another hue.
+  final Color accentText;
   final Color textPrimary;
   final Color textSecondary;
   final Color textDisabled;
@@ -51,6 +56,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
   static const light = DavartColors(
     accent: Color(0xFFFFDD2D),
     accentPressed: Color(0xFFF5D420),
+    accentText: Color(0xFF111111),
     textPrimary: Color(0xFF111111),
     textSecondary: Color(0x8C111111),
     textDisabled: Color(0x40111111),
@@ -73,6 +79,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
   static const dark = DavartColors(
     accent: Color(0xFFFFDD2D),
     accentPressed: Color(0xFFF5D420),
+    accentText: Color(0xFFFFDD2D),
     textPrimary: Color(0xFFF5F5F5),
     textSecondary: Color(0x8CF5F5F5),
     textDisabled: Color(0x40F5F5F5),
@@ -100,6 +107,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
   DavartColors copyWith({
     Color? accent,
     Color? accentPressed,
+    Color? accentText,
     Color? textPrimary,
     Color? textSecondary,
     Color? textDisabled,
@@ -121,6 +129,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
     return DavartColors(
       accent: accent ?? this.accent,
       accentPressed: accentPressed ?? this.accentPressed,
+      accentText: accentText ?? this.accentText,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
       textDisabled: textDisabled ?? this.textDisabled,
@@ -147,6 +156,7 @@ class DavartColors extends ThemeExtension<DavartColors> {
     return DavartColors(
       accent: Color.lerp(accent, other.accent, t)!,
       accentPressed: Color.lerp(accentPressed, other.accentPressed, t)!,
+      accentText: Color.lerp(accentText, other.accentText, t)!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,

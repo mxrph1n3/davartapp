@@ -11,6 +11,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/ru_phone_input_formatter.dart';
 import '../../../core/widgets/ds/ds.dart';
 import '../../../core/widgets/state_views.dart';
+import '../../../core/widgets/top_notice.dart';
 import '../../admin/data/admin_repository.dart';
 import '../../auth/data/auth_repository.dart' show UserRole;
 import '../../auth/presentation/auth_notifier.dart';
@@ -107,15 +108,22 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
               ? projectBriefSummary(projectAsync!.asData!.value)
               : null;
 
-          return Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          // Like Telegram: media right under the info, the tabs stick to the top on scroll.
+          return NestedScrollView(
+            headerSliverBuilder: (context, _) => [
+              SliverPadding(
+                padding: const EdgeInsets.all(AppSpacing.screenPadding),
+                sliver: SliverList.list(
                   children: [
                     if (chat.type == 'personal' || chat.type == 'group')
                       _TelegramProfile(
                         chat: chat,
+                        avatarUrl: chat.type == 'personal'
+                            ? chat.participants
+                                .where((p) => p.id != ref.watch(authProvider).user?.id)
+                                .map((p) => p.avatarUrl)
+                                .firstOrNull
+                            : null,
                         onMessage: () => _close('message'),
                         onSound: () => _toggleMute(chat),
                         onSearch: () => _close('search'),
@@ -133,6 +141,14 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    if (chat.type == 'group') ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      _GroupMembers(
+                        chat: chat,
+                        onAdd: () => _addGroupMembers(chat),
+                        onRemove: (p) => _removeGroupMember(chat, p),
                       ),
                     ],
                     if (chat.isProject) ...[
@@ -188,7 +204,7 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                                     p.phone.isNotEmpty
                                 ? p.phone
                                 : _chatRoleLabel(p.role),
-                            leading: AppAvatar(label: p.name, size: 40),
+                            leading: AppAvatar(label: p.name, imageUrl: p.avatarUrl, size: 40),
                             showChevron: ref
                                     .watch(authProvider)
                                     .user
@@ -207,30 +223,40 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
                   ],
                 ),
               ),
-              TabBar(
-                controller: _tabs,
-                isScrollable: true,
-                tabAlignment: TabAlignment.start,
-                tabs: const [
-                  Tab(text: 'Медиа'),
-                  Tab(text: 'Файлы'),
-                  Tab(text: 'Голосовые'),
-                  Tab(text: 'Ссылки'),
-                ],
-              ),
-              SizedBox(
-                height: 280,
-                child: TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _ArchiveList(chatId: widget.chatId, kind: 'media'),
-                    _ArchiveList(chatId: widget.chatId, kind: 'files'),
-                    _ArchiveList(chatId: widget.chatId, kind: 'voice'),
-                    _ArchiveList(chatId: widget.chatId, kind: 'links'),
-                  ],
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _TabsHeader(
+                  color: AppColors.of(context).background,
+                  tabBar: TabBar(
+                    controller: _tabs,
+                    isScrollable: true,
+                    tabAlignment: TabAlignment.start,
+                    // Tab labels line up with the text above (each tab adds 16 of its own).
+                    padding: const EdgeInsets.only(left: AppSpacing.screenPadding - 16),
+                    // Brand yellow on white is unreadable: black in the light theme.
+                    labelColor: AppColors.of(context).accentText,
+                    indicatorColor: AppColors.of(context).accentText,
+                    unselectedLabelColor: AppColors.of(context).textSecondary,
+                    dividerColor: AppColors.of(context).border,
+                    tabs: const [
+                      Tab(text: 'Медиа'),
+                      Tab(text: 'Файлы'),
+                      Tab(text: 'Голосовые'),
+                      Tab(text: 'Ссылки'),
+                    ],
+                  ),
                 ),
               ),
             ],
+            body: TabBarView(
+              controller: _tabs,
+              children: [
+                _ArchiveList(chatId: widget.chatId, kind: 'media'),
+                _ArchiveList(chatId: widget.chatId, kind: 'files'),
+                _ArchiveList(chatId: widget.chatId, kind: 'voice'),
+                _ArchiveList(chatId: widget.chatId, kind: 'links'),
+              ],
+            ),
           );
         },
       ),
@@ -310,6 +336,46 @@ class _ChatInfoScreenState extends ConsumerState<ChatInfoScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Не удалось изменить звук')),
       );
+    }
+  }
+
+  Future<void> _addGroupMembers(ChatDetails chat) async {
+    final inChat = {for (final p in chat.participants) p.id};
+    final picked = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (_) => _MemberPicker(exclude: inChat),
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    try {
+      await ref.read(chatRepositoryProvider).addGroupMembers(chat.id, picked);
+      ref.invalidate(chatDetailsProvider(chat.id));
+      if (mounted) showTopNotice(context, picked.length == 1 ? 'Участник добавлен' : 'Участники добавлены');
+    } catch (_) {
+      if (mounted) showTopNotice(context, 'Не удалось добавить');
+    }
+  }
+
+  Future<void> _removeGroupMember(ChatDetails chat, ChatParticipant member) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить из группы?'),
+        content: Text('${member.name} больше не будет видеть сообщения этой группы.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Удалить')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(chatRepositoryProvider).removeGroupMember(chat.id, member.id);
+      ref.invalidate(chatDetailsProvider(chat.id));
+    } catch (_) {
+      if (mounted) showTopNotice(context, 'Не удалось удалить участника');
     }
   }
 
@@ -844,6 +910,7 @@ class _ArchiveList extends ConsumerWidget {
 class _TelegramProfile extends StatelessWidget {
   const _TelegramProfile({
     required this.chat,
+    this.avatarUrl,
     required this.onMessage,
     required this.onSound,
     required this.onSearch,
@@ -851,6 +918,7 @@ class _TelegramProfile extends StatelessWidget {
   });
 
   final ChatDetails chat;
+  final String? avatarUrl;
   final VoidCallback onMessage;
   final VoidCallback onSound;
   final VoidCallback onSearch;
@@ -863,7 +931,7 @@ class _TelegramProfile extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 8),
-        AppAvatar(label: chat.title, size: 96),
+        AppAvatar(label: chat.title, imageUrl: avatarUrl, size: 96),
         const SizedBox(height: 12),
         Text(
           chat.title,
@@ -921,7 +989,7 @@ class _TelegramProfile extends StatelessWidget {
                 Text(
                   _formatPhone(phone),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: colors.accent,
+                        color: colors.accentText,
                         fontWeight: FontWeight.w600,
                       ),
                 ),
@@ -961,7 +1029,7 @@ class _ProfileAction extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Column(
                 children: [
-                  Icon(icon, size: 22, color: colors.accent),
+                  Icon(icon, size: 22, color: colors.accentText),
                   const SizedBox(height: 6),
                   Text(
                     label,
@@ -998,4 +1066,153 @@ String _chatRoleLabel(String role) {
     'admin' => 'Админ',
     _ => 'Клиент',
   };
+}
+
+
+/// Group members: everyone sees the list; the remove cross shows only where the viewer may
+/// remove (admins — anyone; a client — other clients, i.e. family; staff otherwise — nobody).
+class _GroupMembers extends ConsumerWidget {
+  const _GroupMembers({required this.chat, required this.onAdd, required this.onRemove});
+
+  final ChatDetails chat;
+  final VoidCallback onAdd;
+  final ValueChanged<ChatParticipant> onRemove;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colors = AppColors.of(context);
+    final me = ref.watch(authProvider).user;
+    final isAdmin = me?.hasRole(UserRole.admin) == true;
+    final isStaff = me?.isStaff == true;
+    bool canRemove(ChatParticipant p) {
+      if (p.id == me?.id) return false;
+      if (isAdmin) return true;
+      return !isStaff && p.role == 'client';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Участники · ${chat.participants.length}',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 6),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            radius: 20,
+            backgroundColor: colors.surfaceMuted,
+            child: Icon(Icons.person_add_alt_1_outlined, color: colors.textPrimary, size: 20),
+          ),
+          title: const Text('Добавить участника'),
+          onTap: onAdd,
+        ),
+        for (final p in chat.participants)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: AppAvatar(label: p.name, imageUrl: p.avatarUrl, size: 40),
+            title: Text(p.id == me?.id ? '${p.name} (вы)' : p.name),
+            subtitle: p.phone.isEmpty ? null : Text(p.phone),
+            trailing: canRemove(p)
+                ? IconButton(
+                    tooltip: 'Удалить из группы',
+                    icon: Icon(Icons.close, color: colors.textSecondary),
+                    onPressed: () => onRemove(p),
+                  )
+                : null,
+          ),
+      ],
+    );
+  }
+}
+
+/// People the user already talks to — pick several and add them to the group.
+class _MemberPicker extends ConsumerStatefulWidget {
+  const _MemberPicker({required this.exclude});
+
+  final Set<String> exclude;
+
+  @override
+  ConsumerState<_MemberPicker> createState() => _MemberPickerState();
+}
+
+class _MemberPickerState extends ConsumerState<_MemberPicker> {
+  final _picked = <String>{};
+  var _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    return FutureBuilder<List<ChatContact>>(
+      future: ref.read(chatRepositoryProvider).getContacts(),
+      builder: (context, snap) {
+        final all = (snap.data ?? const <ChatContact>[]).where((c) => !widget.exclude.contains(c.id));
+        final q = _query.toLowerCase();
+        final list = all
+            .where((c) => q.isEmpty || c.name.toLowerCase().contains(q) || (c.phone ?? '').contains(q))
+            .toList();
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Column(
+              children: [
+                TextField(
+                  decoration: const InputDecoration(hintText: 'Имя или телефон', prefixIcon: Icon(Icons.search)),
+                  onChanged: (v) => setState(() => _query = v.trim()),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: snap.connectionState != ConnectionState.done
+                      ? const Center(child: CircularProgressIndicator())
+                      : list.isEmpty
+                          ? Center(child: Text('Никого не нашлось', style: TextStyle(color: colors.textSecondary)))
+                          : ListView(
+                              children: [
+                                for (final c in list)
+                                  CheckboxListTile(
+                                    value: _picked.contains(c.id),
+                                    onChanged: (v) => setState(() => v == true ? _picked.add(c.id) : _picked.remove(c.id)),
+                                    secondary: AppAvatar(label: c.name, imageUrl: c.avatarUrl, size: 40),
+                                    title: Text(c.name),
+                                    subtitle: Text(c.phone ?? c.roleLabel),
+                                  ),
+                              ],
+                            ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: PrimaryButton(
+                    label: _picked.isEmpty ? 'Выберите участников' : 'Добавить (${_picked.length})',
+                    onPressed: _picked.isEmpty ? null : () => Navigator.pop(context, _picked.toList()),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TabsHeader extends SliverPersistentHeaderDelegate {
+  _TabsHeader({required this.tabBar, required this.color});
+
+  final TabBar tabBar;
+  final Color color;
+
+  @override
+  double get minExtent => tabBar.preferredSize.height;
+
+  @override
+  double get maxExtent => tabBar.preferredSize.height;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) =>
+      ColoredBox(color: color, child: tabBar);
+
+  @override
+  bool shouldRebuild(_TabsHeader old) => old.tabBar != tabBar || old.color != color;
 }

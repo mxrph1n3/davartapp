@@ -36,6 +36,13 @@ import {
   canAccessAnyClientProject,
 } from './project-access';
 
+/** Shown until the admin enters the contract number: then «Дизайн-проект №16068». */
+export const DESIGN_PROJECT_NAME = 'Дизайн-проект';
+
+export function designProjectName(number: string) {
+  return `${DESIGN_PROJECT_NAME} №${number}`;
+}
+
 const staffSelect = { id: true, name: true, phone: true } as const;
 
 const projectInclude = {
@@ -129,9 +136,7 @@ export class ProjectsService {
     options?: { draft?: boolean },
   ) {
     const draft = options?.draft === true;
-    const name = draft
-      ? 'Черновик'
-      : dto.name?.trim() || (await this.nextProjectName());
+    const name = draft ? 'Черновик' : dto.name?.trim() || DESIGN_PROJECT_NAME;
     const project = await this.prisma.project.create({
       data: {
         userId,
@@ -191,7 +196,8 @@ export class ProjectsService {
       throw new BadRequestException('Сначала заполните анкету');
     }
 
-    const name = await this.nextProjectName();
+    // The contract number is added by the admin later (StaffService.setProjectNumber).
+    const name = DESIGN_PROJECT_NAME;
     await this.prisma.project.update({
       where: { id: projectId },
       data: {
@@ -277,25 +283,6 @@ export class ProjectsService {
       orderBy: { createdAt: 'asc' },
       select: { id: true },
     });
-  }
-
-  /** Human project number: «Проект №12» — client never picks the name. */
-  private async nextProjectName(): Promise<string> {
-    const rows = await this.prisma.$queryRaw<Array<{ next: number | bigint }>>`
-      SELECT COALESCE(
-        MAX(
-          CASE
-            WHEN name ~ '^Проект №([0-9]+)$'
-            THEN (regexp_match(name, '^Проект №([0-9]+)$'))[1]::int
-            ELSE NULL
-          END
-        ),
-        0
-      ) + 1 AS next
-      FROM projects
-    `;
-    const next = Number(rows[0]?.next ?? 1);
-    return `Проект №${next}`;
   }
 
   async listMembers(
@@ -1020,6 +1007,7 @@ export class ProjectsService {
       id: project.id,
       userId: project.userId,
       name: project.name,
+      number: project.number,
       address: project.address,
       area: project.area,
       style: project.style,

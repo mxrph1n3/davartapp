@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { hasStudioRole } from '../auth/roles';
 import { LiveSyncService } from '../live/live-sync.service';
 import {
   canAccessAnyClientProject,
@@ -13,6 +12,7 @@ import {
   userCanAccessProjectWhere,
   userProjectAccessWhere,
 } from '../projects/project-access';
+import { unitLinePrice } from './pack-price';
 import { resolveProductImageUrl } from '../catalog/demo-product-image';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -130,12 +130,7 @@ export class CartService {
     }
 
     const formatted = await this.formatCart(projectCart.id);
-    await this.announceProjectCart(
-      projectId,
-      actorId,
-      [actorRole, ...extraRoles],
-      'assign',
-    );
+    await this.announceProjectCart(projectId);
     return formatted;
   }
 
@@ -204,13 +199,7 @@ export class CartService {
     });
 
     const formatted = await this.formatCart(cart.id);
-    await this.announceProjectCart(
-      projectId,
-      actorId,
-      [actorRole, ...extraRoles],
-      'add',
-      product.name,
-    );
+    await this.announceProjectCart(projectId);
     return formatted;
   }
 
@@ -249,12 +238,7 @@ export class CartService {
 
     const formatted = await this.formatCart(cart.id);
     if (projectId) {
-      await this.announceProjectCart(
-        projectId,
-        actorId,
-        [actorRole, ...extraRoles],
-        'update',
-      );
+      await this.announceProjectCart(projectId);
     }
     return formatted;
   }
@@ -289,12 +273,31 @@ export class CartService {
     await this.prisma.cartItem.delete({ where: { id: itemId } });
     const formatted = await this.formatCart(cart.id);
     if (projectId) {
-      await this.announceProjectCart(
-        projectId,
-        actorId,
-        [actorRole, ...extraRoles],
-        'remove',
-      );
+      await this.announceProjectCart(projectId);
+    }
+    return formatted;
+  }
+
+  /** «Удалить выбранные»: unlocked lines of one cart (personal or project). */
+  async removeItems(
+    projectId: string | undefined,
+    actorId: string,
+    actorRole: UserRole,
+    itemIds: string[],
+    extraRoles: UserRole[] = [],
+  ) {
+    const cart = await this.cartForActor(
+      projectId,
+      actorId,
+      actorRole,
+      extraRoles,
+    );
+    await this.prisma.cartItem.deleteMany({
+      where: { id: { in: itemIds }, cartId: cart.id, lockedAt: null },
+    });
+    const formatted = await this.formatCart(cart.id);
+    if (projectId) {
+      await this.announceProjectCart(projectId);
     }
     return formatted;
   }
@@ -316,14 +319,15 @@ export class CartService {
     });
     const formatted = await this.formatCart(cart.id);
     if (projectId) {
-      await this.announceProjectCart(
-        projectId,
-        actorId,
-        [actorRole, ...extraRoles],
-        'clear',
-      );
+      await this.announceProjectCart(projectId);
     }
     return formatted;
+  }
+
+  /** A client's personal cart, read-only for the studio (access is checked by the caller). */
+  async getPersonalCartOf(userId: string) {
+    const cart = await this.getOrCreatePersonalCart(userId);
+    return this.formatCart(cart.id);
   }
 
   /** Used by OrdersService inside a transaction-friendly flow. */
@@ -382,36 +386,12 @@ export class CartService {
     return this.getOrCreateCart(projectId);
   }
 
-  private async announceProjectCart(
-    projectId: string,
-    actorId: string,
-    roles: UserRole[],
-    kind: 'add' | 'update' | 'remove' | 'clear' | 'assign',
-    productName?: string,
-  ) {
+  /**
+   * Live refresh for everyone who has the project cart open. No push per product:
+   * the designer tells the client in the chat when the cart (подборка) is ready.
+   */
+  private async announceProjectCart(projectId: string) {
     await this.liveSync.publish(projectId, 'cart');
-    if (!hasStudioRole(roles)) return;
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      select: { userId: true },
-    });
-    if (!project || project.userId === actorId) return;
-
-    const body =
-      kind === 'add' && productName
-        ? `Команда DAVart добавила «${productName}» в корзину проекта`
-        : kind === 'remove'
-          ? 'Команда DAVart убрала товар из корзины проекта'
-          : kind === 'clear'
-            ? 'Команда DAVart очистила корзину проекта'
-            : 'Команда DAVart обновила корзину проекта';
-
-    await this.liveSync.pushOwner(projectId, {
-      title: 'Корзина обновлена',
-      body,
-      collapseId: `cart-${projectId}`,
-      data: { type: 'cart', projectId },
-    });
   }
 
   private async getOrCreatePersonalCart(userId: string) {
@@ -455,6 +435,12 @@ export class CartService {
                 compareAtPrice: true,
                 imageUrl: true,
                 inStock: true,
+                unit: true,
+                sellByPack: true,
+                packSize: true,
+                packPieces: true,
+                leadTimeMinDays: true,
+                leadTimeMaxDays: true,
                 category: { select: { slug: true } },
               },
             },
@@ -471,7 +457,7 @@ export class CartService {
     const items = cart.items.map((item) => ({
       id: item.id,
       quantity: item.quantity,
-      subtotal: Number(item.product.price) * item.quantity,
+      subtotal: unitLinePrice(item.product) * item.quantity,
       locked: item.lockedAt != null,
       lockedAt: item.lockedAt,
       lockedByOrderId: item.lockedByOrderId,
@@ -490,6 +476,12 @@ export class CartService {
           imageUrl: item.product.imageUrl,
         }),
         inStock: item.product.inStock,
+        unit: item.product.unit,
+        sellByPack: item.product.sellByPack,
+        packSize: item.product.packSize ? Number(item.product.packSize) : null,
+        packPieces: item.product.packPieces,
+        leadTimeMinDays: item.product.leadTimeMinDays,
+        leadTimeMaxDays: item.product.leadTimeMaxDays,
       },
     }));
 

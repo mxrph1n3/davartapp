@@ -19,6 +19,7 @@ import {
   AssignCartDto,
   CartItemIdParamDto,
   CartProjectQueryDto,
+  RemoveCartItemsDto,
   UpdateCartItemDto,
 } from './dto/cart.dto';
 
@@ -82,6 +83,21 @@ export class CartController {
       user.role,
       params.id,
       dto.quantity,
+      user.extraRoles ?? [],
+    );
+  }
+
+  @Post('items/remove')
+  @HttpCode(200)
+  removeItems(
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: RemoveCartItemsDto,
+  ) {
+    return this.cartService.removeItems(
+      dto.projectId,
+      user.sub,
+      user.role,
+      dto.itemIds,
       user.extraRoles ?? [],
     );
   }
