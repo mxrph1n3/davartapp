@@ -9,6 +9,7 @@ import { isStudioRole } from '../auth/roles';
 import { LiveSyncService } from '../live/live-sync.service';
 import { PushService } from '../push/push.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OrdersChatService } from '../chat/orders-chat.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { CartService } from './cart.service';
 
@@ -27,6 +28,7 @@ export class OrdersService {
     private readonly cartService: CartService,
     private readonly pushService: PushService,
     private readonly telegram: TelegramService,
+    private readonly ordersChat: OrdersChatService,
     private readonly liveSync: LiveSyncService,
   ) {}
 
@@ -161,8 +163,8 @@ export class OrdersService {
       void this.liveSync.publish(projectId, 'cart');
     }
 
-    // Alert is best-effort: a Telegram outage must not fail checkout.
-    void this.telegram.notifyOrderCreated({
+    // Alerts are best-effort: neither channel may fail checkout.
+    const alert = {
       orderId: formatted.id,
       projectId: projectId ?? null,
       projectName: projectId ? cart.projectName : null,
@@ -177,7 +179,9 @@ export class OrdersService {
         quantity: item.quantity,
         price: unitLinePrice(item.product),
       })),
-    });
+    };
+    void this.telegram.notifyOrderCreated(alert);
+    void this.ordersChat.notifyOrderCreated(alert);
 
     return formatted;
   }
