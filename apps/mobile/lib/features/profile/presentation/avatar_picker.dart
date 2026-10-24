@@ -76,7 +76,7 @@ class _AvatarPickerState extends ConsumerState<AvatarPicker> {
       }
       ref.invalidate(profileProvider);
     } catch (_) {
-      showTopNotice(context, 'Не удалось обновить фото');
+      if (mounted) showTopNotice(context, 'Не удалось обновить фото');
     } finally {
       if (mounted) setState(() => _busy = false);
     }

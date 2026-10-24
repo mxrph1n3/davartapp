@@ -11,7 +11,7 @@ Color shopAccentLine(BuildContext context) => AppColors.of(context).accentText;
 
 /// Yellow «+» / «−» drawn with round caps (same weight in both themes).
 class AccentGlyph extends StatelessWidget {
-  const AccentGlyph({required this.plus, this.size = 20});
+  const AccentGlyph({super.key, required this.plus, this.size = 20});
 
   final bool plus;
   final double size;
@@ -301,7 +301,7 @@ class _Photo extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => placeholder,
+      errorBuilder: (_, _, _) => placeholder,
     );
   }
 }

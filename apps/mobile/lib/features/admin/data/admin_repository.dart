@@ -55,8 +55,8 @@ class AdminRepository {
     final response = await _dio.patch(
       '/admin/users/$userId',
       data: {
-        if (phone != null) 'phone': phone,
-        if (name != null) 'name': name,
+        'phone': ?phone,
+        'name': ?name,
         if (role != null) 'role': role.name,
         if (roles != null) 'roles': roles.map((item) => item.name).toList(),
       },

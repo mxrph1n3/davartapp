@@ -251,6 +251,8 @@ export class PushService implements OnModuleInit {
     return new Promise((resolve) => {
       const client = http2.connect(`https://${host}`);
       let settled = false;
+      // Assigned below, after finish() that clears it is defined.
+      // eslint-disable-next-line prefer-const
       let timer: ReturnType<typeof setTimeout>;
       const finish = (value: {
         ok: boolean;

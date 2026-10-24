@@ -74,7 +74,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async onModuleDestroy() {
+  onModuleDestroy() {
     this.polling = false;
   }
 

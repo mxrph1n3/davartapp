@@ -23,7 +23,7 @@ class CatalogRepository {
   Future<FilterOptions> getFilterOptions({String? categoryId}) async {
     final response = await _dio.get(
       '/catalog/filters',
-      queryParameters: {if (categoryId != null) 'categoryId': categoryId},
+      queryParameters: {'categoryId': ?categoryId},
     );
     return FilterOptions.fromJson(response.data as Map<String, dynamic>);
   }
@@ -38,7 +38,7 @@ class CatalogRepository {
       queryParameters: <String, dynamic>{
         'page': page,
         'limit': limit,
-        if (categoryId != null) 'categoryId': categoryId,
+        'categoryId': ?categoryId,
       },
     );
 
@@ -58,7 +58,7 @@ class CatalogRepository {
       options: Options(listFormat: ListFormat.multi),
       queryParameters: <String, dynamic>{
         if (query != null && query.isNotEmpty) 'q': query,
-        if (categoryId != null) 'categoryId': categoryId,
+        'categoryId': ?categoryId,
         if (filters.minPrice != null) 'minPrice': filters.minPrice,
         if (filters.maxPrice != null) 'maxPrice': filters.maxPrice,
         if (filters.brandId != null) 'brandId': filters.brandId,

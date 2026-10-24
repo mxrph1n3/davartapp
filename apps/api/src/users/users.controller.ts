@@ -41,11 +41,15 @@ export class UsersController {
 
   @Post('me/avatar')
   @UseInterceptors(
-    FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } }),
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
   )
   setAvatar(
     @CurrentUser() user: JwtPayload,
-    @UploadedFile() file: { mimetype: string; size: number; buffer: Buffer } | undefined,
+    @UploadedFile()
+    file: { mimetype: string; size: number; buffer: Buffer } | undefined,
   ) {
     return this.usersService.setAvatar(user.sub, file);
   }

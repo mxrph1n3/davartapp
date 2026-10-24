@@ -48,12 +48,12 @@ class ChatRepository {
       '/chats/$chatId/messages',
       data: {
         'type': type,
-        if (content != null) 'content': content,
-        if (attachmentKey != null) 'attachmentKey': attachmentKey,
-        if (attachmentName != null) 'attachmentName': attachmentName,
-        if (attachmentMime != null) 'attachmentMime': attachmentMime,
-        if (productId != null) 'productId': productId,
-        if (replyToId != null) 'replyToId': replyToId,
+        'content': ?content,
+        'attachmentKey': ?attachmentKey,
+        'attachmentName': ?attachmentName,
+        'attachmentMime': ?attachmentMime,
+        'productId': ?productId,
+        'replyToId': ?replyToId,
       },
     );
     return ChatMessage.fromJson(response.data as Map<String, dynamic>);
@@ -73,7 +73,7 @@ class ChatRepository {
       data: {
         'fileName': fileName,
         'contentType': contentType,
-        if (size != null) 'size': size,
+        'size': ?size,
       },
     );
     return response.data as Map<String, dynamic>;
@@ -240,8 +240,8 @@ class ChatRepository {
     final response = await _dio.patch(
       '/chats/$chatId',
       data: {
-        if (title != null) 'title': title,
-        if (alias != null) 'alias': alias,
+        'title': ?title,
+        'alias': ?alias,
       },
     );
     return ChatDetails.fromJson(response.data as Map<String, dynamic>);

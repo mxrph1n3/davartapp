@@ -2510,7 +2510,7 @@ export class ChatService {
     user: {
       name: string | null;
       phone: string;
-      role?: UserRole | string;
+      role?: string;
     },
     options?: { revealPhone?: boolean },
   ) {

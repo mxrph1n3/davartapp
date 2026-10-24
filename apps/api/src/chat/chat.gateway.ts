@@ -222,7 +222,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private extractToken(client: AuthedSocket): string | null {
-    const authToken = client.handshake.auth?.token;
+    const authToken: unknown = client.handshake.auth?.token;
     if (typeof authToken === 'string' && authToken.length > 0) {
       return authToken;
     }

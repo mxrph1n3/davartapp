@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChatGateway } from '../src/chat/chat.gateway';
 import { ChatService } from '../src/chat/chat.service';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('ChatGateway join ACL (e2e)', () => {
   let gateway: ChatGateway;
@@ -22,6 +23,8 @@ describe('ChatGateway join ACL (e2e)', () => {
           provide: ChatService,
           useValue: { assertParticipant },
         },
+        // Only used on connect (user lookup); join goes through ChatService.
+        { provide: PrismaService, useValue: {} },
       ],
     }).compile();
 

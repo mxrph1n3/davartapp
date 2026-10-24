@@ -1,5 +1,6 @@
 /// Curated interior / product photos for demo & store reviews
 /// when catalog rows have null `imageUrl` (or picsum covers).
+library;
 
 const _interiorCovers = <String>[
   'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1200&h=900&q=80',

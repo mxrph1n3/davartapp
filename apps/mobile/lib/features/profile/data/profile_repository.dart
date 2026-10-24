@@ -26,11 +26,10 @@ class ProfileRepository {
     final response = await _dio.patch(
       '/users/me',
       data: {
-        if (name != null) 'name': name,
+        'name': ?name,
         // Empty string fails @IsEmail on API — omit rather than send "".
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
-        if (notificationsEnabled != null)
-          'notificationsEnabled': notificationsEnabled,
+        'notificationsEnabled': ?notificationsEnabled,
       },
     );
     return UserProfile.fromJson(response.data as Map<String, dynamic>);
@@ -67,7 +66,7 @@ class ProfileRepository {
       '/users/me/fcm-token',
       data: {
         'token': token,
-        if (platform != null) 'platform': platform,
+        'platform': ?platform,
       },
     );
   }

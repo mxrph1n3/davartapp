@@ -58,8 +58,8 @@ class StaffRepository {
     await _dio.patch(
       '/staff/projects/$projectId/staff',
       data: {
-        if (designerId != null) 'designerId': designerId,
-        if (surveyorId != null) 'surveyorId': surveyorId,
+        'designerId': ?designerId,
+        'surveyorId': ?surveyorId,
       },
     );
   }
@@ -265,7 +265,7 @@ class StaffRepository {
     final response = await _dio.get(
       '/staff/audit',
       queryParameters: {
-        if (clientId != null) 'clientId': clientId,
+        'clientId': ?clientId,
         'page': page,
         'limit': limit,
       },
